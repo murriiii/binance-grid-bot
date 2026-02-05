@@ -1,9 +1,10 @@
-"""Binance API Client Wrapper - mit Rate Limiting"""
+"""Binance API Client Wrapper - mit Rate Limiting und Decimal-Formatierung"""
 
 import logging
 import os
 import time
 from collections import deque
+from decimal import Decimal
 from threading import Lock
 
 from binance.client import Client
@@ -13,6 +14,15 @@ from dotenv import load_dotenv
 load_dotenv()
 
 logger = logging.getLogger("trading_bot")
+
+
+def format_decimal(value: float | Decimal | str) -> str:
+    """Format a number for Binance API - no scientific notation, no excess trailing zeros."""
+    d = Decimal(str(value))
+    result = format(d, "f")
+    if "." in result:
+        result = result.rstrip("0").rstrip(".")
+    return result
 
 
 class RateLimiter:
@@ -91,8 +101,9 @@ class BinanceClient:
             except BinanceAPIException as e:
                 last_error = e
 
-                # Rate Limit Error (429) - länger warten
-                if e.code == -1015:
+                # Rate Limit Error - länger warten
+                # -1003: Too many requests, -1015: Too many orders, HTTP 429
+                if e.code in (-1003, -1015) or e.status_code == 429:
                     wait_time = 60 * (attempt + 1)
                     logger.warning(
                         f"Rate limit hit, warte {wait_time}s (Versuch {attempt + 1}/{retries})"
@@ -142,10 +153,13 @@ class BinanceClient:
 
             filters = {f["filterType"]: f for f in info["filters"]}
 
+            price_filter = filters.get("PRICE_FILTER", {})
+
             return {
                 "min_qty": float(filters["LOT_SIZE"]["minQty"]),
                 "max_qty": float(filters["LOT_SIZE"]["maxQty"]),
                 "step_size": float(filters["LOT_SIZE"]["stepSize"]),
+                "tick_size": float(price_filter.get("tickSize", "0.01")),
                 "min_notional": float(
                     filters.get("NOTIONAL", filters.get("MIN_NOTIONAL", {})).get("minNotional", 10)
                 ),
@@ -154,11 +168,13 @@ class BinanceClient:
             logger.error(f"API Error (get_symbol_info): {e}")
             return None
 
-    def place_market_buy(self, symbol: str, quote_qty: float) -> dict:
+    def place_market_buy(self, symbol: str, quote_qty: float | Decimal) -> dict:
         """Market Buy mit Quote-Währung (z.B. USDT)"""
         try:
             order = self._retry_call(
-                self.client.order_market_buy, symbol=symbol, quoteOrderQty=quote_qty
+                self.client.order_market_buy,
+                symbol=symbol,
+                quoteOrderQty=format_decimal(quote_qty),
             )
             logger.info(f"Market BUY: {symbol} für {quote_qty} USDT")
             return {"success": True, "order": order}
@@ -166,11 +182,13 @@ class BinanceClient:
             logger.error(f"Market BUY fehlgeschlagen: {e}")
             return {"success": False, "error": str(e)}
 
-    def place_market_sell(self, symbol: str, quantity: float) -> dict:
+    def place_market_sell(self, symbol: str, quantity: float | Decimal) -> dict:
         """Market Sell mit Menge"""
         try:
             order = self._retry_call(
-                self.client.order_market_sell, symbol=symbol, quantity=quantity
+                self.client.order_market_sell,
+                symbol=symbol,
+                quantity=format_decimal(quantity),
             )
             logger.info(f"Market SELL: {quantity} {symbol}")
             return {"success": True, "order": order}
@@ -178,11 +196,16 @@ class BinanceClient:
             logger.error(f"Market SELL fehlgeschlagen: {e}")
             return {"success": False, "error": str(e)}
 
-    def place_limit_buy(self, symbol: str, quantity: float, price: float) -> dict:
+    def place_limit_buy(
+        self, symbol: str, quantity: float | Decimal, price: float | Decimal
+    ) -> dict:
         """Limit Buy Order"""
         try:
             order = self._retry_call(
-                self.client.order_limit_buy, symbol=symbol, quantity=quantity, price=str(price)
+                self.client.order_limit_buy,
+                symbol=symbol,
+                quantity=format_decimal(quantity),
+                price=format_decimal(price),
             )
             logger.info(f"Limit BUY: {quantity} {symbol} @ {price}")
             return {"success": True, "order": order}
@@ -190,11 +213,16 @@ class BinanceClient:
             logger.error(f"Limit BUY fehlgeschlagen: {e}")
             return {"success": False, "error": str(e)}
 
-    def place_limit_sell(self, symbol: str, quantity: float, price: float) -> dict:
+    def place_limit_sell(
+        self, symbol: str, quantity: float | Decimal, price: float | Decimal
+    ) -> dict:
         """Limit Sell Order"""
         try:
             order = self._retry_call(
-                self.client.order_limit_sell, symbol=symbol, quantity=quantity, price=str(price)
+                self.client.order_limit_sell,
+                symbol=symbol,
+                quantity=format_decimal(quantity),
+                price=format_decimal(price),
             )
             logger.info(f"Limit SELL: {quantity} {symbol} @ {price}")
             return {"success": True, "order": order}

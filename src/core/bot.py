@@ -11,7 +11,7 @@ from typing import Any
 
 from src.api.binance_client import BinanceClient
 from src.api.http_client import HTTPClientError, get_http_client
-from src.strategies.grid_strategy import GridStrategy
+from src.strategies.grid_strategy import TAKER_FEE_RATE, GridStrategy
 
 
 # Logging Setup mit Rotation
@@ -76,6 +76,7 @@ class GridBot:
     MAX_CONSECUTIVE_ERRORS = 5
     INITIAL_BACKOFF_SECONDS = 30
     MAX_BACKOFF_SECONDS = 300
+    CIRCUIT_BREAKER_PCT = 10.0  # Emergency stop bei >10% Drop pro Check-Zyklus
 
     def __init__(self, config: dict):
         self.config = config
@@ -98,6 +99,12 @@ class GridBot:
         self.consecutive_errors = 0
         self.last_error_time: datetime | None = None
 
+        # Circuit breaker: track last known price
+        self._last_known_price: float = 0.0
+
+        # Downtime-fill-recovery: queued follow-up actions from load_state()
+        self._pending_followups: list[dict] = []
+
         # Optional: Memory System (wird in Phase 2 aktiviert)
         self.memory = None
         self._init_memory()
@@ -105,6 +112,11 @@ class GridBot:
         # Optional: Stop-Loss Manager (wird in Phase 2 aktiviert)
         self.stop_loss_manager = None
         self._init_stop_loss()
+
+        # Optional: Risk modules
+        self.cvar_sizer = None
+        self.allocation_constraints = None
+        self._init_risk_modules()
 
     def _init_memory(self):
         """Initialisiert das Memory-System wenn verfügbar"""
@@ -118,15 +130,133 @@ class GridBot:
             self.memory = None
 
     def _init_stop_loss(self):
-        """Initialisiert den Stop-Loss Manager wenn verfügbar"""
+        """Initialisiert den Stop-Loss Manager mit DB-Persistenz wenn verfügbar"""
         try:
             from src.risk.stop_loss import StopLossManager
 
-            self.stop_loss_manager = StopLossManager(db_connection=None, telegram_bot=None)
-            logger.info("Stop-Loss Manager initialisiert")
+            # Versuche DB-Manager zu holen für Stop-Persistenz
+            db_manager = None
+            try:
+                from src.data.database import DatabaseManager
+
+                db_manager = DatabaseManager.get_instance()
+                if db_manager and not db_manager._pool:
+                    db_manager = None
+            except Exception:
+                pass
+
+            self.stop_loss_manager = StopLossManager(db_manager=db_manager, telegram_bot=None)
+            if db_manager:
+                logger.info("Stop-Loss Manager initialisiert (mit DB-Persistenz)")
+            else:
+                logger.info("Stop-Loss Manager initialisiert (ohne DB)")
         except Exception as e:
             logger.warning(f"Stop-Loss Manager nicht verfügbar: {e}")
             self.stop_loss_manager = None
+
+    def _init_risk_modules(self):
+        """Initialisiert CVaR Position Sizer und Allocation Constraints"""
+        try:
+            from src.risk.cvar_sizing import CVaRPositionSizer
+
+            self.cvar_sizer = CVaRPositionSizer.get_instance()
+            logger.info("CVaR Position Sizer initialisiert")
+        except Exception as e:
+            logger.warning(f"CVaR Position Sizer nicht verfügbar: {e}")
+            self.cvar_sizer = None
+
+        try:
+            from src.portfolio.constraints import AllocationConstraints
+
+            self.allocation_constraints = AllocationConstraints()
+            logger.info("Allocation Constraints initialisiert")
+        except Exception as e:
+            logger.warning(f"Allocation Constraints nicht verfügbar: {e}")
+            self.allocation_constraints = None
+
+    def _validate_order_risk(self, side: str, quantity: float, price: float) -> tuple[bool, str]:
+        """
+        Validiert eine Order gegen Risk-Checks bevor sie platziert wird.
+
+        Returns:
+            (allowed, reason) - False + reason wenn Order abgelehnt
+        """
+        order_value = quantity * price
+
+        # 1. Portfolio drawdown check
+        if self.stop_loss_manager and self.stop_loss_manager.portfolio_stopped:
+            return False, "Portfolio drawdown limit reached - all trading halted"
+
+        # 2. CVaR position sizing check
+        if self.cvar_sizer and side == "BUY":
+            try:
+                portfolio_value = self.client.get_account_balance("USDT")
+                if portfolio_value > 0:
+                    sizing = self.cvar_sizer.calculate_position_size(
+                        symbol=self.symbol,
+                        portfolio_value=portfolio_value,
+                        signal_confidence=0.5,
+                    )
+                    if order_value > sizing.max_position:
+                        return (
+                            False,
+                            f"Order ${order_value:.2f} exceeds CVaR max position "
+                            f"${sizing.max_position:.2f}",
+                        )
+            except Exception as e:
+                logger.warning(f"CVaR check failed (allowing order): {e}")
+
+        # 3. Allocation constraints check
+        if self.allocation_constraints and side == "BUY":
+            try:
+                portfolio_value = self.client.get_account_balance("USDT")
+                if portfolio_value > 0:
+                    # Calculate current invested amount from active orders
+                    current_invested = sum(
+                        o["quantity"] * o["price"]
+                        for o in self.active_orders.values()
+                        if o["type"] == "BUY"
+                    )
+                    available = self.allocation_constraints.get_available_capital(
+                        total_capital=portfolio_value + current_invested,
+                        current_invested=current_invested,
+                    )
+                    if order_value > available:
+                        return (
+                            False,
+                            f"Order ${order_value:.2f} exceeds available capital "
+                            f"${available:.2f} (cash reserve enforced)",
+                        )
+            except Exception as e:
+                logger.warning(f"Allocation check failed (allowing order): {e}")
+
+        return True, ""
+
+    def _check_circuit_breaker(self, current_price: float) -> bool:
+        """
+        Emergency stop bei Flash-Crash (>10% Drop seit letztem Check).
+
+        Returns:
+            True wenn Circuit Breaker ausgelöst wurde
+        """
+        if self._last_known_price <= 0:
+            self._last_known_price = current_price
+            return False
+
+        if current_price <= 0:
+            return False
+
+        drop_pct = (self._last_known_price - current_price) / self._last_known_price * 100
+
+        if drop_pct >= self.CIRCUIT_BREAKER_PCT:
+            self._emergency_stop(
+                f"Circuit Breaker: {self.symbol} dropped {drop_pct:.1f}% "
+                f"({self._last_known_price:.2f} → {current_price:.2f})"
+            )
+            return True
+
+        self._last_known_price = current_price
+        return False
 
     def _get_current_fear_greed(self) -> int:
         """Holt den aktuellen Fear & Greed Index"""
@@ -263,6 +393,15 @@ class GridBot:
                     )
                     continue
 
+                # Risk validation
+                allowed, reason = self._validate_order_risk(
+                    "BUY", float(order["quantity"]), float(order["price"])
+                )
+                if not allowed:
+                    logger.warning(f"Order blocked by risk check: {reason}")
+                    failed_count += 1
+                    continue
+
                 result = self.client.place_limit_buy(self.symbol, order["quantity"], order["price"])
 
                 if result["success"]:
@@ -306,16 +445,46 @@ class GridBot:
                         continue
 
                     status = order_status.get("status", "")
+                    executed_qty = float(order_status.get("executedQty", 0))
 
-                    # Nur FILLED Orders verarbeiten
-                    if status != "FILLED":
+                    # --- Status-specific handling ---
+
+                    if status == "PARTIALLY_FILLED":
+                        # Still alive on Binance but disappeared from open_orders
+                        # (race condition between API calls). Keep tracking.
+                        logger.info(
+                            f"Order {order_id} partially filled "
+                            f"({executed_qty}/{order_info['quantity']}) - weiter tracken"
+                        )
+                        order_info["executed_qty"] = executed_qty
+                        continue
+
+                    if status == "CANCELED" and executed_qty > 0:
+                        # Canceled with partial fill -> process the filled portion
+                        logger.info(
+                            f"Order {order_id} canceled with partial fill: "
+                            f"{executed_qty} of {order_info['quantity']}"
+                        )
+                        self._process_partial_fill(order_id, order_info, order_status)
+                        continue
+
+                    if status in ("CANCELED", "EXPIRED", "REJECTED", "PENDING_CANCEL"):
+                        # Clean removal - nothing was filled
                         logger.info(f"Order {order_id} Status: {status} - wird entfernt")
                         del self.active_orders[order_id]
                         continue
 
-                    # Order wurde gefüllt!
+                    if status != "FILLED":
+                        # Unknown status - log and keep for safety
+                        logger.warning(
+                            f"Order {order_id} unbekannter Status: {status} - wird entfernt"
+                        )
+                        del self.active_orders[order_id]
+                        continue
+
+                    # Order wurde vollständig gefüllt!
                     filled_price = float(order_status.get("price", order_info["price"]))
-                    filled_qty = float(order_status.get("executedQty", order_info["quantity"]))
+                    filled_qty = executed_qty if executed_qty > 0 else float(order_info["quantity"])
 
                     logger.info(
                         f"Order gefüllt: {order_info['type']} @ {filled_price} x {filled_qty}"
@@ -330,8 +499,11 @@ class GridBot:
                         f"Menge: {filled_qty}"
                     )
 
+                    # Fee berechnen (0.1% Binance taker fee)
+                    fee_usd = filled_price * filled_qty * float(TAKER_FEE_RATE)
+
                     # Trade in Memory speichern (Phase 2.1)
-                    self._save_trade_to_memory(order_info, filled_price, filled_qty)
+                    self._save_trade_to_memory(order_info, filled_price, filled_qty, fee_usd)
 
                     # Stop-Loss erstellen für BUY Orders (Phase 2.2)
                     if order_info["type"] == "BUY" and self.stop_loss_manager:
@@ -356,42 +528,56 @@ class GridBot:
                     new_order_id = None
 
                     if action_type == "PLACE_SELL":
-                        result = self.client.place_limit_sell(
-                            self.symbol, action["quantity"], action["price"]
+                        # Risk validation for follow-up SELL
+                        allowed, reason = self._validate_order_risk(
+                            "SELL", float(action["quantity"]), float(action["price"])
                         )
-                        if result["success"]:
-                            new_order_id = result["order"]["orderId"]
-                            self.active_orders[new_order_id] = {
-                                "type": "SELL",
-                                "price": action["price"],
-                                "quantity": action["quantity"],
-                                "created_at": datetime.now().isoformat(),
-                            }
-                            new_order_placed = True
-                            logger.info(
-                                f"Sell Order platziert: {action['price']:.2f} x {action['quantity']}"
-                            )
+                        if not allowed:
+                            logger.warning(f"Follow-up SELL blocked by risk check: {reason}")
                         else:
-                            logger.error(f"Sell Order fehlgeschlagen: {result.get('error')}")
+                            result = self.client.place_limit_sell(
+                                self.symbol, action["quantity"], action["price"]
+                            )
+                            if result["success"]:
+                                new_order_id = result["order"]["orderId"]
+                                self.active_orders[new_order_id] = {
+                                    "type": "SELL",
+                                    "price": action["price"],
+                                    "quantity": action["quantity"],
+                                    "created_at": datetime.now().isoformat(),
+                                }
+                                new_order_placed = True
+                                logger.info(
+                                    f"Sell Order platziert: {action['price']:.2f} x {action['quantity']}"
+                                )
+                            else:
+                                logger.error(f"Sell Order fehlgeschlagen: {result.get('error')}")
 
                     elif action_type == "PLACE_BUY":
-                        result = self.client.place_limit_buy(
-                            self.symbol, action["quantity"], action["price"]
+                        # Risk validation for follow-up BUY
+                        allowed, reason = self._validate_order_risk(
+                            "BUY", float(action["quantity"]), float(action["price"])
                         )
-                        if result["success"]:
-                            new_order_id = result["order"]["orderId"]
-                            self.active_orders[new_order_id] = {
-                                "type": "BUY",
-                                "price": action["price"],
-                                "quantity": action["quantity"],
-                                "created_at": datetime.now().isoformat(),
-                            }
-                            new_order_placed = True
-                            logger.info(
-                                f"Buy Order platziert: {action['price']:.2f} x {action['quantity']}"
-                            )
+                        if not allowed:
+                            logger.warning(f"Follow-up BUY blocked by risk check: {reason}")
                         else:
-                            logger.error(f"Buy Order fehlgeschlagen: {result.get('error')}")
+                            result = self.client.place_limit_buy(
+                                self.symbol, action["quantity"], action["price"]
+                            )
+                            if result["success"]:
+                                new_order_id = result["order"]["orderId"]
+                                self.active_orders[new_order_id] = {
+                                    "type": "BUY",
+                                    "price": action["price"],
+                                    "quantity": action["quantity"],
+                                    "created_at": datetime.now().isoformat(),
+                                }
+                                new_order_placed = True
+                                logger.info(
+                                    f"Buy Order platziert: {action['price']:.2f} x {action['quantity']}"
+                                )
+                            else:
+                                logger.error(f"Buy Order fehlgeschlagen: {result.get('error')}")
 
                     # NUR löschen wenn neue Order erfolgreich ODER keine Aktion nötig
                     if new_order_placed or action_type == "NONE":
@@ -406,7 +592,52 @@ class GridBot:
             logger.exception(f"Fehler in check_orders: {e}")
             raise  # Re-raise für Error-Handling im Main-Loop
 
-    def _save_trade_to_memory(self, order_info: dict, price: float, quantity: float):
+    def _process_partial_fill(self, order_id: int, order_info: dict, order_status: dict):
+        """
+        Verarbeitet eine teilweise gefüllte und dann stornierte Order.
+
+        - Speichert den gefüllten Teil als Trade
+        - Erstellt Stop-Loss für BUY-Partial-Fills
+        - Entfernt die Order aus active_orders
+        - Platziert KEINE Follow-up-Order (Grid-Level bleibt für nächsten Zyklus)
+        """
+        filled_price = float(order_status.get("price", order_info["price"]))
+        filled_qty = float(order_status.get("executedQty", 0))
+
+        if filled_qty <= 0:
+            del self.active_orders[order_id]
+            return
+
+        # Fee berechnen
+        fee_usd = filled_price * filled_qty * float(TAKER_FEE_RATE)
+
+        logger.info(
+            f"Partial fill verarbeitet: {order_info['type']} "
+            f"@ {filled_price:.2f} x {filled_qty} (fee: ${fee_usd:.4f})"
+        )
+
+        # Telegram Benachrichtigung
+        self.telegram.send(
+            f"⚠️ Partial Fill\n"
+            f"Typ: {order_info['type']}\n"
+            f"Preis: {filled_price:.2f}\n"
+            f"Menge: {filled_qty} / {order_info['quantity']}\n"
+            f"Status: Canceled nach Partial Fill"
+        )
+
+        # Trade in Memory speichern
+        self._save_trade_to_memory(order_info, filled_price, filled_qty, fee_usd)
+
+        # Stop-Loss für BUY Partial Fills
+        if order_info["type"] == "BUY" and self.stop_loss_manager:
+            self._create_stop_loss(filled_price, filled_qty)
+
+        # Order entfernen
+        del self.active_orders[order_id]
+
+    def _save_trade_to_memory(
+        self, order_info: dict, price: float, quantity: float, fee_usd: float = 0.0
+    ):
         """Speichert einen Trade im Memory-System"""
         if not self.memory:
             return
@@ -433,11 +664,11 @@ class GridBot:
                 market_trend="NEUTRAL",
                 math_signal="GRID",
                 ai_signal="N/A",
-                reasoning=f"Grid order filled at {price}",
+                reasoning=f"Grid order filled at {price} (fee: ${fee_usd:.4f})",
             )
 
             trade_id = self.memory.save_trade(trade_record)
-            logger.info(f"Trade in Memory gespeichert: ID {trade_id}")
+            logger.info(f"Trade in Memory gespeichert: ID {trade_id} (fee: ${fee_usd:.4f})")
 
         except Exception as e:
             logger.warning(f"Konnte Trade nicht in Memory speichern: {e}")
@@ -480,10 +711,92 @@ class GridBot:
                     f"Menge: {stop.quantity}",
                     urgent=True,
                 )
-                # TODO: Market-Sell Order platzieren
+
+                # Market-Sell ausführen
+                result = self.client.place_market_sell(stop.symbol, stop.quantity)
+                if result["success"]:
+                    logger.info(f"Stop-Loss Market-Sell ausgeführt: {stop.quantity} {stop.symbol}")
+                    fee_usd = current_price * stop.quantity * float(TAKER_FEE_RATE)
+                    self._save_trade_to_memory(
+                        {"type": "SELL"},
+                        current_price,
+                        stop.quantity,
+                        fee_usd,
+                    )
+                else:
+                    logger.error(f"Stop-Loss Market-Sell fehlgeschlagen: {result.get('error')}")
+                    self.telegram.send(
+                        f"⚠️ Stop-Loss SELL fehlgeschlagen!\n"
+                        f"Symbol: {stop.symbol}\n"
+                        f"Error: {result.get('error')}",
+                        urgent=True,
+                    )
 
         except Exception as e:
             logger.warning(f"Stop-Loss Check Fehler: {e}")
+
+    def _process_pending_followups(self):
+        """
+        Verarbeitet Follow-up-Orders von während der Downtime gefüllten Orders.
+
+        Wird nach load_state() aufgerufen, wenn self.strategy verfügbar ist.
+        """
+        if not self._pending_followups or not self.strategy:
+            return
+
+        logger.info(f"Verarbeite {len(self._pending_followups)} Downtime-Fills")
+
+        for fill in self._pending_followups:
+            try:
+                if fill["type"] == "BUY":
+                    action = self.strategy.on_buy_filled(fill["price"])
+                else:
+                    action = self.strategy.on_sell_filled(fill["price"])
+
+                action_type = action.get("action", "NONE")
+                if action_type == "NONE":
+                    logger.info(
+                        f"Keine Folge-Aktion für Downtime-Fill {fill['type']} @ {fill['price']}"
+                    )
+                    continue
+
+                # Risk validation before placing follow-up
+                side = "SELL" if action_type == "PLACE_SELL" else "BUY"
+                allowed, reason = self._validate_order_risk(
+                    side, float(action["quantity"]), float(action["price"])
+                )
+                if not allowed:
+                    logger.warning(f"Downtime follow-up blocked by risk check: {reason}")
+                    continue
+
+                if action_type == "PLACE_SELL":
+                    result = self.client.place_limit_sell(
+                        self.symbol, action["quantity"], action["price"]
+                    )
+                else:
+                    result = self.client.place_limit_buy(
+                        self.symbol, action["quantity"], action["price"]
+                    )
+
+                if result["success"]:
+                    order_id = result["order"]["orderId"]
+                    self.active_orders[order_id] = {
+                        "type": side,
+                        "price": action["price"],
+                        "quantity": action["quantity"],
+                        "created_at": datetime.now().isoformat(),
+                    }
+                    logger.info(
+                        f"Downtime follow-up {side} platziert: "
+                        f"{action['price']} x {action['quantity']}"
+                    )
+                else:
+                    logger.error(f"Downtime follow-up fehlgeschlagen: {result.get('error')}")
+
+            except Exception as e:
+                logger.warning(f"Fehler bei Downtime follow-up: {e}")
+
+        self._pending_followups.clear()
 
     def save_state(self):
         """Speichert Bot-State für Neustart - mit Error-Handling"""
@@ -548,16 +861,70 @@ class GridBot:
                         continue
 
                     status = binance_status.get("status", "")
+                    executed_qty = float(binance_status.get("executedQty", 0))
 
                     if status == "NEW":  # Noch offen
                         validated_orders[order_id] = order_info
                         logger.info(f"Order {order_id} validiert: noch offen")
+
                     elif status == "FILLED":
-                        logger.info(f"Order {order_id} während Downtime gefüllt - wird verarbeitet")
-                        # TODO: Verarbeite gefüllte Order
+                        # Downtime-Fill-Recovery: Trade speichern + Follow-up queuen
+                        filled_price = float(
+                            binance_status.get("price", order_info.get("price", 0))
+                        )
+                        filled_qty = (
+                            executed_qty
+                            if executed_qty > 0
+                            else float(order_info.get("quantity", 0))
+                        )
+                        fee_usd = filled_price * filled_qty * float(TAKER_FEE_RATE)
+
+                        logger.info(
+                            f"Order {order_id} während Downtime gefüllt: "
+                            f"{order_info.get('type')} @ {filled_price} x {filled_qty}"
+                        )
+                        self._save_trade_to_memory(order_info, filled_price, filled_qty, fee_usd)
+
+                        if order_info.get("type") == "BUY" and self.stop_loss_manager:
+                            self._create_stop_loss(filled_price, filled_qty)
+
+                        # Queue follow-up for after load_state() completes
+                        self._pending_followups.append(
+                            {
+                                "type": order_info.get("type"),
+                                "price": filled_price,
+                                "quantity": filled_qty,
+                            }
+                        )
+
+                        self.telegram.send(
+                            f"🔄 Downtime-Fill erkannt\n"
+                            f"Typ: {order_info.get('type')}\n"
+                            f"Preis: {filled_price:.2f}\n"
+                            f"Menge: {filled_qty}"
+                        )
+
+                    elif status == "CANCELED" and executed_qty > 0:
+                        # Partial fill during downtime
+                        filled_price = float(
+                            binance_status.get("price", order_info.get("price", 0))
+                        )
+                        fee_usd = filled_price * executed_qty * float(TAKER_FEE_RATE)
+
+                        logger.info(
+                            f"Order {order_id} canceled mit Partial Fill während Downtime: "
+                            f"{executed_qty} of {order_info.get('quantity')}"
+                        )
+                        self._save_trade_to_memory(order_info, filled_price, executed_qty, fee_usd)
+
+                        if order_info.get("type") == "BUY" and self.stop_loss_manager:
+                            self._create_stop_loss(filled_price, executed_qty)
+
                     elif status == "PARTIALLY_FILLED":
-                        logger.info(f"Order {order_id} teilweise gefüllt")
+                        logger.info(f"Order {order_id} teilweise gefüllt ({executed_qty})")
+                        order_info["executed_qty"] = executed_qty
                         validated_orders[order_id] = order_info
+
                     else:
                         logger.info(f"Order {order_id} Status: {status} - wird entfernt")
 
@@ -587,6 +954,9 @@ class GridBot:
         if not self.load_state():
             self.place_initial_orders()
 
+        # Verarbeite Follow-ups von Downtime-Fills
+        self._process_pending_followups()
+
         logger.info("Bot gestartet - Drücke Ctrl+C zum Stoppen")
         self.telegram.send("🤖 Trading Bot gestartet")
 
@@ -600,6 +970,10 @@ class GridBot:
                     # Status und Stop-Loss Check
                     current_price = self.client.get_current_price(self.symbol)
                     if current_price:
+                        # Circuit breaker: emergency stop on flash crash
+                        if self._check_circuit_breaker(current_price):
+                            break
+
                         self._check_stop_losses(current_price)
 
                         balance_usdt = self.client.get_account_balance("USDT")

@@ -133,8 +133,8 @@ class StopLossManager:
     - Portfolio-weiter Drawdown-Schutz
     """
 
-    def __init__(self, db_connection=None, telegram_bot=None):
-        self.db = db_connection
+    def __init__(self, db_manager=None, telegram_bot=None):
+        self.db = db_manager
         self.telegram = telegram_bot
         self.stops: dict[str, StopLossOrder] = {}
         self.lock = threading.Lock()
@@ -143,6 +143,9 @@ class StopLossManager:
         self.max_daily_drawdown_pct = 10.0  # Stop alles bei -10% am Tag
         self.daily_start_value: float = 0.0
         self.portfolio_stopped = False
+
+        # Lade aktive Stops aus DB
+        self._load_from_db()
 
     def create_stop(
         self,
@@ -156,7 +159,7 @@ class StopLossManager:
         import uuid
 
         stop = StopLossOrder(
-            id=str(uuid.uuid4())[:8],
+            id=str(uuid.uuid4()),
             symbol=symbol,
             entry_price=entry_price,
             quantity=quantity,
@@ -260,19 +263,67 @@ Type: {stop.stop_type.value}
                 return True
         return False
 
+    def _load_from_db(self):
+        """Lädt aktive Stops aus der Datenbank beim Start"""
+        if not self.db:
+            return
+
+        try:
+            with self.db.get_cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT id, symbol, entry_price, stop_price, quantity,
+                           stop_type, stop_percentage, trailing_distance,
+                           highest_price, is_active, created_at
+                    FROM stop_loss_orders
+                    WHERE is_active = true
+                    """
+                )
+                rows = cur.fetchall()
+
+            for row in rows:
+                stop = StopLossOrder(
+                    id=row["id"],
+                    symbol=row["symbol"],
+                    entry_price=float(row["entry_price"]),
+                    quantity=float(row["quantity"]),
+                    stop_type=StopType(row["stop_type"]),
+                    stop_percentage=float(row.get("stop_percentage") or 5.0),
+                    trailing_distance=float(row.get("trailing_distance") or 3.0),
+                    current_stop_price=float(row["stop_price"]),
+                    is_active=True,
+                )
+                # Restore highest_price for trailing stops
+                if row.get("highest_price"):
+                    stop.highest_price = float(row["highest_price"])
+
+                with self.lock:
+                    self.stops[stop.id] = stop
+
+            if rows:
+                logger.info(f"Stop-Loss Manager: {len(rows)} aktive Stops aus DB geladen")
+
+        except Exception as e:
+            logger.warning(f"Stop-Loss DB Load fehlgeschlagen: {e}")
+
     def _save_to_db(self, stop: StopLossOrder):
         """Speichert Stop in Datenbank"""
         if not self.db:
             return
 
         try:
-            with self.db.cursor() as cur:
+            with self.db.get_cursor() as cur:
                 cur.execute(
                     """
                     INSERT INTO stop_loss_orders
-                    (id, symbol, entry_price, stop_price, quantity, stop_type, is_active)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
-                """,
+                    (id, symbol, entry_price, stop_price, quantity, stop_type,
+                     stop_percentage, trailing_distance, highest_price, is_active)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (id) DO UPDATE SET
+                        stop_price = EXCLUDED.stop_price,
+                        highest_price = EXCLUDED.highest_price,
+                        is_active = EXCLUDED.is_active
+                    """,
                     (
                         stop.id,
                         stop.symbol,
@@ -280,12 +331,14 @@ Type: {stop.stop_type.value}
                         stop.current_stop_price,
                         stop.quantity,
                         stop.stop_type.value,
+                        stop.stop_percentage,
+                        stop.trailing_distance,
+                        stop.highest_price,
                         stop.is_active,
                     ),
                 )
-                self.db.commit()
         except Exception as e:
-            logger.error(f"DB Error: {e}")
+            logger.error(f"Stop-Loss DB Save Error: {e}")
 
     def _update_db(self, stop: StopLossOrder):
         """Aktualisiert Stop in Datenbank"""
@@ -293,25 +346,27 @@ Type: {stop.stop_type.value}
             return
 
         try:
-            with self.db.cursor() as cur:
+            with self.db.get_cursor() as cur:
                 cur.execute(
                     """
                     UPDATE stop_loss_orders
                     SET is_active = %s, triggered_at = %s,
-                        triggered_price = %s, result_pnl = %s
+                        triggered_price = %s, result_pnl = %s,
+                        stop_price = %s, highest_price = %s
                     WHERE id = %s
-                """,
+                    """,
                     (
                         stop.is_active,
                         stop.triggered_at,
                         stop.triggered_price,
                         stop.result_pnl_pct,
+                        stop.current_stop_price,
+                        stop.highest_price,
                         stop.id,
                     ),
                 )
-                self.db.commit()
         except Exception as e:
-            logger.error(f"DB Error: {e}")
+            logger.error(f"Stop-Loss DB Update Error: {e}")
 
 
 def get_recommended_stop(

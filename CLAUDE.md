@@ -17,6 +17,9 @@ pytest tests/test_grid_strategy.py -v
 # Run specific test
 pytest tests/test_grid_strategy.py::TestGridStrategy::test_initialization -v
 
+# Run with coverage
+pytest tests/ --cov=src --cov-report=term-missing
+
 # Lint and format
 ruff check src/ tests/ docker/
 ruff format src/ tests/ docker/
@@ -33,6 +36,16 @@ cd docker && docker-compose up -d
 # View bot logs
 docker logs -f trading-bot
 ```
+
+## Code Conventions
+
+- **Line length**: 100 characters (Ruff formatter handles this)
+- **Type hints**: Use `X | None` instead of `Optional[X]` (Ruff UP007/UP045). No quoted forward references (UP037).
+- **Imports**: isort-ordered via Ruff. `src` is first-party.
+- **Logging**: Always use `logger = logging.getLogger("trading_bot")`. Never use `print()` for operational logs.
+- **Commits**: Conventional commits enforced by commitizen (`feat:`, `fix:`, `bump:`, etc.)
+- **Test markers**: `@pytest.mark.slow`, `@pytest.mark.integration`
+- **Coverage**: 60% minimum (`fail_under = 60` in pyproject.toml)
 
 ## Architecture Overview
 
@@ -145,6 +158,13 @@ Weekly trading cycles (Sunday 00:00 - Saturday 23:59):
 - Fresh capital allocation per cycle
 - Full metrics calculated at cycle end (Sharpe, Sortino, Kelly, VaR, CVaR)
 - Cycle-to-cycle comparison for learning
+
+### Multi-Coin Trading Pipeline
+
+1. **WatchlistManager** maintains coin universe (25+ coins in 6 categories: LARGE_CAP, MID_CAP, L2, DEFI, AI, GAMING)
+2. **CoinScanner** scores opportunities on 5 dimensions: technical (30%), volume (20%), sentiment (15%), whale (15%), momentum (20%)
+3. **PortfolioAllocator** distributes capital via Kelly Criterion with constraints (max 10% per coin, 30% per category, 20% cash reserve)
+4. Constraint presets: `CONSERVATIVE_CONSTRAINTS`, `BALANCED_CONSTRAINTS`, `AGGRESSIVE_CONSTRAINTS`
 
 ### Data Flow
 

@@ -209,14 +209,19 @@ CREATE INDEX idx_portfolio_timestamp ON portfolio_snapshots(timestamp DESC);
 -- STOP_LOSS_ORDERS - Automatische Stop-Loss Tracking
 -- ═══════════════════════════════════════════════════════════════
 CREATE TABLE IF NOT EXISTS stop_loss_orders (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id VARCHAR(36) PRIMARY KEY,
     created_at TIMESTAMPTZ DEFAULT NOW(),
 
     symbol VARCHAR(20) NOT NULL,
     entry_price DECIMAL(20, 8) NOT NULL,
     stop_price DECIMAL(20, 8) NOT NULL,
     quantity DECIMAL(20, 8) NOT NULL,
-    stop_type VARCHAR(20) DEFAULT 'fixed',  -- fixed, trailing, atr
+    stop_type VARCHAR(20) DEFAULT 'fixed',  -- fixed, trailing, atr, break_even
+
+    -- Config für Recovery
+    stop_percentage DECIMAL(10, 4) DEFAULT 5.0,
+    trailing_distance DECIMAL(10, 4) DEFAULT 3.0,
+    highest_price DECIMAL(20, 8),
 
     -- Status
     is_active BOOLEAN DEFAULT true,

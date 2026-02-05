@@ -1,38 +1,63 @@
-"""Grid Trading Strategy - mit min_qty Validierung"""
+"""Grid Trading Strategy - mit min_qty Validierung und Decimal-Präzision"""
 
 import logging
-import math
 from dataclasses import dataclass
+from decimal import ROUND_DOWN, Decimal
+
+# Binance standard taker fee (0.1%). With BNB discount: 0.075%
+TAKER_FEE_RATE = Decimal("0.001")
 
 logger = logging.getLogger("trading_bot")
 
 
+def _to_decimal(value: float | int | str | Decimal) -> Decimal:
+    """Convert to Decimal without float precision artifacts or scientific notation."""
+    if isinstance(value, Decimal):
+        return value
+    if isinstance(value, float):
+        # Fixed-point format avoids str(float) producing scientific notation (e.g. '1e-05')
+        s = f"{value:.18f}"
+        if "." in s:
+            s = s.rstrip("0").rstrip(".")
+        return Decimal(s)
+    return Decimal(str(value))
+
+
 @dataclass
 class GridLevel:
-    price: float
-    buy_order_id: int = None
-    sell_order_id: int = None
+    price: Decimal
+    buy_order_id: int | None = None
+    sell_order_id: int | None = None
     filled: bool = False
-    quantity: float = 0.0
-    valid: bool = True  # NEU: Flag für gültige Levels
+    quantity: Decimal = Decimal("0")
+    valid: bool = True
+
+    def __post_init__(self):
+        if not isinstance(self.price, Decimal):
+            self.price = _to_decimal(self.price)
+        if not isinstance(self.quantity, Decimal):
+            self.quantity = _to_decimal(self.quantity)
 
 
 class GridStrategy:
     def __init__(
         self,
-        lower_price: float,
-        upper_price: float,
+        lower_price: float | Decimal,
+        upper_price: float | Decimal,
         num_grids: int,
-        total_investment: float,
+        total_investment: float | Decimal,
         symbol_info: dict,
+        fee_rate: float | Decimal | None = None,
     ):
-        self.lower_price = lower_price
-        self.upper_price = upper_price
+        self.lower_price = _to_decimal(lower_price)
+        self.upper_price = _to_decimal(upper_price)
         self.num_grids = num_grids
-        self.total_investment = total_investment
+        self.total_investment = _to_decimal(total_investment)
         self.symbol_info = symbol_info
+        self.fee_rate = _to_decimal(fee_rate) if fee_rate is not None else TAKER_FEE_RATE
+        self._step_size = _to_decimal(symbol_info.get("step_size", "0.00001"))
         self.levels: list[GridLevel] = []
-        self.skipped_levels = 0  # Zählt ungültige Levels
+        self.skipped_levels = 0
 
         self._calculate_grid_levels()
 
@@ -41,45 +66,43 @@ class GridStrategy:
         price_range = self.upper_price - self.lower_price
         grid_spacing = price_range / self.num_grids
 
-        # Investment pro Grid-Ebene
         investment_per_grid = self.total_investment / self.num_grids
 
-        # Symbol-Limits
-        min_qty = self.symbol_info.get("min_qty", 0)
-        step_size = self.symbol_info.get("step_size", 0.00001)
-        min_notional = self.symbol_info.get("min_notional", 10)
+        min_qty = _to_decimal(self.symbol_info.get("min_qty", 0))
+        step_size = _to_decimal(self.symbol_info.get("step_size", "0.00001"))
+        min_notional = _to_decimal(self.symbol_info.get("min_notional", 10))
+        tick_size = _to_decimal(self.symbol_info.get("tick_size", "0.01"))
 
         for i in range(self.num_grids + 1):
-            price = self.lower_price + (i * grid_spacing)
+            price = self.lower_price + (Decimal(i) * grid_spacing)
             quantity = investment_per_grid / price
 
-            # Auf step_size runden (abrunden)
-            quantity = math.floor(quantity / step_size) * step_size
+            # Round quantity down to step_size (Decimal division prevents float drift)
+            quantity = (quantity / step_size).to_integral_value(rounding=ROUND_DOWN) * step_size
+            # Ensure no scientific notation in Decimal repr (e.g., 2E+6 → 2000000)
+            quantity = Decimal(format(quantity, "f"))
 
-            # Validierung 1: min_qty Check
             if quantity < min_qty:
                 logger.warning(
-                    f"Grid Level {i} übersprungen: Quantity {quantity:.8f} < min_qty {min_qty}"
+                    f"Grid Level {i} übersprungen: Quantity {quantity} < min_qty {min_qty}"
                 )
                 self.skipped_levels += 1
                 continue
 
-            # Validierung 2: min_notional Check
             notional = quantity * price
             if notional < min_notional:
                 logger.warning(
-                    f"Grid Level {i} übersprungen: Notional {notional:.2f} < min_notional {min_notional}"
+                    f"Grid Level {i} übersprungen: Notional {notional} < min_notional {min_notional}"
                 )
                 self.skipped_levels += 1
                 continue
 
-            # Preis runden (2 Dezimalstellen für die meisten Pairs)
-            price_precision = self._get_price_precision()
-            rounded_price = round(price, price_precision)
+            # Round price down to tick_size
+            rounded_price = (price / tick_size).to_integral_value(rounding=ROUND_DOWN) * tick_size
+            rounded_price = Decimal(format(rounded_price, "f"))
 
             self.levels.append(GridLevel(price=rounded_price, quantity=quantity, valid=True))
 
-        # Warnung wenn zu wenige gültige Levels
         if len(self.levels) < 2:
             logger.error(
                 f"Nur {len(self.levels)} gültige Grid-Levels! "
@@ -90,17 +113,12 @@ class GridStrategy:
             f"Grid berechnet: {len(self.levels)} gültige Levels, {self.skipped_levels} übersprungen"
         )
 
-    def _get_price_precision(self) -> int:
-        """Ermittelt die Preispräzision aus dem step_size"""
-        # Für die meisten USDT-Pairs sind 2 Dezimalstellen üblich
-        # TODO: Könnte aus PRICE_FILTER tickSize extrahiert werden
-        return 2
-
-    def get_initial_orders(self, current_price: float) -> dict:
+    def get_initial_orders(self, current_price: float | Decimal) -> dict:
         """
         Gibt initiale Orders zurück.
         Buy-Orders unter aktuellem Preis, Sell-Orders darüber.
         """
+        current_price = _to_decimal(current_price)
         buy_orders = []
         sell_orders = []
 
@@ -114,27 +132,42 @@ class GridStrategy:
 
         return {"buy_orders": buy_orders, "sell_orders": sell_orders}
 
-    def on_buy_filled(self, price: float) -> dict:
-        """Wenn ein Buy gefüllt wurde, platziere Sell darüber"""
+    def _apply_buy_fee(self, quantity: Decimal) -> Decimal:
+        """Reduce quantity by taker fee and round down to step_size.
+
+        After a BUY fill, Binance deducts the fee from the received asset.
+        E.g. BUY 0.001 BTC with 0.1% fee → you receive 0.000999 BTC.
+        The SELL quantity must not exceed what you actually hold.
+        """
+        qty_after_fee = quantity * (Decimal("1") - self.fee_rate)
+        rounded = (qty_after_fee / self._step_size).to_integral_value(
+            rounding=ROUND_DOWN
+        ) * self._step_size
+        return Decimal(format(rounded, "f"))
+
+    def on_buy_filled(self, price: float | Decimal) -> dict:
+        """Wenn ein Buy gefüllt wurde, platziere Sell darüber (fee-adjusted)"""
+        price = _to_decimal(price)
         for i, level in enumerate(self.levels):
-            if abs(level.price - price) < 0.01:
+            if abs(level.price - price) < Decimal("0.01"):
                 level.filled = True
-                # Finde nächsthöhere Ebene für Sell
                 if i + 1 < len(self.levels):
                     next_level = self.levels[i + 1]
+                    sell_qty = self._apply_buy_fee(level.quantity)
                     return {
                         "action": "PLACE_SELL",
                         "price": next_level.price,
-                        "quantity": level.quantity,
+                        "quantity": sell_qty,
+                        "fee_qty": level.quantity - sell_qty,
                     }
         return {"action": "NONE"}
 
-    def on_sell_filled(self, price: float) -> dict:
+    def on_sell_filled(self, price: float | Decimal) -> dict:
         """Wenn ein Sell gefüllt wurde, platziere Buy darunter"""
+        price = _to_decimal(price)
         for i, level in enumerate(self.levels):
-            if abs(level.price - price) < 0.01:
+            if abs(level.price - price) < Decimal("0.01"):
                 level.filled = False
-                # Finde nächstniedrigere Ebene für Buy
                 if i - 1 >= 0:
                     prev_level = self.levels[i - 1]
                     return {
@@ -152,5 +185,5 @@ class GridStrategy:
         logger.info(f"{'=' * 50}")
         for level in reversed(self.levels):
             status = "●" if level.filled else "○"
-            logger.info(f"  {status} {level.price:>10.2f} | Qty: {level.quantity:.6f}")
+            logger.info(f"  {status} {level.price:>10.2f} | Qty: {level.quantity:.8f}")
         logger.info(f"{'=' * 50}")

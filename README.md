@@ -10,6 +10,8 @@ Ein intelligenter Krypto-Trading-Bot mit Grid-Strategie, Multi-Coin Trading, AI-
 
 ### Core Trading
 - **Grid Trading Strategy** - Automatisches Kaufen/Verkaufen in definierten Preisbändern
+- **Decimal Precision** - Alle Preis-/Mengenberechnungen nutzen `Decimal` statt `float` (keine Binance-Rejections durch Rundungsfehler)
+- **Fee-Aware Trading** - Binance Taker-Fees (0.1%) werden bei Sell-Quantities automatisch abgezogen
 - **Multi-Coin Trading** - Handel über 20-30 Coins mit intelligenter Kapitalverteilung
 - **Dynamic Grid Strategy** - ATR-basierte Grid-Abstände, asymmetrische Grids basierend auf Trend
 - **AI-Enhanced Decisions** - DeepSeek-Integration für intelligentere Entscheidungen
@@ -30,8 +32,12 @@ Ein intelligenter Krypto-Trading-Bot mit Grid-Strategie, Multi-Coin Trading, AI-
 - **Regime Detection** - Hidden Markov Model für Markt-Regime (BULL/BEAR/SIDEWAYS)
 
 ### Risk Management
+- **Risk Enforcement Pipeline** - Jede Order wird gegen CVaR-Limits, Allocation-Constraints und Portfolio-Drawdown geprüft
+- **Circuit Breaker** - Emergency-Stop bei >10% Flash-Crash zwischen Check-Zyklen
 - **CVaR Position Sizing** - Conditional Value at Risk basierte Positionsgrößen
-- **Stop-Loss Management** - Fixed, Trailing und ATR-basierte Stops
+- **Stop-Loss Management** - Fixed, Trailing und ATR-basierte Stops mit DB-Persistenz und automatischer Market-Sell-Ausführung
+- **Partial-Fill-Handling** - Teilweise gefüllte Orders werden korrekt verarbeitet statt verworfen
+- **Downtime-Fill-Recovery** - Bei Neustart werden während der Downtime gefüllte Orders erkannt und Follow-ups platziert
 - **Kelly Criterion** - Optimale Positionsgrößen-Berechnung
 - **Sharpe/Sortino Ratio** - Risiko-adjustierte Performance-Metriken
 
@@ -655,11 +661,23 @@ print(signal.reasoning)    # "Fed dovish → Risk-On, Playbook sagt BUY bei F&G 
 | `ATR` | Volatilitätsbasiert (14-Perioden ATR) |
 | `BREAK_EVEN` | Auf Entry setzen nach X% Gewinn |
 
+### Order Risk Pipeline
+
+Jede Order (initial + follow-up) durchläuft vor Platzierung:
+
+1. **Portfolio Drawdown Check** - Handel gestoppt bei >10% Tagesverlust
+2. **CVaR Max Position** - Orderwert darf CVaR-Limit nicht überschreiten
+3. **Allocation Constraints** - Cash-Reserve und Exposure-Limits eingehalten
+4. **Circuit Breaker** - Emergency-Stop bei Flash-Crash (>10% Drop pro Check-Zyklus)
+
+Bei Fehler der Risk-Module: Graceful Degradation (Order wird zugelassen).
+
 ### Portfolio Risk
 
 - **Max Daily Drawdown**: Automatischer Stop bei 10% Tagesverlust
 - **Position Sizing**: Kelly Criterion für optimale Größe
 - **Diversifikation**: Markowitz Mean-Variance Optimization
+- **Stop-Loss Persistenz**: Stops werden in PostgreSQL gespeichert und nach Neustart automatisch wiederhergestellt
 
 ## Development
 
