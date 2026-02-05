@@ -93,6 +93,7 @@ class BotConfig:
     # Notification
     telegram_enabled: bool = True
     notification_level: str = "normal"  # minimal, normal, verbose
+    learning_mode: bool = False  # Wenn True: nur 1x täglich Daily Summary
 
     def validate(self) -> tuple[bool, list[str]]:
         """Validiert alle Konfigurationswerte."""
@@ -183,6 +184,7 @@ class BotConfig:
             enable_economic_events=os.getenv("ENABLE_ECONOMIC_EVENTS", "true").lower() == "true",
             telegram_enabled=bool(os.getenv("TELEGRAM_BOT_TOKEN")),
             notification_level=os.getenv("NOTIFICATION_LEVEL", "normal"),
+            learning_mode=os.getenv("LEARNING_MODE", "false").lower() == "true",
         )
 
     def to_dict(self) -> dict:
