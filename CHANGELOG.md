@@ -1,3 +1,9 @@
+## v1.4.0 (2026-02-05)
+
+### Feat
+
+- add LEARNING_MODE for reduced notifications
+
 ## v1.3.2 (2026-02-05)
 
 ### Fix
