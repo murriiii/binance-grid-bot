@@ -32,9 +32,6 @@ cd docker && docker-compose up -d
 
 # View bot logs
 docker logs -f trading-bot
-
-# Run backtest
-python run_backtest.py
 ```
 
 ## Architecture Overview
@@ -53,11 +50,21 @@ DeepSeek AI (optional enhancement)
 
 ### Singleton Services
 
-Critical shared resources use the singleton pattern:
+Critical shared resources use the singleton pattern with `get_instance()` and `reset_instance()` methods:
 - `get_config()` - Global configuration from environment
 - `get_http_client()` - Centralized HTTP with retry/caching
 - `TelegramService.get_instance()` - Notification service
 - `MarketDataProvider.get_instance()` - Price data with caching
+- `CohortManager.get_instance()` - Parallel strategy variants
+- `CycleManager.get_instance()` - Weekly trading cycles
+- `SignalAnalyzer.get_instance()` - Signal breakdown storage
+- `MetricsCalculator.get_instance()` - Risk metrics (Sharpe, Sortino, Kelly)
+- `RegimeDetector.get_instance()` - HMM market regime detection
+- `BayesianWeightLearner.get_instance()` - Adaptive signal weights
+- `DivergenceDetector.get_instance()` - Technical divergences
+- `ABTestingFramework.get_instance()` - A/B testing with statistics
+- `CVaRPositionSizer.get_instance()` - Risk-based position sizing
+- `DynamicGridStrategy.get_instance()` - ATR-based grid spacing
 
 ### Key Modules
 
@@ -65,14 +72,21 @@ Critical shared resources use the singleton pattern:
 |--------|---------|
 | `src/core/bot.py` | Main GridBot orchestrator with error recovery |
 | `src/core/config.py` | Dataclass configs loaded from env vars |
+| `src/core/cohort_manager.py` | Parallel strategy variants (conservative/balanced/aggressive/baseline) |
+| `src/core/cycle_manager.py` | Weekly trading cycles with performance tracking |
 | `src/strategies/grid_strategy.py` | Grid level calculation and order logic |
+| `src/strategies/dynamic_grid.py` | ATR-based grid spacing, asymmetric grids |
 | `src/data/memory.py` | PostgreSQL-based trading memory (RAG pattern) |
-| `src/data/sentiment.py` | Fear & Greed Index, social sentiment |
 | `src/data/playbook.py` | Self-learning Trading Playbook generator |
+| `src/analysis/signal_analyzer.py` | Signal breakdown persistence per trade |
+| `src/analysis/metrics_calculator.py` | Sharpe, Sortino, Kelly, VaR, CVaR |
+| `src/analysis/regime_detection.py` | HMM for BULL/BEAR/SIDEWAYS detection |
+| `src/analysis/bayesian_weights.py` | Dirichlet-based adaptive signal weights |
+| `src/analysis/divergence_detector.py` | RSI, MACD, Stochastic, MFI, OBV divergences |
+| `src/optimization/ab_testing.py` | Statistical A/B testing (Welch t-test, Mann-Whitney U) |
+| `src/risk/cvar_sizing.py` | CVaR-based position sizing |
 | `src/risk/stop_loss.py` | Stop-loss management (fixed, trailing, ATR) |
 | `src/strategies/ai_enhanced.py` | DeepSeek AI integration with fallbacks |
-| `src/core/logging_system.py` | Structured JSON logging (TradingLogger) |
-| `src/analysis/weekly_export.py` | Weekly analysis export for optimization |
 
 ### Grid Strategy Logic
 
@@ -82,11 +96,29 @@ Critical shared resources use the singleton pattern:
 4. On BUY fill → place SELL at next higher level
 5. On SELL fill → place BUY at next lower level
 
+### Cohort System
+
+Parallel strategy testing with 4 cohorts running simultaneously:
+- **Conservative**: Tight grids (2%), high confidence (>0.7), only F&G < 40
+- **Balanced**: Standard grids (5%), medium confidence (>0.5), playbook-driven
+- **Aggressive**: Wide grids (8%), low confidence ok, trades at F&G > 60
+- **Baseline**: No changes, week 1 strategy for comparison
+
+Each cohort has separate trades tracked via `cohort_id` in the database.
+
+### Cycle Management
+
+Weekly trading cycles (Sunday 00:00 - Saturday 23:59):
+- Fresh capital allocation per cycle
+- Full metrics calculated at cycle end (Sharpe, Sortino, Kelly, VaR, CVaR)
+- Cycle-to-cycle comparison for learning
+
 ### Data Flow
 
 Trades are stored with full context in PostgreSQL:
 - Entry conditions (fear_greed, btc_price, trend)
 - Decision signals (math_signal, ai_signal, confidence)
+- Signal components breakdown via `signal_components` table
 - Outcomes tracked at 1h, 24h, 7d intervals
 
 The Memory System (`TradingMemory`) retrieves similar historical trades for AI context generation.
@@ -108,13 +140,6 @@ All logs are JSON-structured in `logs/` directory:
 - `performance.log` - Daily/weekly metrics
 - `playbook.log` - Playbook updates
 
-### Weekly Analysis Export
-
-Automatic export every Saturday 23:00 to `analysis_exports/week_YYYYMMDD/`:
-- `analysis_export.json` - Structured performance data
-- `ANALYSIS_REPORT.md` - Human-readable summary
-- Used for Claude Code optimization workflow
-
 ### External APIs
 
 | API | Module | Notes |
@@ -122,6 +147,10 @@ Automatic export every Saturday 23:00 to `analysis_exports/week_YYYYMMDD/`:
 | Binance | `src/api/binance_client.py` | Rate limited (1000/min) |
 | DeepSeek | `src/strategies/ai_enhanced.py` | 30s timeout, 3 retries |
 | Alternative.me | `src/data/sentiment.py` | Fear & Greed Index |
+| LunarCrush | `src/data/social_sentiment.py` | Galaxy Score, social volume |
+| Reddit (PRAW) | `src/data/social_sentiment.py` | Mentions, sentiment |
+| Farside Investors | `src/data/etf_flows.py` | Bitcoin ETF flows |
+| TokenUnlocks.app | `src/data/token_unlocks.py` | Supply events |
 | Blockchain.com | `src/data/whale_alert.py` | BTC whale tracking |
 | Telegram | `src/notifications/telegram_service.py` | Bot notifications |
 
@@ -147,7 +176,7 @@ DATABASE_URL, REDIS_URL
 
 - `trading-bot` - Main GridBot
 - `telegram-handler` - Telegram commands (separate process)
-- `scheduler` - Background tasks (daily summaries, market snapshots, playbook updates, weekly exports)
+- `scheduler` - Background tasks (see Key Scheduled Tasks)
 - `postgres` - Trading memory database
 - `redis` - Caching
 
@@ -155,16 +184,26 @@ DATABASE_URL, REDIS_URL
 
 | Task | Schedule | Description |
 |------|----------|-------------|
-| Pattern Learning | 21:00 daily | Analyze new trades |
+| Cycle Management | Sun 00:00 | End/start weekly cycles |
+| Regime Detection | Every 4h | HMM market regime update |
+| Signal Weights | 22:00 daily | Bayesian weight update |
+| Divergence Scan | Every 2h | RSI/MACD divergences |
+| Social Sentiment | Every 4h | LunarCrush, Reddit |
+| ETF Flows | 10:00 daily | Bitcoin/ETH ETF tracking |
+| Token Unlocks | 08:00 daily | Supply events |
+| A/B Test Check | 23:00 daily | Statistical significance |
 | Playbook Update | Sun 19:00 | Generate new playbook |
 | Weekly Export | Sat 23:00 | Create analysis export |
-| Outcome Update | Every 6h | Update trade outcomes |
 
 ## Testing Notes
 
 Tests use fixtures from `tests/conftest.py`:
-- `reset_singletons` - Resets all singleton instances between tests
-- `mock_env_vars` - Sets test environment variables
+- `reset_singletons` - Resets original singleton instances between tests
+- `reset_new_singletons` - Resets Phase 1-5 singleton instances
+- `mock_env_vars` - Sets test environment variables (autouse)
+- `sample_ohlcv_data` - OHLCV data for technical analysis tests
+- `sample_returns` - Return data for risk calculation tests
+- `sample_trade_history` - Trade history for signal analysis
 - Sample response fixtures for API mocking
 
 Symbol info format for GridStrategy tests uses flat dict:
