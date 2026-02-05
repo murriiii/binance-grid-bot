@@ -1,6 +1,6 @@
 # Binance Grid Trading Bot
 
-Ein intelligenter Krypto-Trading-Bot mit Grid-Strategie, AI-Enhancement und Memory-System.
+Ein intelligenter Krypto-Trading-Bot mit Grid-Strategie, AI-Enhancement, Memory-System und selbstlernendem Trading Playbook.
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -10,7 +10,10 @@ Ein intelligenter Krypto-Trading-Bot mit Grid-Strategie, AI-Enhancement und Memo
 
 - **Grid Trading Strategy** - Automatisches Kaufen/Verkaufen in definierten Preisbändern
 - **AI-Enhanced Decisions** - DeepSeek-Integration für intelligentere Entscheidungen
-- **Memory System** - PostgreSQL-basiertes "Gedächtnis" - lernt aus vergangenen Trades
+- **Trading Playbook** - Selbstlernendes "Erfahrungsgedächtnis" das aus Trades lernt
+- **Memory System** - PostgreSQL-basiertes RAG-System für historische Muster
+- **Comprehensive Logging** - JSON-strukturierte Logs für langfristige Analyse
+- **Weekly Analysis Export** - Automatische Reports für Claude Code Optimierung
 - **Fear & Greed Integration** - Sentiment-basierte Trading-Signale
 - **Whale Alert Tracking** - Überwachung großer Transaktionen
 - **Economic Events** - FOMC, CPI, NFP automatisch berücksichtigt
@@ -21,38 +24,125 @@ Ein intelligenter Krypto-Trading-Bot mit Grid-Strategie, AI-Enhancement und Memo
 ## Architektur
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                         BINANCE GRID BOT                            │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                     │
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐          │
-│  │   Telegram   │◄───│   GridBot    │───►│   Binance    │          │
-│  │   Service    │    │   (Core)     │    │   Client     │          │
-│  └──────────────┘    └──────┬───────┘    └──────────────┘          │
-│                             │                                       │
-│         ┌───────────────────┼───────────────────┐                  │
-│         │                   │                   │                  │
-│         ▼                   ▼                   ▼                  │
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐          │
-│  │   Market     │    │   Memory     │    │  Stop-Loss   │          │
-│  │   Data       │    │   System     │    │  Manager     │          │
-│  └──────────────┘    └──────────────┘    └──────────────┘          │
-│         │                   │                   │                  │
-│         ▼                   ▼                   ▼                  │
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐          │
-│  │  Sentiment   │    │  PostgreSQL  │    │   Risk       │          │
-│  │  Aggregator  │    │   Database   │    │   Control    │          │
-│  └──────────────┘    └──────────────┘    └──────────────┘          │
-│         │                                                          │
-│         ├────────────────┬────────────────┐                        │
-│         ▼                ▼                ▼                        │
-│  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐                │
-│  │ Fear & Greed │ │ Whale Alert  │ │  Economic    │                │
-│  │    Index     │ │   Tracker    │ │   Events     │                │
-│  └──────────────┘ └──────────────┘ └──────────────┘                │
-│                                                                     │
-└─────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           BINANCE GRID BOT                                   │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐                   │
+│  │   Telegram   │◄───│   GridBot    │───►│   Binance    │                   │
+│  │   Service    │    │   (Core)     │    │   Client     │                   │
+│  └──────────────┘    └──────┬───────┘    └──────────────┘                   │
+│                             │                                                │
+│         ┌───────────────────┼───────────────────┐                           │
+│         │                   │                   │                           │
+│         ▼                   ▼                   ▼                           │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐                   │
+│  │   Market     │    │   Memory     │    │  Stop-Loss   │                   │
+│  │   Data       │    │   System     │    │  Manager     │                   │
+│  └──────────────┘    └──────────────┘    └──────────────┘                   │
+│         │                   │                   │                           │
+│         ▼                   ▼                   ▼                           │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐                   │
+│  │  Sentiment   │    │  PostgreSQL  │    │   Risk       │                   │
+│  │  Aggregator  │    │   Database   │    │   Control    │                   │
+│  └──────────────┘    └──────────────┘    └──────────────┘                   │
+│         │                   │                                               │
+│         │                   ▼                                               │
+│         │            ┌──────────────┐                                       │
+│         │            │   Trading    │◄──── Wöchentliches Update             │
+│         │            │   Playbook   │      aus Trade-Analyse                │
+│         │            └──────┬───────┘                                       │
+│         │                   │                                               │
+│         │                   ▼                                               │
+│         │            ┌──────────────┐                                       │
+│         └───────────►│  DeepSeek    │◄──── Playbook als Kontext             │
+│                      │  AI Engine   │                                       │
+│                      └──────────────┘                                       │
+│                                                                              │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │                        LEARNING & ANALYSIS                              │ │
+│  │  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐   │ │
+│  │  │   Logging    │ │   Weekly     │ │  Playbook    │ │   Pattern    │   │ │
+│  │  │   System     │ │   Export     │ │   History    │ │   Learning   │   │ │
+│  │  └──────────────┘ └──────────────┘ └──────────────┘ └──────────────┘   │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
+
+## Trading Playbook - Das Herzstück
+
+Das **Trading Playbook** ist ein selbstlernendes Erfahrungsgedächtnis:
+
+```
+config/TRADING_PLAYBOOK.md          ◄── Aktuelles Playbook
+config/playbook_history/            ◄── Alle historischen Versionen
+├── playbook_v1_20260205.md
+├── playbook_v2_20260212.md
+└── ...
+```
+
+### Wie es funktioniert
+
+1. **Tägliches Lernen** (21:00): Analysiert neue Trades
+2. **Wöchentliches Update** (Sonntag 19:00): Generiert neues Playbook
+3. **Pattern-Erkennung**: Identifiziert erfolgreiche/fehlgeschlagene Strategien
+4. **AI-Integration**: Playbook wird als Kontext an DeepSeek übergeben
+
+### Was das Playbook enthält
+
+- Fear & Greed Regeln mit Erfolgsraten
+- Whale Alert Interpretation
+- Economic Event Reaktionen
+- Technische Analyse Regeln
+- Anti-Patterns (was zu vermeiden ist)
+- Erfolgreiche Strategien
+
+## Logging & Analyse
+
+### Strukturierte Logs
+
+```
+logs/
+├── error.log          # Fehler mit vollem Kontext
+├── trade.log          # Jeder Trade mit Marktdaten
+├── decision.log       # AI-Entscheidungen mit Reasoning
+├── performance.log    # Tägliche/wöchentliche Performance
+├── playbook.log       # Playbook-Updates & Regeln
+├── api.log            # API-Calls für Rate-Limit Analyse
+└── combined.log       # Alles kombiniert
+```
+
+Alle Logs sind JSON-formatiert für einfaches Parsen:
+
+```json
+{
+  "timestamp": "2026-02-05T14:30:00Z",
+  "level": "INFO",
+  "category": "trade",
+  "message": "Trade executed: BUY 0.001 BTCUSDT @ 97500",
+  "data": {
+    "symbol": "BTCUSDT",
+    "side": "BUY",
+    "quantity": 0.001,
+    "price": 97500,
+    "context": {"fear_greed": 25, "btc_trend": "bullish"}
+  }
+}
+```
+
+### Weekly Analysis Export
+
+Jeden Samstag 23:00 wird ein Export für Claude Code Analyse erstellt:
+
+```
+analysis_exports/
+└── week_20260205/
+    ├── analysis_export.json    # Strukturierte Daten
+    ├── ANALYSIS_REPORT.md      # Lesbare Zusammenfassung
+    └── logs/                   # Relevante Log-Ausschnitte
+```
+
+Siehe [docs/CLAUDE_ANALYSIS_GUIDE.md](docs/CLAUDE_ANALYSIS_GUIDE.md) für den Analyse-Workflow.
 
 ## Projektstruktur
 
@@ -61,45 +151,56 @@ binance-grid-bot/
 ├── src/
 │   ├── core/
 │   │   ├── bot.py              # Haupt-Bot-Logik
-│   │   └── config.py           # Zentrale Konfiguration
+│   │   ├── config.py           # Zentrale Konfiguration
+│   │   └── logging_system.py   # Strukturiertes Logging
 │   ├── api/
 │   │   ├── binance_client.py   # Binance API Wrapper
 │   │   └── http_client.py      # HTTP Client mit Retry/Caching
 │   ├── strategies/
 │   │   ├── grid_strategy.py    # Grid-Trading-Logik
-│   │   ├── ai_enhanced.py      # DeepSeek AI Integration
+│   │   ├── ai_enhanced.py      # DeepSeek AI + Playbook Integration
 │   │   └── portfolio_rebalance.py
 │   ├── data/
 │   │   ├── market_data.py      # Zentraler Marktdaten-Provider
 │   │   ├── sentiment.py        # Fear & Greed, CoinGecko
 │   │   ├── whale_alert.py      # Whale-Tracking
 │   │   ├── economic_events.py  # FOMC, CPI, NFP Events
-│   │   ├── memory.py           # Trading Memory System
+│   │   ├── memory.py           # Trading Memory System (RAG)
+│   │   ├── playbook.py         # Trading Playbook Generator
 │   │   └── fetcher.py          # Historische Daten
 │   ├── risk/
 │   │   └── stop_loss.py        # Stop-Loss Management
 │   ├── analysis/
-│   │   └── technical_indicators.py
+│   │   ├── technical_indicators.py
+│   │   └── weekly_export.py    # Wöchentlicher Analyse-Export
 │   ├── models/
 │   │   └── portfolio.py        # Markowitz, Kelly Criterion
 │   ├── notifications/
 │   │   ├── telegram_service.py # Zentraler Telegram Service
 │   │   ├── telegram_bot.py     # Telegram Bot Commands
+│   │   ├── charts.py           # Performance-Charts
 │   │   └── ai_assistant.py     # AI Chat Integration
 │   └── backtest/
 │       └── engine.py           # Backtesting Engine
 ├── docker/
 │   ├── docker-compose.yml      # PostgreSQL, Redis, Bot
 │   ├── scheduler.py            # Scheduled Tasks
+│   ├── telegram_bot_handler.py # Telegram Command Handler
 │   └── init.sql                # Database Schema
 ├── config/
-│   └── bot_state.json          # Persistenter Bot-State
+│   ├── bot_state.json          # Persistenter Bot-State
+│   ├── TRADING_PLAYBOOK.md     # Aktuelles Playbook
+│   └── playbook_history/       # Playbook-Versionen
+├── logs/                       # Strukturierte Logs (gitignored)
+├── analysis_exports/           # Wöchentliche Exports (gitignored)
+├── docs/
+│   └── CLAUDE_ANALYSIS_GUIDE.md
 ├── main.py                     # Entry Point
 ├── requirements.txt
 ├── pyproject.toml              # Linting/Formatting Config
 └── .github/
     └── workflows/
-        └── ci.yml              # CI/CD Pipeline
+        └── ci.yml              # CI/CD Pipeline mit Auto-Release
 ```
 
 ## Datenbank-Schema
@@ -118,9 +219,8 @@ binance-grid-bot/
 | `technical_indicators` | Berechnete Indikatoren | Technical Analysis |
 | `ai_conversations` | Telegram AI Chat | Context für AI Antworten |
 
-### Detaillierte Tabellen-Strukturen
+### `trades` - Trade-Historie mit Kontext
 
-#### `trades` - Trade-Historie
 ```sql
 CREATE TABLE trades (
     id UUID PRIMARY KEY,
@@ -132,138 +232,24 @@ CREATE TABLE trades (
     price DECIMAL(20, 8),
     quantity DECIMAL(20, 8),
     value_usd DECIMAL(20, 2),
-    fee_usd DECIMAL(10, 4),
 
     -- Market Context (zum Zeitpunkt des Trades)
-    fear_greed INTEGER,           -- 0-100
-    btc_price DECIMAL(20, 2),
-    symbol_24h_change DECIMAL(10, 4),
+    fear_greed_at_entry INTEGER,  -- 0-100
+    btc_price_at_entry DECIMAL(20, 2),
     market_trend VARCHAR(20),     -- BULL, BEAR, SIDEWAYS
-    volatility_regime VARCHAR(20), -- LOW, MEDIUM, HIGH, EXTREME
 
     -- Decision Context
     math_signal JSONB,            -- Markowitz/Portfolio Output
     ai_signal JSONB,              -- DeepSeek Analyse
-    sentiment_data JSONB,         -- Sentiment zum Zeitpunkt
     reasoning TEXT,               -- Begründung für Trade
     confidence DECIMAL(3, 2),     -- 0.00 - 1.00
 
-    -- Outcome (später aktualisiert)
+    -- Outcome (später aktualisiert für Playbook-Learning)
     outcome_1h DECIMAL(10, 4),    -- Return nach 1h
     outcome_24h DECIMAL(10, 4),   -- Return nach 24h
     outcome_7d DECIMAL(10, 4),    -- Return nach 7d
     was_good_decision BOOLEAN     -- Automatisch berechnet
 );
-```
-
-**Verwendung:**
-- Speichert jeden Trade mit vollständigem Kontext
-- Ermöglicht Analyse welche Bedingungen zu guten Trades führen
-- AI nutzt historische Trades für bessere Entscheidungen
-
-#### `market_snapshots` - Marktdaten-Historie
-```sql
-CREATE TABLE market_snapshots (
-    id UUID PRIMARY KEY,
-    timestamp TIMESTAMPTZ NOT NULL,
-
-    -- Global Market
-    fear_greed INTEGER,
-    btc_price DECIMAL(20, 2),
-    btc_24h_change DECIMAL(10, 4),
-    total_market_cap DECIMAL(30, 2),
-    btc_dominance DECIMAL(5, 2),
-
-    -- Top Movers (JSONB)
-    top_gainers JSONB,    -- [{symbol, change_pct}, ...]
-    top_losers JSONB,
-    trending_coins JSONB,
-
-    -- Macro
-    etf_flows JSONB,          -- {btc_flow, eth_flow}
-    upcoming_events JSONB,
-
-    -- Technical
-    btc_rsi DECIMAL(5, 2),
-    btc_macd JSONB
-);
-```
-
-**Verwendung:**
-- Stündlicher Snapshot der Marktlage
-- Pattern-Erkennung über Zeit
-- Kontext für AI-Entscheidungen
-
-#### `whale_alerts` - Große Transaktionen
-```sql
-CREATE TABLE whale_alerts (
-    id UUID PRIMARY KEY,
-    timestamp TIMESTAMPTZ NOT NULL,
-
-    symbol VARCHAR(20),
-    amount DECIMAL(30, 8),
-    amount_usd DECIMAL(20, 2),
-    transaction_type VARCHAR(50),  -- transfer, exchange_deposit, exchange_withdrawal
-    from_owner VARCHAR(100),       -- Exchange Name oder "unknown"
-    to_owner VARCHAR(100),
-
-    is_significant BOOLEAN,
-    potential_impact VARCHAR(20)   -- BULLISH, BEARISH, NEUTRAL
-);
-```
-
-**Verwendung:**
-- Exchange Deposit → Potentieller Verkaufsdruck (BEARISH)
-- Exchange Withdrawal → Akkumulation (BULLISH)
-- Schwellwerte: BTC > $10M, ETH > $5M, Altcoins > $1M
-
-#### `learned_patterns` - Erfolgreiche Muster
-```sql
-CREATE TABLE learned_patterns (
-    id UUID PRIMARY KEY,
-    pattern_name VARCHAR(100) UNIQUE,
-    description TEXT,
-    conditions JSONB,              -- {"fear_greed_min": 20, "fear_greed_max": 30}
-
-    -- Statistiken
-    sample_size INTEGER,
-    success_rate DECIMAL(5, 2),
-    avg_return_24h DECIMAL(10, 4),
-    sharpe_ratio DECIMAL(10, 4),
-    max_drawdown DECIMAL(10, 4),
-
-    is_active BOOLEAN,
-    last_triggered TIMESTAMPTZ
-);
-```
-
-**Vordefinierte Patterns:**
-- `buy_extreme_fear` - F&G < 25 (historisch gute Kaufgelegenheit)
-- `buy_fear` - F&G 25-40
-- `sell_extreme_greed` - F&G > 75 (Warnsignal)
-- `buy_rsi_oversold` - RSI < 30
-- `buy_whale_accumulation` - Nach großen Exchange-Withdrawals
-
-### Views
-
-```sql
--- Performance der letzten 30 Tage
-CREATE VIEW v_recent_performance AS
-SELECT
-    DATE_TRUNC('day', timestamp) as date,
-    COUNT(*) as trades,
-    SUM(CASE WHEN was_good_decision THEN 1 ELSE 0 END) as winning_trades,
-    AVG(outcome_24h) as avg_return
-FROM trades
-WHERE timestamp > NOW() - INTERVAL '30 days'
-GROUP BY date;
-
--- Aktive Pattern-Performance
-CREATE VIEW v_pattern_performance AS
-SELECT pattern_name, success_rate, sample_size, avg_return_24h
-FROM learned_patterns
-WHERE is_active = true AND sample_size >= 10
-ORDER BY success_rate DESC;
 ```
 
 ## Installation
@@ -285,7 +271,6 @@ cd binance-grid-bot
 # Virtual Environment erstellen
 python -m venv venv
 source venv/bin/activate  # Linux/Mac
-# oder: venv\Scripts\activate  # Windows
 
 # Dependencies installieren
 pip install -r requirements.txt
@@ -353,20 +338,6 @@ TELEGRAM_CHAT_ID=your_chat_id
 DATABASE_URL=postgresql://trading:password@localhost:5433/trading_bot
 ```
 
-### Config Klassen
-
-Die Konfiguration ist zentral in `src/core/config.py` definiert:
-
-```python
-from src.core.config import get_config
-
-config = get_config()
-print(config.bot.symbol)           # BTCUSDT
-print(config.bot.investment)       # 10.0
-print(config.sentiment.extreme_fear_threshold)  # 20
-print(config.whale.btc_threshold)  # 10_000_000
-```
-
 ## Verwendung
 
 ### Telegram Commands
@@ -379,136 +350,65 @@ print(config.whale.btc_threshold)  # 10_000_000
 | `/whale` | Letzte Whale-Alerts |
 | `/events` | Anstehende Makro-Events |
 | `/performance` | 30-Tage Performance |
+| `/playbook` | Aktuelles Trading Playbook anzeigen |
+| `/playbook_stats` | Playbook-Statistiken |
+| `/playbook_update` | Manuelles Playbook-Update auslösen |
 | `/stop` | Bot stoppen |
-
-### Täglicher Report
-
-Der Bot sendet automatisch um 20:00 Uhr einen Tages-Report:
-
-```
-📊 TAGES-REPORT 2024-01-15
-
-💰 Portfolio: $1,234.56
-📈 Heute: +2.34%
-
-Trades heute: 5
-Win Rate: 80%
-
-Markt:
-├ Fear & Greed: 45 (Neutral)
-├ BTC: $42,500
-└ Trend: Bullish
-
-Gute Nacht! 🌙
-```
 
 ### Scheduler Tasks
 
 | Task | Zeitplan | Beschreibung |
 |------|----------|--------------|
 | Daily Summary | 20:00 | Portfolio-Report |
+| Pattern Learning | 21:00 | Tägliche Trade-Analyse |
 | Market Snapshot | Stündlich | Marktdaten speichern |
 | Stop-Loss Check | 5 Min | Aktive Stops prüfen |
 | Outcome Update | 6h | Trade-Ergebnisse aktualisieren |
+| System Health | 6h | DB, API, Memory prüfen |
 | Macro Check | 08:00 | FOMC/CPI Events prüfen |
 | Sentiment Check | 4h | F&G Extreme Alert |
 | Whale Check | Stündlich | Große Transaktionen |
 | Weekly Rebalance | So 18:00 | Portfolio-Rebalancing |
+| Playbook Update | So 19:00 | Playbook neu generieren |
+| Weekly Export | Sa 23:00 | Analyse-Export erstellen |
 
-## API Integration
+## Wöchentlicher Optimierungs-Workflow
 
-### Verwendete APIs
+```bash
+# Jeden Sonntag nach dem automatischen Export:
+cd /home/murriiii/dev/private/trading/binance-grid-bot
+claude
 
-| API | Zweck | Auth |
-|-----|-------|------|
-| Binance | Trading, Preise | API Key |
-| Alternative.me | Fear & Greed Index | Keine |
-| CoinGecko | Social Stats, Trending | Keine |
-| Blockchain.com | Whale Tracking (BTC) | Keine |
-| TradingView | Economic Calendar | Keine |
-| DeepSeek | AI Analysis | API Key |
-| Telegram | Notifications | Bot Token |
-
-### HTTP Client
-
-Zentraler HTTP Client mit Retry-Logik:
-
-```python
-from src.api.http_client import get_http_client
-
-http = get_http_client()
-data = http.get(
-    "https://api.example.com/data",
-    params={'symbol': 'BTCUSDT'},
-    api_type='binance',  # Verwendet Binance-spezifischen Timeout
-    timeout=10           # Optional: Override
-)
+# Claude Code fragen:
+"Analyze the latest weekly export in analysis_exports/ and suggest:
+1. Playbook rule updates based on trade outcomes
+2. Code improvements for common errors
+3. Risk management adjustments"
 ```
 
-## Grid Trading Strategie
-
-### Funktionsweise
-
-```
-Upper Price ────────────────────── $105,000
-                    │ SELL
-Level 4      ──────┬┴──────────── $103,750
-                   │ SELL
-Level 3      ─────┬┴───────────── $102,500
-                  │ SELL
-Level 2      ────┬┴────────────── $101,250
-                 │
-Current Price ───●─────────────── $100,500
-                 │
-Level 1      ────┴┬────────────── $100,000
-                  │ BUY
-Lower Price  ─────┴────────────── $95,000
-```
-
-1. Bot platziert BUY Orders unter dem aktuellen Preis
-2. Bot platziert SELL Orders über dem aktuellen Preis
-3. Bei Ausführung einer BUY Order → Neue SELL Order auf nächstem Level
-4. Bei Ausführung einer SELL Order → Neue BUY Order auf nächstem Level
-
-### min_qty Validierung
-
-```python
-# Jedes Grid-Level wird validiert
-if quantity < symbol_info['min_qty']:
-    logger.warning(f"Level {price} übersprungen: qty {quantity} < min {min_qty}")
-    level.valid = False
-```
+Detaillierte Anleitung: [docs/CLAUDE_ANALYSIS_GUIDE.md](docs/CLAUDE_ANALYSIS_GUIDE.md)
 
 ## AI-Enhanced Trading
 
-### DeepSeek Integration
+### DeepSeek + Playbook Integration
 
 ```python
 from src.strategies.ai_enhanced import AITradingEnhancer
 
 ai = AITradingEnhancer()
 
-# News analysieren
+# Der System-Prompt enthält automatisch das Playbook:
+# - Fear & Greed Regeln
+# - Historische Erfolgsraten
+# - Anti-Patterns zu vermeiden
+
 signal = ai.analyze_news([
     {"title": "Fed signals rate cut", "summary": "..."}
 ])
 print(signal.direction)    # BULLISH
 print(signal.confidence)   # 0.75
-print(signal.reasoning)    # "Fed dovish → Risk-On..."
-
-# Anomalie erklären
-explanation = ai.explain_anomaly(
-    "BTC dropped 5% in 1 hour",
-    context={"fear_greed": 75, "whale_activity": "high"}
-)
+print(signal.reasoning)    # "Fed dovish → Risk-On, Playbook sagt BUY bei F&G < 40..."
 ```
-
-### Retry & Fallback
-
-- 3 Retries mit Exponential Backoff
-- 30 Sekunden Timeout
-- Rate Limit Handling (429)
-- Fallback Response bei Ausfall
 
 ## Risk Management
 
@@ -563,9 +463,16 @@ pre-commit install
 pre-commit run --all-files
 ```
 
-## Conventional Commits
+## CI/CD Pipeline
 
-Das Projekt verwendet [Conventional Commits](https://www.conventionalcommits.org/):
+Die GitHub Actions Pipeline:
+
+1. **Lint & Format**: Ruff checks
+2. **Type Check**: MyPy
+3. **Tests**: Pytest mit Coverage
+4. **Auto-Release**: Bei Version-Bump in pyproject.toml wird automatisch ein GitHub Release erstellt
+
+## Conventional Commits
 
 ```
 feat: Add whale alert integration
@@ -584,6 +491,18 @@ chore: Update dependencies
 | `fix:` | Patch (0.0.X) |
 | `BREAKING CHANGE:` | Major (X.0.0) |
 
+## API Integration
+
+| API | Zweck | Auth |
+|-----|-------|------|
+| Binance | Trading, Preise | API Key |
+| Alternative.me | Fear & Greed Index | Keine |
+| CoinGecko | Social Stats, Trending | Keine |
+| Blockchain.com | Whale Tracking (BTC) | Keine |
+| TradingView | Economic Calendar | Keine |
+| DeepSeek | AI Analysis | API Key |
+| Telegram | Notifications | Bot Token |
+
 ## Lizenz
 
 MIT License - siehe [LICENSE](LICENSE)
@@ -592,7 +511,7 @@ MIT License - siehe [LICENSE](LICENSE)
 
 **Dieses Projekt ist nur für Bildungszwecke gedacht.**
 
-- Kein Finanzberatung
+- Keine Finanzberatung
 - Trading birgt Risiken
 - Verwende immer zuerst das Testnet
 - Investiere nur was du bereit bist zu verlieren
@@ -607,4 +526,4 @@ MIT License - siehe [LICENSE](LICENSE)
 
 ---
 
-Made with ❤️ by [murriiii](https://github.com/murriiii)
+Made with Claude Code by [murriiii](https://github.com/murriiii)
