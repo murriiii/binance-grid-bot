@@ -1,0 +1,27 @@
+# ═══════════════════════════════════════════════════════════════
+# SCHEDULER - Cron Jobs
+# ═══════════════════════════════════════════════════════════════
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# System dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    libpq-dev \
+    cron \
+    && rm -rf /var/lib/apt/lists/*
+
+# Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir schedule==1.2.1
+
+# Application code
+COPY src/ ./src/
+COPY config/ ./config/
+
+# Scheduler script
+COPY docker/scheduler.py .
+
+CMD ["python", "scheduler.py"]

@@ -1,0 +1,344 @@
+"""
+Stop-Loss Management System
+Automatischer Schutz vor großen Verlusten
+
+Typen:
+1. Fixed Stop-Loss: Verkaufe wenn Preis X% unter Entry fällt
+2. Trailing Stop: Folgt dem Preis nach oben, stoppt bei Rücksetzer
+3. ATR-basiert: Dynamischer Stop basierend auf Volatilität
+
+Wichtig: Stop-Loss schützt vor katastrophalen Verlusten,
+aber kann bei hoher Volatilität zu früh auslösen.
+"""
+import logging
+from datetime import datetime
+from typing import Dict, List, Optional, Tuple
+from dataclasses import dataclass, field
+from enum import Enum
+import threading
+import time
+
+logger = logging.getLogger('trading_bot')
+
+
+class StopType(Enum):
+    FIXED = "fixed"           # Fester Prozentsatz
+    TRAILING = "trailing"     # Folgt dem Preis
+    ATR = "atr"               # Volatilitätsbasiert
+    BREAK_EVEN = "break_even" # Auf Entry setzen nach X% Gewinn
+
+
+@dataclass
+class StopLossOrder:
+    """Eine Stop-Loss Order"""
+    id: str
+    symbol: str
+    entry_price: float
+    quantity: float
+    stop_type: StopType
+
+    # Stop Konfiguration
+    stop_percentage: float = 5.0  # Standard: 5% unter Entry
+    trailing_distance: float = 3.0  # Für Trailing: 3% Abstand
+    atr_multiplier: float = 2.0  # Für ATR: 2x ATR als Stop
+
+    # Status
+    current_stop_price: float = 0.0
+    highest_price: float = 0.0  # Für Trailing
+    is_active: bool = True
+    created_at: datetime = field(default_factory=datetime.now)
+
+    # Ergebnis
+    triggered_at: Optional[datetime] = None
+    triggered_price: Optional[float] = None
+    result_pnl_pct: Optional[float] = None
+
+    def __post_init__(self):
+        if self.current_stop_price == 0:
+            self.current_stop_price = self._calculate_initial_stop()
+        self.highest_price = self.entry_price
+
+    def _calculate_initial_stop(self) -> float:
+        """Berechnet initialen Stop-Preis"""
+        if self.stop_type == StopType.FIXED:
+            return self.entry_price * (1 - self.stop_percentage / 100)
+        elif self.stop_type == StopType.TRAILING:
+            return self.entry_price * (1 - self.trailing_distance / 100)
+        else:
+            return self.entry_price * (1 - self.stop_percentage / 100)
+
+    def update(self, current_price: float, current_atr: float = None) -> bool:
+        """
+        Aktualisiert den Stop basierend auf aktuellem Preis.
+
+        Returns:
+            True wenn Stop getriggert wurde
+        """
+        if not self.is_active:
+            return False
+
+        # Trailing Stop: Ziehe Stop nach wenn Preis steigt
+        if self.stop_type == StopType.TRAILING:
+            if current_price > self.highest_price:
+                self.highest_price = current_price
+                new_stop = current_price * (1 - self.trailing_distance / 100)
+                if new_stop > self.current_stop_price:
+                    self.current_stop_price = new_stop
+
+        # ATR Stop: Dynamisch basierend auf Volatilität
+        elif self.stop_type == StopType.ATR and current_atr:
+            new_stop = current_price - (current_atr * self.atr_multiplier)
+            if new_stop > self.current_stop_price:
+                self.current_stop_price = new_stop
+
+        # Break-Even: Nach X% Gewinn auf Entry setzen
+        elif self.stop_type == StopType.BREAK_EVEN:
+            pnl_pct = (current_price - self.entry_price) / self.entry_price * 100
+            if pnl_pct >= self.stop_percentage:  # Z.B. nach 5% Gewinn
+                if self.current_stop_price < self.entry_price:
+                    self.current_stop_price = self.entry_price  # Break-Even
+
+        # Check ob Stop getriggert
+        if current_price <= self.current_stop_price:
+            self.trigger(current_price)
+            return True
+
+        return False
+
+    def trigger(self, trigger_price: float):
+        """Markiert Stop als getriggert"""
+        self.is_active = False
+        self.triggered_at = datetime.now()
+        self.triggered_price = trigger_price
+        self.result_pnl_pct = (trigger_price - self.entry_price) / self.entry_price * 100
+
+    def to_dict(self) -> Dict:
+        return {
+            'id': self.id,
+            'symbol': self.symbol,
+            'entry_price': self.entry_price,
+            'current_stop': self.current_stop_price,
+            'stop_type': self.stop_type.value,
+            'is_active': self.is_active,
+            'distance_pct': (self.entry_price - self.current_stop_price) / self.entry_price * 100
+        }
+
+
+class StopLossManager:
+    """
+    Verwaltet alle Stop-Loss Orders.
+
+    Features:
+    - Automatisches Trailing
+    - Benachrichtigung bei Trigger
+    - Portfolio-weiter Drawdown-Schutz
+    """
+
+    def __init__(self, db_connection=None, telegram_bot=None):
+        self.db = db_connection
+        self.telegram = telegram_bot
+        self.stops: Dict[str, StopLossOrder] = {}
+        self.lock = threading.Lock()
+
+        # Portfolio Protection
+        self.max_daily_drawdown_pct = 10.0  # Stop alles bei -10% am Tag
+        self.daily_start_value: float = 0.0
+        self.portfolio_stopped = False
+
+    def create_stop(
+        self,
+        symbol: str,
+        entry_price: float,
+        quantity: float,
+        stop_type: StopType = StopType.TRAILING,
+        stop_percentage: float = 5.0
+    ) -> StopLossOrder:
+        """Erstellt einen neuen Stop-Loss"""
+        import uuid
+
+        stop = StopLossOrder(
+            id=str(uuid.uuid4())[:8],
+            symbol=symbol,
+            entry_price=entry_price,
+            quantity=quantity,
+            stop_type=stop_type,
+            stop_percentage=stop_percentage
+        )
+
+        with self.lock:
+            self.stops[stop.id] = stop
+
+        # In DB speichern
+        self._save_to_db(stop)
+
+        return stop
+
+    def update_all(self, prices: Dict[str, float], atrs: Dict[str, float] = None) -> List[StopLossOrder]:
+        """
+        Aktualisiert alle Stops mit aktuellen Preisen.
+
+        Returns:
+            Liste der getriggerten Stops
+        """
+        triggered = []
+
+        with self.lock:
+            for stop_id, stop in list(self.stops.items()):
+                if not stop.is_active:
+                    continue
+
+                price = prices.get(stop.symbol)
+                if not price:
+                    continue
+
+                atr = atrs.get(stop.symbol) if atrs else None
+
+                if stop.update(price, atr):
+                    triggered.append(stop)
+                    self._on_stop_triggered(stop)
+
+        return triggered
+
+    def _on_stop_triggered(self, stop: StopLossOrder):
+        """Callback wenn ein Stop getriggert wird"""
+        # Telegram Benachrichtigung
+        if self.telegram:
+            emoji = "🛑" if stop.result_pnl_pct < 0 else "✅"
+            msg = f"""
+{emoji} *STOP-LOSS TRIGGERED*
+
+Symbol: *{stop.symbol}*
+Entry: `${stop.entry_price:,.2f}`
+Stop: `${stop.triggered_price:,.2f}`
+Result: `{stop.result_pnl_pct:+.2f}%`
+
+Type: {stop.stop_type.value}
+"""
+            self.telegram.send_message(msg)
+
+        # In DB aktualisieren
+        self._update_db(stop)
+
+    def check_portfolio_drawdown(self, current_value: float) -> Tuple[bool, str]:
+        """
+        Prüft ob Portfolio-weiter Stop erreicht ist.
+
+        Returns:
+            (should_stop_all, reason)
+        """
+        if self.daily_start_value == 0:
+            self.daily_start_value = current_value
+            return False, ""
+
+        drawdown = (current_value - self.daily_start_value) / self.daily_start_value * 100
+
+        if drawdown <= -self.max_daily_drawdown_pct:
+            self.portfolio_stopped = True
+            return True, f"Portfolio Drawdown {drawdown:.1f}% erreicht Maximum von {self.max_daily_drawdown_pct}%"
+
+        return False, ""
+
+    def reset_daily(self, start_value: float):
+        """Reset für neuen Tag"""
+        self.daily_start_value = start_value
+        self.portfolio_stopped = False
+
+    def get_active_stops(self) -> List[Dict]:
+        """Gibt alle aktiven Stops zurück"""
+        with self.lock:
+            return [s.to_dict() for s in self.stops.values() if s.is_active]
+
+    def cancel_stop(self, stop_id: str) -> bool:
+        """Storniert einen Stop"""
+        with self.lock:
+            if stop_id in self.stops:
+                self.stops[stop_id].is_active = False
+                return True
+        return False
+
+    def _save_to_db(self, stop: StopLossOrder):
+        """Speichert Stop in Datenbank"""
+        if not self.db:
+            return
+
+        try:
+            with self.db.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO stop_loss_orders
+                    (id, symbol, entry_price, stop_price, quantity, stop_type, is_active)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                """, (
+                    stop.id, stop.symbol, stop.entry_price,
+                    stop.current_stop_price, stop.quantity,
+                    stop.stop_type.value, stop.is_active
+                ))
+                self.db.commit()
+        except Exception as e:
+            logger.error(f"DB Error: {e}")
+
+    def _update_db(self, stop: StopLossOrder):
+        """Aktualisiert Stop in Datenbank"""
+        if not self.db:
+            return
+
+        try:
+            with self.db.cursor() as cur:
+                cur.execute("""
+                    UPDATE stop_loss_orders
+                    SET is_active = %s, triggered_at = %s,
+                        triggered_price = %s, result_pnl = %s
+                    WHERE id = %s
+                """, (
+                    stop.is_active, stop.triggered_at,
+                    stop.triggered_price, stop.result_pnl_pct, stop.id
+                ))
+                self.db.commit()
+        except Exception as e:
+            logger.error(f"DB Error: {e}")
+
+
+def get_recommended_stop(
+    symbol: str,
+    entry_price: float,
+    volatility: str,
+    risk_tolerance: str = "medium"
+) -> Tuple[StopType, float]:
+    """
+    Empfiehlt Stop-Loss Konfiguration basierend auf Volatilität und Risiko.
+
+    Args:
+        symbol: Trading Symbol
+        entry_price: Einstiegspreis
+        volatility: "LOW", "MEDIUM", "HIGH"
+        risk_tolerance: "low", "medium", "high"
+
+    Returns:
+        (stop_type, stop_percentage)
+    """
+    # Basis Stop-Prozent basierend auf Volatilität
+    base_stops = {
+        "LOW": 3.0,
+        "MEDIUM": 5.0,
+        "HIGH": 8.0
+    }
+
+    # Risiko-Multiplikator
+    risk_mult = {
+        "low": 0.7,      # Engere Stops
+        "medium": 1.0,
+        "high": 1.3      # Weitere Stops
+    }
+
+    base = base_stops.get(volatility, 5.0)
+    mult = risk_mult.get(risk_tolerance, 1.0)
+    stop_pct = base * mult
+
+    # Stop-Typ basierend auf Volatilität
+    if volatility == "LOW":
+        stop_type = StopType.FIXED  # Bei niedriger Vola reicht fixed
+    elif volatility == "HIGH":
+        stop_type = StopType.ATR    # Bei hoher Vola ATR-basiert
+    else:
+        stop_type = StopType.TRAILING  # Standard: Trailing
+
+    return stop_type, stop_pct

@@ -1,0 +1,26 @@
+# ═══════════════════════════════════════════════════════════════
+# TELEGRAM HANDLER - Interactive Bot
+# ═══════════════════════════════════════════════════════════════
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# System dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir python-telegram-bot==20.7
+
+# Application code
+COPY src/ ./src/
+COPY config/ ./config/
+
+# Telegram bot script
+COPY docker/telegram_bot_handler.py .
+
+CMD ["python", "telegram_bot_handler.py"]

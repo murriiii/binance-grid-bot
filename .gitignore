@@ -1,0 +1,48 @@
+# Secrets - NIEMALS committen!
+.env
+docker/.env
+*.pem
+*_secret*
+.secrets.baseline
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Testing
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# Logs
+logs/*.log
+*.log
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Bot State (optional - kann committet werden für Persistenz)
+# config/bot_state.json
+
+# Data files (root level data folder, not src/data)
+/data/
+*.csv
+*.parquet

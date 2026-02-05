@@ -1,0 +1,155 @@
+services:
+  # ═══════════════════════════════════════════════════════════════
+  # TRADING BOT - Main Application
+  # ═══════════════════════════════════════════════════════════════
+  trading-bot:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: trading-bot
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      - TZ=Europe/Berlin
+      # Database
+      - DATABASE_URL=postgresql://trading:${POSTGRES_PASSWORD}@postgres:5432/trading_bot
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
+      # Binance
+      - BINANCE_API_KEY=${BINANCE_API_KEY:-}
+      - BINANCE_API_SECRET=${BINANCE_API_SECRET:-}
+      - BINANCE_TESTNET=${BINANCE_TESTNET:-true}
+      # Telegram
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
+      # DeepSeek AI
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      # Trading Config
+      - TRADING_PAIR=${TRADING_PAIR:-BTCUSDT}
+      - INVESTMENT_AMOUNT=${INVESTMENT_AMOUNT:-10}
+    volumes:
+      - bot_logs:/app/logs
+      - bot_data:/app/data
+    networks:
+      - trading-internal
+      - proxy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8080/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  # ═══════════════════════════════════════════════════════════════
+  # TELEGRAM BOT - Interactive Commands Handler
+  # ═══════════════════════════════════════════════════════════════
+  telegram-handler:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.telegram
+    container_name: trading-telegram
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - redis
+    environment:
+      - TZ=Europe/Berlin
+      - DATABASE_URL=postgresql://trading:${POSTGRES_PASSWORD}@postgres:5432/trading_bot
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+    networks:
+      - trading-internal
+    healthcheck:
+      test: ["CMD", "python", "-c", "print('ok')"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+
+  # ═══════════════════════════════════════════════════════════════
+  # SCHEDULER - Cron Jobs (Daily Reports, Rebalancing, etc.)
+  # ═══════════════════════════════════════════════════════════════
+  scheduler:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.scheduler
+    container_name: trading-scheduler
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - trading-bot
+    environment:
+      - TZ=Europe/Berlin
+      - DATABASE_URL=postgresql://trading:${POSTGRES_PASSWORD}@postgres:5432/trading_bot
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+    volumes:
+      - bot_logs:/app/logs
+    networks:
+      - trading-internal
+
+  # ═══════════════════════════════════════════════════════════════
+  # POSTGRES - Trading Memory Database
+  # ═══════════════════════════════════════════════════════════════
+  postgres:
+    image: postgres:16-alpine
+    container_name: trading-postgres
+    restart: unless-stopped
+    ports:
+      - "5433:5432"  # Externer Port 5433 (5432 ist schon belegt)
+    environment:
+      - POSTGRES_USER=trading
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=trading_bot
+      - TZ=Europe/Berlin
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ../docker/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U trading -d trading_bot"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - trading-internal
+
+  # ═══════════════════════════════════════════════════════════════
+  # REDIS - Caching & Rate Limiting
+  # ═══════════════════════════════════════════════════════════════
+  redis:
+    image: redis:7-alpine
+    container_name: trading-redis
+    restart: unless-stopped
+    ports:
+      - "6380:6379"  # Externer Port 6380 (6379 ist schon belegt)
+    command: redis-server --requirepass ${REDIS_PASSWORD} --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - trading-internal
+
+volumes:
+  postgres_data:
+  redis_data:
+  bot_logs:
+  bot_data:
+
+networks:
+  trading-internal:
+    driver: bridge
+  proxy:
+    external: true
