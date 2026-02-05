@@ -107,7 +107,8 @@ ignore = [
     "ERA001",  # Commented-out code (documentation comments)
     "RUF012",  # Mutable class attributes (ClassVar)
     "RUF013",  # Implicit Optional
-    "RUF059",  # Unpacked variable not used
+    "PTH100",  # os.path.abspath() (path setup pattern)
+    "PTH120",  # os.path.dirname() (path setup pattern)
     "PTH123",  # open() vs Path.open()
     "B007",    # Unused loop control variable
     "B905",    # zip() without strict parameter

@@ -5,8 +5,10 @@ Zeigt aktuelles Markt-Sentiment aus kostenlosen Quellen
 
 Keine API Keys nötig!
 """
-import sys
+
 import os
+import sys
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from src.data.sentiment import print_sentiment_report

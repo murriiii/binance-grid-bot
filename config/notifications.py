@@ -6,34 +6,29 @@ Modus: NORMAL (2-5 Nachrichten/Tag)
 NOTIFICATION_CONFIG = {
     # Modus: "minimal", "normal", "verbose"
     "mode": "normal",
-
     # Tägliche Summary
     "daily_summary": {
         "enabled": True,
         "time": "20:00",  # Uhrzeit für täglichen Report
         "include_chart": True,
     },
-
     # Trade Alerts
     "trade_alerts": {
         "enabled": True,
         "min_value": 5.0,  # Nur Trades > 5€ melden
         "include_reasoning": True,  # Begründung mitschicken
     },
-
     # Sentiment Alerts
     "sentiment_alerts": {
         "enabled": True,
-        "fear_threshold": 25,   # Alert wenn Fear & Greed < 25
+        "fear_threshold": 25,  # Alert wenn Fear & Greed < 25
         "greed_threshold": 75,  # Alert wenn Fear & Greed > 75
-        "cooldown_hours": 12,   # Nicht öfter als alle 12h
+        "cooldown_hours": 12,  # Nicht öfter als alle 12h
     },
-
     # Error Alerts (immer an)
     "error_alerts": {
         "enabled": True,
     },
-
     # Stille Zeiten (keine Benachrichtigungen)
     "quiet_hours": {
         "enabled": False,

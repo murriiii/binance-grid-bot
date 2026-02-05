@@ -13,15 +13,13 @@ STRATEGY_CONFIG = {
         "duration_months": 4,  # 3-4 Monate für genug Datenpunkte
         "min_trades_for_patterns": 50,  # Mindestens 50 Trades pro Pattern
         "min_confidence_threshold": 0.6,  # AI-Confidence unter 0.6 = HOLD
-
         # In der Lernphase konservativer
         "learning_mode_settings": {
             "max_position_size_pct": 20,  # Max 20% pro Position
             "prefer_hold_on_uncertainty": True,
             "log_all_decisions": True,  # Auch Nicht-Trades loggen
-        }
+        },
     },
-
     # ═══════════════════════════════════════════════════════════════
     # MAKROÖKONOMISCHE REGELN
     # ═══════════════════════════════════════════════════════════════
@@ -34,18 +32,15 @@ STRATEGY_CONFIG = {
             "Core CPI",
             "ECB Interest Rate Decision",
         ],
-
         # Stunden vor/nach Event nicht traden
         "event_blackout_hours_before": 4,
         "event_blackout_hours_after": 2,
-
         # ETF Flow Regeln
         "etf_flow_thresholds": {
-            "strong_inflow_mio": 500,   # >500M = sehr bullish
+            "strong_inflow_mio": 500,  # >500M = sehr bullish
             "strong_outflow_mio": -300,  # <-300M = bearish Signal
         },
     },
-
     # ═══════════════════════════════════════════════════════════════
     # DATENSAMMLUNG
     # ═══════════════════════════════════════════════════════════════
@@ -55,15 +50,12 @@ STRATEGY_CONFIG = {
         "log_non_trades": True,  # "Bot hat NICHT gehandelt weil..."
         "log_market_snapshots": True,
         "log_ai_reasoning": True,
-
         # Wie oft?
         "market_snapshot_interval_minutes": 60,  # Stündlich
         "portfolio_snapshot_interval_hours": 4,  # Alle 4h
-
         # Outcome Tracking
         "track_outcome_after_hours": [1, 4, 24, 168],  # 1h, 4h, 24h, 7d
     },
-
     # ═══════════════════════════════════════════════════════════════
     # RISIKO MANAGEMENT
     # ═══════════════════════════════════════════════════════════════
@@ -71,28 +63,23 @@ STRATEGY_CONFIG = {
         # Portfolio Limits
         "max_single_position_pct": 30,  # Max 30% in einem Coin
         "max_altcoin_exposure_pct": 80,  # Max 80% in Altcoins
-
         # Drawdown Protection
         "max_daily_drawdown_pct": 10,  # Stop bei -10% am Tag
         "max_total_drawdown_pct": 25,  # Stop bei -25% gesamt
-
         # Bei extremen Bedingungen
         "extreme_fear_action": "ACCUMULATE",  # Fear < 20: Akkumulieren
-        "extreme_greed_action": "REDUCE",     # Greed > 80: Positionen reduzieren
+        "extreme_greed_action": "REDUCE",  # Greed > 80: Positionen reduzieren
     },
-
     # ═══════════════════════════════════════════════════════════════
     # AI INTEGRATION
     # ═══════════════════════════════════════════════════════════════
     "ai_settings": {
         "provider": "deepseek",
         "model": "deepseek-chat",
-
         # Wann AI nutzen?
         "use_ai_for_trade_reasoning": True,
         "use_ai_for_macro_analysis": True,
         "use_ai_for_anomaly_detection": True,
-
         # AI kann Mathe überstimmen wenn:
         "ai_can_override_math": True,
         "ai_override_conditions": [
@@ -100,19 +87,16 @@ STRATEGY_CONFIG = {
             "extreme_sentiment",
             "detected_anomaly",
         ],
-
         # Kosten-Limit (DeepSeek ist günstig, aber trotzdem)
         "max_daily_api_calls": 100,
         "max_monthly_cost_usd": 5.0,
     },
-
     # ═══════════════════════════════════════════════════════════════
     # REBALANCING
     # ═══════════════════════════════════════════════════════════════
     "rebalancing": {
         "interval_days": 7,  # Wöchentlich
         "threshold_pct": 5,  # Nur wenn Position >5% abweicht
-
         # Nicht rebalancen wenn:
         "skip_rebalance_conditions": [
             "high_impact_event_today",
@@ -120,13 +104,11 @@ STRATEGY_CONFIG = {
             "ai_confidence_low",
         ],
     },
-
     # ═══════════════════════════════════════════════════════════════
     # BENACHRICHTIGUNGEN
     # ═══════════════════════════════════════════════════════════════
     "notifications": {
         "mode": "normal",  # minimal, normal, verbose
-
         # Normal Mode:
         "daily_summary_time": "20:00",
         "alert_on_trade": True,
