@@ -755,5 +755,454 @@ INSERT INTO cohorts (name, description, config, starting_capital) VALUES
      1000.00)
 ON CONFLICT (name) DO NOTHING;
 
+-- ═══════════════════════════════════════════════════════════════
+-- PHASE 6: MULTI-COIN TRADING SYSTEM
+-- ═══════════════════════════════════════════════════════════════
+
+-- ═══════════════════════════════════════════════════════════════
+-- WATCHLIST - Tradeable Coins Universe
+-- ═══════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS watchlist (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    symbol VARCHAR(20) NOT NULL UNIQUE,  -- z.B. "BTCUSDT"
+    base_asset VARCHAR(10) NOT NULL,     -- z.B. "BTC"
+    quote_asset VARCHAR(10) DEFAULT 'USDT',
+
+    -- Kategorisierung
+    category VARCHAR(20) NOT NULL,       -- LARGE_CAP, MID_CAP, SMALL_CAP, DEFI, L2, AI, GAMING
+    tier INTEGER DEFAULT 2,              -- 1=Primary (immer aktiv), 2=Secondary, 3=Experimental
+
+    -- Coin-spezifische Trading Limits
+    min_position_usd DECIMAL(10, 2) DEFAULT 10.00,
+    max_position_usd DECIMAL(10, 2) DEFAULT 500.00,
+    max_allocation_pct DECIMAL(5, 2) DEFAULT 10.00,  -- Max % des Portfolios pro Coin
+
+    -- Trading Parameter (NULL = auto/ATR-basiert)
+    default_grid_range_pct DECIMAL(5, 2),
+    default_num_grids INTEGER,
+    min_confidence_override DECIMAL(3, 2),
+
+    -- Liquiditäts-Anforderungen
+    min_volume_24h_usd DECIMAL(20, 2) DEFAULT 10000000,  -- $10M minimum
+    min_market_cap_usd DECIMAL(20, 2),
+
+    -- Binance Info (cached)
+    binance_min_qty DECIMAL(20, 8),
+    binance_step_size DECIMAL(20, 8),
+    binance_min_notional DECIMAL(10, 2),
+    binance_tick_size DECIMAL(20, 8),
+
+    -- Status
+    is_active BOOLEAN DEFAULT TRUE,
+    is_tradeable BOOLEAN DEFAULT TRUE,   -- False wenn delisted/suspended/low volume
+    pause_reason VARCHAR(100),           -- Grund für Pause
+
+    -- Performance Tracking (aggregiert)
+    total_trades INTEGER DEFAULT 0,
+    winning_trades INTEGER DEFAULT 0,
+    total_pnl DECIMAL(20, 4) DEFAULT 0,
+    win_rate DECIMAL(5, 2),
+    avg_return_pct DECIMAL(10, 4),
+    sharpe_ratio DECIMAL(10, 4),
+    best_regime VARCHAR(20),             -- In welchem Regime performt der Coin am besten
+
+    -- Optimale Settings (gelernt über Zeit)
+    optimal_grid_range DECIMAL(5, 2),
+    optimal_confidence DECIMAL(3, 2),
+    optimal_regime_weights JSONB,        -- {"BULL": 1.2, "BEAR": 0.5, "SIDEWAYS": 1.0}
+
+    -- Korrelationen
+    btc_correlation DECIMAL(5, 4),       -- -1 to +1
+    eth_correlation DECIMAL(5, 4),
+
+    -- Market Data Cache
+    last_price DECIMAL(20, 8),
+    price_change_24h DECIMAL(10, 4),
+    volume_24h DECIMAL(20, 2),
+    market_cap DECIMAL(20, 2),
+
+    added_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_watchlist_category ON watchlist(category);
+CREATE INDEX idx_watchlist_tier ON watchlist(tier);
+CREATE INDEX idx_watchlist_active ON watchlist(is_active, is_tradeable);
+CREATE INDEX idx_watchlist_base ON watchlist(base_asset);
+
+-- ═══════════════════════════════════════════════════════════════
+-- COIN_PERFORMANCE - Per-Coin Performance über Zeit
+-- ═══════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS coin_performance (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    symbol VARCHAR(20) NOT NULL,
+    period_start TIMESTAMPTZ NOT NULL,
+    period_end TIMESTAMPTZ NOT NULL,
+    period_type VARCHAR(20) NOT NULL,  -- DAILY, WEEKLY, MONTHLY
+
+    -- Trade Statistiken
+    total_trades INTEGER DEFAULT 0,
+    buy_trades INTEGER DEFAULT 0,
+    sell_trades INTEGER DEFAULT 0,
+    winning_trades INTEGER DEFAULT 0,
+    losing_trades INTEGER DEFAULT 0,
+    win_rate DECIMAL(5, 2),
+
+    -- Returns
+    gross_pnl DECIMAL(20, 4),
+    net_pnl DECIMAL(20, 4),            -- Nach Fees
+    gross_return_pct DECIMAL(10, 4),
+    net_return_pct DECIMAL(10, 4),
+    total_fees DECIMAL(10, 4),
+
+    -- Risk Metriken
+    max_drawdown DECIMAL(10, 4),
+    volatility DECIMAL(10, 4),
+    sharpe_ratio DECIMAL(10, 4),
+    sortino_ratio DECIMAL(10, 4),
+    profit_factor DECIMAL(10, 4),      -- Gross Profit / Gross Loss
+
+    -- Signal Performance für diesen Coin
+    best_signal VARCHAR(50),            -- Welches Signal funktioniert am besten
+    worst_signal VARCHAR(50),
+    signal_accuracy JSONB,              -- {"rsi": 0.65, "macd": 0.58, "volume": 0.72}
+
+    -- Regime Performance
+    bull_return_pct DECIMAL(10, 4),
+    bear_return_pct DECIMAL(10, 4),
+    sideways_return_pct DECIMAL(10, 4),
+    best_regime VARCHAR(20),
+
+    -- Zeitliche Muster
+    best_hour_utc INTEGER,              -- 0-23
+    worst_hour_utc INTEGER,
+    best_day_of_week INTEGER,           -- 0=Monday, 6=Sunday
+
+    -- Optimale Settings (für diesen Coin in dieser Periode)
+    optimal_grid_range DECIMAL(5, 2),
+    optimal_confidence_threshold DECIMAL(5, 2),
+    optimal_position_size_pct DECIMAL(5, 2),
+
+    -- Market Context
+    avg_volume_24h DECIMAL(20, 2),
+    btc_correlation DECIMAL(5, 4),
+    avg_fear_greed DECIMAL(5, 2),
+
+    -- Cohort Breakdown
+    performance_by_cohort JSONB,        -- {"conservative": 2.3, "balanced": 3.1, ...}
+
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+
+    UNIQUE(symbol, period_start, period_type)
+);
+
+CREATE INDEX idx_coinperf_symbol ON coin_performance(symbol);
+CREATE INDEX idx_coinperf_period ON coin_performance(period_start DESC, period_type);
+CREATE INDEX idx_coinperf_type ON coin_performance(period_type);
+
+-- ═══════════════════════════════════════════════════════════════
+-- COHORT_ALLOCATIONS - Aktive Positionen pro Cohort
+-- ═══════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS cohort_allocations (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    cohort_id UUID REFERENCES cohorts(id) ON DELETE CASCADE,
+    cycle_id UUID REFERENCES trading_cycles(id),
+    symbol VARCHAR(20) NOT NULL,
+
+    -- Allocation Target
+    target_allocation_pct DECIMAL(5, 2),     -- Ziel-% des Portfolios
+    target_position_usd DECIMAL(20, 2),
+
+    -- Current State
+    current_allocation_pct DECIMAL(5, 2),
+    current_position_usd DECIMAL(20, 2),
+    current_quantity DECIMAL(20, 8),
+
+    -- Entry Info
+    avg_entry_price DECIMAL(20, 8),
+    first_entry_timestamp TIMESTAMPTZ,
+    last_entry_timestamp TIMESTAMPTZ,
+    total_entries INTEGER DEFAULT 0,
+
+    -- Grid Status
+    active_grid_orders INTEGER DEFAULT 0,
+    lowest_grid_price DECIMAL(20, 8),
+    highest_grid_price DECIMAL(20, 8),
+
+    -- Unrealized P&L
+    current_price DECIMAL(20, 8),
+    unrealized_pnl DECIMAL(20, 4),
+    unrealized_pnl_pct DECIMAL(10, 4),
+    max_unrealized_pnl_pct DECIMAL(10, 4),
+    min_unrealized_pnl_pct DECIMAL(10, 4),
+
+    -- Realized P&L (closed trades)
+    realized_pnl DECIMAL(20, 4),
+    realized_pnl_pct DECIMAL(10, 4),
+    closed_trades INTEGER DEFAULT 0,
+
+    -- Risk
+    stop_loss_price DECIMAL(20, 8),
+    take_profit_price DECIMAL(20, 8),
+
+    -- Status
+    status VARCHAR(20) DEFAULT 'active',  -- active, paused, closing, closed
+    pause_reason VARCHAR(100),
+
+    -- Priority Score (für Rebalancing)
+    opportunity_score DECIMAL(5, 4),       -- Scanner Score
+    priority_rank INTEGER,
+
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+
+    UNIQUE(cohort_id, symbol, cycle_id)
+);
+
+CREATE INDEX idx_alloc_cohort ON cohort_allocations(cohort_id);
+CREATE INDEX idx_alloc_cycle ON cohort_allocations(cycle_id);
+CREATE INDEX idx_alloc_symbol ON cohort_allocations(symbol);
+CREATE INDEX idx_alloc_status ON cohort_allocations(status);
+
+-- ═══════════════════════════════════════════════════════════════
+-- OPPORTUNITIES - Scanner gefundene Opportunities
+-- ═══════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS opportunities (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    symbol VARCHAR(20) NOT NULL,
+
+    -- Scores (0 to 1)
+    technical_score DECIMAL(5, 4),       -- RSI, MACD, Divergence
+    volume_score DECIMAL(5, 4),          -- Volume Spike
+    sentiment_score DECIMAL(5, 4),       -- Fear&Greed, Social
+    whale_score DECIMAL(5, 4),           -- Whale Activity
+    momentum_score DECIMAL(5, 4),        -- Price Momentum
+    total_score DECIMAL(5, 4),           -- Gewichteter Durchschnitt
+
+    -- Direction
+    direction VARCHAR(10) NOT NULL,      -- LONG, SHORT, NEUTRAL
+    confidence DECIMAL(5, 4),
+
+    -- Context
+    signals JSONB,                        -- ["RSI Oversold", "Volume Spike 2.5x", ...]
+    risk_level VARCHAR(20),              -- LOW, MEDIUM, HIGH
+
+    -- Market Data at Detection
+    price_at_detection DECIMAL(20, 8),
+    volume_24h DECIMAL(20, 2),
+    fear_greed INTEGER,
+    current_regime VARCHAR(20),
+
+    -- Outcome (filled later)
+    was_traded BOOLEAN DEFAULT FALSE,
+    traded_by_cohorts JSONB,             -- ["conservative", "balanced"]
+    price_1h_later DECIMAL(20, 8),
+    price_24h_later DECIMAL(20, 8),
+    return_1h DECIMAL(10, 4),
+    return_24h DECIMAL(10, 4),
+    was_good_opportunity BOOLEAN,
+
+    -- Expiry
+    expires_at TIMESTAMPTZ,              -- Opportunity verfällt nach X Stunden
+    is_expired BOOLEAN DEFAULT FALSE,
+
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_opp_timestamp ON opportunities(timestamp DESC);
+CREATE INDEX idx_opp_symbol ON opportunities(symbol);
+CREATE INDEX idx_opp_score ON opportunities(total_score DESC);
+CREATE INDEX idx_opp_active ON opportunities(is_expired, was_traded);
+
+-- ═══════════════════════════════════════════════════════════════
+-- SOCIAL_SENTIMENT - Social Media Tracking (erweitert)
+-- ═══════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS social_sentiment (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    symbol VARCHAR(20) NOT NULL,
+
+    -- LunarCrush (wenn verfügbar)
+    galaxy_score DECIMAL(5, 2),
+    social_volume INTEGER,
+    social_engagement INTEGER,
+
+    -- Reddit
+    reddit_mentions INTEGER,
+    reddit_sentiment DECIMAL(5, 4),      -- -1 to +1
+    reddit_posts_24h INTEGER,
+
+    -- Twitter (optional)
+    twitter_mentions INTEGER,
+    twitter_sentiment DECIMAL(5, 4),
+
+    -- Aggregiert
+    composite_sentiment DECIMAL(5, 4),   -- -1 to +1
+    sentiment_change_24h DECIMAL(5, 4),  -- Änderung vs gestern
+
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_social_timestamp ON social_sentiment(timestamp DESC);
+CREATE INDEX idx_social_symbol ON social_sentiment(symbol);
+
+-- ═══════════════════════════════════════════════════════════════
+-- ETF_FLOWS - Bitcoin/Ethereum ETF Tracking
+-- ═══════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS etf_flows (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    flow_date DATE NOT NULL UNIQUE,
+
+    -- BTC ETF Flows (in Mio USD)
+    btc_total_flow DECIMAL(20, 2),
+    btc_cumulative_flow DECIMAL(20, 2),
+    gbtc_flow DECIMAL(20, 2),
+    ibit_flow DECIMAL(20, 2),
+    fbtc_flow DECIMAL(20, 2),
+    arkb_flow DECIMAL(20, 2),
+    bitb_flow DECIMAL(20, 2),
+
+    -- ETH ETF Flows
+    eth_total_flow DECIMAL(20, 2),
+    eth_cumulative_flow DECIMAL(20, 2),
+
+    -- Derived Metrics
+    flow_trend VARCHAR(20),              -- STRONG_INFLOW, INFLOW, NEUTRAL, OUTFLOW, STRONG_OUTFLOW
+    seven_day_avg DECIMAL(20, 2),
+    thirty_day_avg DECIMAL(20, 2),
+
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_etf_date ON etf_flows(flow_date DESC);
+
+-- ═══════════════════════════════════════════════════════════════
+-- TOKEN_UNLOCKS - Supply Events
+-- ═══════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS token_unlocks (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    symbol VARCHAR(20) NOT NULL,
+    unlock_date TIMESTAMPTZ NOT NULL,
+
+    unlock_amount DECIMAL(30, 8),
+    unlock_value_usd DECIMAL(20, 2),
+    unlock_pct_of_supply DECIMAL(10, 4),
+    unlock_type VARCHAR(50),             -- CLIFF, LINEAR, INVESTOR, TEAM, FOUNDATION
+
+    -- Impact Assessment
+    expected_impact VARCHAR(20),         -- HIGH, MEDIUM, LOW
+    historical_avg_reaction DECIMAL(10, 4),
+
+    -- Outcome (filled after event)
+    actual_price_impact DECIMAL(10, 4),
+
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_unlock_date ON token_unlocks(unlock_date);
+CREATE INDEX idx_unlock_symbol ON token_unlocks(symbol);
+
+-- ═══════════════════════════════════════════════════════════════
+-- VIEWS FOR MULTI-COIN ANALYSIS
+-- ═══════════════════════════════════════════════════════════════
+
+-- View: Coin Rankings
+CREATE OR REPLACE VIEW v_coin_rankings AS
+SELECT
+    w.symbol,
+    w.base_asset,
+    w.category,
+    w.tier,
+    w.total_trades,
+    w.win_rate,
+    w.sharpe_ratio,
+    w.optimal_grid_range,
+    w.btc_correlation,
+    w.last_price,
+    w.volume_24h,
+    RANK() OVER (PARTITION BY w.category ORDER BY w.sharpe_ratio DESC NULLS LAST) as category_rank,
+    RANK() OVER (ORDER BY w.sharpe_ratio DESC NULLS LAST) as overall_rank
+FROM watchlist w
+WHERE w.is_active = true AND w.total_trades >= 10
+ORDER BY w.sharpe_ratio DESC NULLS LAST;
+
+-- View: Active Positions Summary
+CREATE OR REPLACE VIEW v_active_positions AS
+SELECT
+    c.name as cohort_name,
+    ca.symbol,
+    w.category,
+    ca.current_position_usd,
+    ca.current_allocation_pct,
+    ca.unrealized_pnl,
+    ca.unrealized_pnl_pct,
+    ca.realized_pnl,
+    ca.active_grid_orders,
+    ca.opportunity_score,
+    ca.status
+FROM cohort_allocations ca
+JOIN cohorts c ON ca.cohort_id = c.id
+LEFT JOIN watchlist w ON ca.symbol = w.symbol
+WHERE ca.status = 'active'
+ORDER BY c.name, ca.current_position_usd DESC;
+
+-- View: Category Performance
+CREATE OR REPLACE VIEW v_category_performance AS
+SELECT
+    w.category,
+    COUNT(DISTINCT w.symbol) as coin_count,
+    SUM(w.total_trades) as total_trades,
+    AVG(w.win_rate) as avg_win_rate,
+    AVG(w.sharpe_ratio) as avg_sharpe,
+    SUM(w.total_pnl) as total_pnl
+FROM watchlist w
+WHERE w.is_active = true
+GROUP BY w.category
+ORDER BY avg_sharpe DESC NULLS LAST;
+
+-- ═══════════════════════════════════════════════════════════════
+-- INITIAL WATCHLIST DATA
+-- ═══════════════════════════════════════════════════════════════
+INSERT INTO watchlist (symbol, base_asset, category, tier, min_volume_24h_usd) VALUES
+    -- LARGE CAP (Tier 1)
+    ('BTCUSDT', 'BTC', 'LARGE_CAP', 1, 500000000),
+    ('ETHUSDT', 'ETH', 'LARGE_CAP', 1, 200000000),
+
+    -- MID CAP (Tier 1-2)
+    ('SOLUSDT', 'SOL', 'MID_CAP', 1, 100000000),
+    ('BNBUSDT', 'BNB', 'MID_CAP', 1, 50000000),
+    ('XRPUSDT', 'XRP', 'MID_CAP', 1, 50000000),
+    ('ADAUSDT', 'ADA', 'MID_CAP', 2, 30000000),
+    ('AVAXUSDT', 'AVAX', 'MID_CAP', 2, 30000000),
+    ('DOTUSDT', 'DOT', 'MID_CAP', 2, 20000000),
+    ('LINKUSDT', 'LINK', 'MID_CAP', 1, 30000000),
+    ('MATICUSDT', 'MATIC', 'MID_CAP', 2, 20000000),
+    ('ATOMUSDT', 'ATOM', 'MID_CAP', 2, 20000000),
+    ('NEARUSDT', 'NEAR', 'MID_CAP', 2, 20000000),
+    ('LTCUSDT', 'LTC', 'MID_CAP', 2, 20000000),
+
+    -- LAYER 2 (Tier 2)
+    ('ARBUSDT', 'ARB', 'L2', 2, 20000000),
+    ('OPUSDT', 'OP', 'L2', 2, 15000000),
+
+    -- DEFI (Tier 2)
+    ('UNIUSDT', 'UNI', 'DEFI', 2, 15000000),
+    ('AAVEUSDT', 'AAVE', 'DEFI', 2, 10000000),
+    ('MKRUSDT', 'MKR', 'DEFI', 2, 10000000),
+    ('CRVUSDT', 'CRV', 'DEFI', 2, 10000000),
+
+    -- AI (Tier 2)
+    ('FETUSDT', 'FET', 'AI', 2, 15000000),
+    ('AGIXUSDT', 'AGIX', 'AI', 2, 10000000),
+    ('RNDRUSDT', 'RNDR', 'AI', 2, 15000000),
+
+    -- GAMING (Tier 3)
+    ('AXSUSDT', 'AXS', 'GAMING', 3, 10000000),
+    ('SANDUSDT', 'SAND', 'GAMING', 3, 10000000),
+    ('MANAUSDT', 'MANA', 'GAMING', 3, 10000000)
+
+ON CONFLICT (symbol) DO NOTHING;
+
 -- Fertig!
-SELECT 'Trading Bot Database initialized successfully with Cohort System!' as status;
+SELECT 'Trading Bot Database initialized successfully with Multi-Coin System!' as status;
