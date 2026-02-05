@@ -15,8 +15,9 @@ import logging
 import os
 from datetime import datetime
 
-import requests
 from dotenv import load_dotenv
+
+from src.api.http_client import HTTPClientError, get_http_client
 
 load_dotenv()
 
@@ -40,9 +41,9 @@ class TelegramBot:
         self.base_url = f"https://api.telegram.org/bot{self.token}"
 
         if not self.token:
-            print("⚠️  TELEGRAM_BOT_TOKEN nicht gesetzt!")
+            logger.warning("TELEGRAM_BOT_TOKEN nicht gesetzt")
         if not self.chat_id:
-            print("⚠️  TELEGRAM_CHAT_ID nicht gesetzt!")
+            logger.warning("TELEGRAM_CHAT_ID nicht gesetzt")
 
     def send_message(
         self, text: str, parse_mode: str = "Markdown", disable_notification: bool = False
@@ -60,7 +61,8 @@ class TelegramBot:
             return False
 
         try:
-            response = requests.post(
+            http = get_http_client()
+            data = http.post(
                 f"{self.base_url}/sendMessage",
                 json={
                     "chat_id": self.chat_id,
@@ -68,11 +70,11 @@ class TelegramBot:
                     "parse_mode": parse_mode,
                     "disable_notification": disable_notification,
                 },
-                timeout=10,
+                api_type="telegram",
             )
-            return response.json().get("ok", False)
-        except Exception as e:
-            print(f"Telegram Fehler: {e}")
+            return data.get("ok", False)
+        except HTTPClientError as e:
+            logger.error(f"Telegram Fehler: {e}")
             return False
 
     def send_photo(
@@ -91,25 +93,34 @@ class TelegramBot:
             return False
 
         try:
+            http = get_http_client()
+            form_data = {"chat_id": self.chat_id, "caption": caption}
+
             if photo_path:
                 with open(photo_path, "rb") as f:
                     files = {"photo": f}
-                    data = {"chat_id": self.chat_id, "caption": caption}
-                    response = requests.post(
-                        f"{self.base_url}/sendPhoto", data=data, files=files, timeout=30
+                    result = http.post(
+                        f"{self.base_url}/sendPhoto",
+                        data=form_data,
+                        files=files,
+                        api_type="telegram",
+                        timeout=30,
                     )
             elif photo_bytes:
                 files = {"photo": ("chart.png", io.BytesIO(photo_bytes), "image/png")}
-                data = {"chat_id": self.chat_id, "caption": caption}
-                response = requests.post(
-                    f"{self.base_url}/sendPhoto", data=data, files=files, timeout=30
+                result = http.post(
+                    f"{self.base_url}/sendPhoto",
+                    data=form_data,
+                    files=files,
+                    api_type="telegram",
+                    timeout=30,
                 )
             else:
                 return False
 
-            return response.json().get("ok", False)
-        except Exception as e:
-            print(f"Telegram Photo Fehler: {e}")
+            return result.get("ok", False)
+        except HTTPClientError as e:
+            logger.error(f"Telegram Photo Fehler: {e}")
             return False
 
     def send_document(self, file_path: str, caption: str = None) -> bool:
@@ -119,15 +130,20 @@ class TelegramBot:
             return False
 
         try:
+            http = get_http_client()
             with open(file_path, "rb") as f:
                 files = {"document": f}
-                data = {"chat_id": self.chat_id, "caption": caption}
-                response = requests.post(
-                    f"{self.base_url}/sendDocument", data=data, files=files, timeout=30
+                form_data = {"chat_id": self.chat_id, "caption": caption}
+                result = http.post(
+                    f"{self.base_url}/sendDocument",
+                    data=form_data,
+                    files=files,
+                    api_type="telegram",
+                    timeout=30,
                 )
-            return response.json().get("ok", False)
-        except Exception as e:
-            print(f"Telegram Document Fehler: {e}")
+            return result.get("ok", False)
+        except HTTPClientError as e:
+            logger.error(f"Telegram Document Fehler: {e}")
             return False
 
     def get_chat_id(self) -> None:
@@ -142,17 +158,20 @@ class TelegramBot:
             print("Token nicht gesetzt!")
             return
 
-        response = requests.get(f"{self.base_url}/getUpdates", timeout=10)
-        data = response.json()
+        try:
+            http = get_http_client()
+            data = http.get(f"{self.base_url}/getUpdates", api_type="telegram")
 
-        if data.get("result"):
-            for update in data["result"]:
-                chat = update.get("message", {}).get("chat", {})
-                print(f"Chat ID: {chat.get('id')}")
-                print(f"Username: {chat.get('username')}")
-                print(f"First Name: {chat.get('first_name')}")
-        else:
-            print("Keine Nachrichten gefunden. Schreibe erst deinem Bot!")
+            if data.get("result"):
+                for update in data["result"]:
+                    chat = update.get("message", {}).get("chat", {})
+                    print(f"Chat ID: {chat.get('id')}")
+                    print(f"Username: {chat.get('username')}")
+                    print(f"First Name: {chat.get('first_name')}")
+            else:
+                print("Keine Nachrichten gefunden. Schreibe erst deinem Bot!")
+        except HTTPClientError as e:
+            print(f"Fehler beim Abrufen: {e}")
 
 
 class TradingNotifier:

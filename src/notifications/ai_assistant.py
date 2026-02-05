@@ -10,13 +10,17 @@ DeepSeek Preise (Stand 2024):
 Das macht professionelle AI-Features auch bei kleinem Portfolio sinnvoll.
 """
 
+import logging
 import os
 from datetime import datetime
 
-import requests
 from dotenv import load_dotenv
 
+from src.api.http_client import HTTPClientError, get_http_client
+
 load_dotenv()
+
+logger = logging.getLogger("trading_bot")
 
 
 class DeepSeekAssistant:
@@ -58,7 +62,7 @@ Sei direkt - keine Floskeln."""
         self.total_tokens_used = 0
 
         if not self.api_key:
-            print("⚠️  DEEPSEEK_API_KEY nicht gesetzt")
+            logger.warning("DEEPSEEK_API_KEY nicht gesetzt")
 
     def ask(
         self,
@@ -95,7 +99,8 @@ Sei direkt - keine Floskeln."""
         messages.append({"role": "user", "content": user_content})
 
         try:
-            response = requests.post(
+            http = get_http_client()
+            data = http.post(
                 self.API_URL,
                 headers={
                     "Authorization": f"Bearer {self.api_key}",
@@ -107,28 +112,24 @@ Sei direkt - keine Floskeln."""
                     "max_tokens": max_tokens,
                     "temperature": 0.7,
                 },
-                timeout=60,
+                api_type="deepseek",
             )
 
-            if response.status_code == 200:
-                data = response.json()
-                answer = data["choices"][0]["message"]["content"]
+            answer = data["choices"][0]["message"]["content"]
 
-                # Token-Tracking
-                usage = data.get("usage", {})
-                self.total_tokens_used += usage.get("total_tokens", 0)
+            # Token-Tracking
+            usage = data.get("usage", {})
+            self.total_tokens_used += usage.get("total_tokens", 0)
 
-                # History speichern
-                if keep_history:
-                    self.conversation_history.append({"role": "user", "content": user_content})
-                    self.conversation_history.append({"role": "assistant", "content": answer})
+            # History speichern
+            if keep_history:
+                self.conversation_history.append({"role": "user", "content": user_content})
+                self.conversation_history.append({"role": "assistant", "content": answer})
 
-                return answer
-            else:
-                return f"❌ API Fehler: {response.status_code} - {response.text}"
+            return answer
 
-        except Exception as e:
-            return f"❌ Fehler: {e!s}"
+        except HTTPClientError as e:
+            return f"❌ API Fehler: {e!s}"
 
     def clear_history(self):
         """Löscht Konversations-History"""

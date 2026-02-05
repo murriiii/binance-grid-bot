@@ -190,6 +190,7 @@ class HTTPClient:
         timeout: int | None = None,
         headers: dict | None = None,
         api_type: str = "default",
+        files: dict | None = None,
     ) -> dict[str, Any]:
         """
         HTTP POST Request mit Retry-Logik.
@@ -201,12 +202,20 @@ class HTTPClient:
             timeout: Timeout in Sekunden
             headers: Zusätzliche Header
             api_type: API-Typ für Timeout-Lookup
+            files: Dateien für Multipart-Upload
 
         Returns:
             Response JSON als Dict
         """
         return self._request(
-            "POST", url, json=json, data=data, timeout=timeout, headers=headers, api_type=api_type
+            "POST",
+            url,
+            json=json,
+            data=data,
+            timeout=timeout,
+            headers=headers,
+            api_type=api_type,
+            files=files,
         )
 
     def _request(self, method: str, url: str, **kwargs) -> dict[str, Any]:
@@ -216,11 +225,14 @@ class HTTPClient:
             api_type, self.default_timeout
         )
         extra_headers = kwargs.pop("headers", None)
+        files = kwargs.pop("files", None)
 
         if extra_headers:
             kwargs["headers"] = {**self.session.headers, **extra_headers}
 
         kwargs["timeout"] = timeout
+        if files:
+            kwargs["files"] = files
 
         last_exception = None
         last_status_code = None

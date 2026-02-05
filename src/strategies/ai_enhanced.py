@@ -19,7 +19,7 @@ import os
 from dataclasses import dataclass
 from datetime import datetime
 
-import requests
+from src.api.http_client import HTTPClientError, get_http_client
 
 logger = logging.getLogger("trading_bot")
 
@@ -78,11 +78,6 @@ Antworte IMMER in diesem JSON-Format:
     "playbook_alignment": "Wie passt diese Entscheidung zu meinem Playbook?"
 }"""
 
-    # Retry-Konfiguration
-    MAX_RETRIES = 3
-    TIMEOUT_SECONDS = 30
-    RETRY_DELAYS = [2, 5, 10]  # Sekunden zwischen Retries
-
     def __init__(self):
         self.api_key = os.getenv("DEEPSEEK_API_KEY")
         self.last_error_time: datetime | None = None
@@ -119,98 +114,42 @@ Antworte IMMER in diesem JSON-Format:
         """
         API-Call zu DeepSeek mit Retry-Logik und Fallbacks.
 
-        Features:
+        HTTPClient übernimmt:
         - 3 Retries mit exponentieller Verzögerung
-        - 30 Sekunden Timeout
+        - 30 Sekunden Timeout (deepseek api_type)
         - Rate Limit Handling (429)
-        - Sichere Fallback-Response bei Fehlern
         """
         if not self.api_key:
             return self._get_fallback_response("API nicht konfiguriert")
 
-        last_error = None
+        try:
+            http = get_http_client()
+            data = http.post(
+                self.API_URL,
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": "deepseek-chat",
+                    "messages": [
+                        {"role": "system", "content": self._get_system_prompt()},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                    "max_tokens": 800,  # Erhöht für Playbook-Referenzen
+                    "temperature": 0.3,  # Niedrig für konsistentere Outputs
+                },
+                api_type="deepseek",
+            )
 
-        for attempt in range(self.MAX_RETRIES):
-            try:
-                response = requests.post(
-                    self.API_URL,
-                    headers={
-                        "Authorization": f"Bearer {self.api_key}",
-                        "Content-Type": "application/json",
-                    },
-                    json={
-                        "model": "deepseek-chat",
-                        "messages": [
-                            {"role": "system", "content": self._get_system_prompt()},
-                            {"role": "user", "content": user_prompt},
-                        ],
-                        "max_tokens": 800,  # Erhöht für Playbook-Referenzen
-                        "temperature": 0.3,  # Niedrig für konsistentere Outputs
-                    },
-                    timeout=self.TIMEOUT_SECONDS,
-                )
+            self.consecutive_errors = 0
+            return data["choices"][0]["message"]["content"]
 
-                # Erfolgreiche Antwort
-                if response.status_code == 200:
-                    self.consecutive_errors = 0
-                    return response.json()["choices"][0]["message"]["content"]
-
-                # Rate Limit (429) - längere Pause
-                if response.status_code == 429:
-                    wait_time = self.RETRY_DELAYS[attempt] * 3
-                    logger.warning(
-                        f"DeepSeek Rate Limit, warte {wait_time}s (Versuch {attempt + 1}/{self.MAX_RETRIES})"
-                    )
-                    import time
-
-                    time.sleep(wait_time)
-                    continue
-
-                # Server Fehler (5xx) - kurze Pause und Retry
-                if 500 <= response.status_code < 600:
-                    wait_time = self.RETRY_DELAYS[attempt]
-                    logger.warning(
-                        f"DeepSeek Server Error {response.status_code}, warte {wait_time}s"
-                    )
-                    import time
-
-                    time.sleep(wait_time)
-                    continue
-
-                # Andere Fehler - kein Retry
-                last_error = f"HTTP {response.status_code}"
-                break
-
-            except requests.Timeout:
-                last_error = "Timeout"
-                logger.warning(f"DeepSeek Timeout (Versuch {attempt + 1}/{self.MAX_RETRIES})")
-                if attempt < self.MAX_RETRIES - 1:
-                    import time
-
-                    time.sleep(self.RETRY_DELAYS[attempt])
-
-            except requests.ConnectionError:
-                last_error = "Connection Error"
-                logger.warning(
-                    f"DeepSeek Connection Error (Versuch {attempt + 1}/{self.MAX_RETRIES})"
-                )
-                if attempt < self.MAX_RETRIES - 1:
-                    import time
-
-                    time.sleep(self.RETRY_DELAYS[attempt])
-
-            except Exception as e:
-                last_error = str(e)
-                logger.error(f"DeepSeek Error: {e}")
-                break
-
-        # Alle Retries fehlgeschlagen
-        self.consecutive_errors += 1
-        self.last_error_time = datetime.now()
-
-        return self._get_fallback_response(
-            f"API nicht erreichbar nach {self.MAX_RETRIES} Versuchen: {last_error}"
-        )
+        except HTTPClientError as e:
+            self.consecutive_errors += 1
+            self.last_error_time = datetime.now()
+            logger.warning(f"DeepSeek API error: {e}")
+            return self._get_fallback_response(f"API nicht erreichbar: {e}")
 
     def is_api_healthy(self) -> bool:
         """Prüft ob die API kürzlich funktioniert hat"""

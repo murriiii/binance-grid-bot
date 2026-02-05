@@ -9,9 +9,8 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any
 
-import requests
-
 from src.api.binance_client import BinanceClient
+from src.api.http_client import HTTPClientError, get_http_client
 from src.strategies.grid_strategy import GridStrategy
 
 
@@ -60,12 +59,13 @@ class TelegramNotifier:
 
         prefix = "🚨 URGENT: " if urgent else ""
         try:
-            requests.post(
+            http = get_http_client()
+            http.post(
                 f"https://api.telegram.org/bot{self.token}/sendMessage",
                 json={"chat_id": self.chat_id, "text": f"{prefix}{message}", "parse_mode": "HTML"},
-                timeout=10,
+                api_type="telegram",
             )
-        except Exception as e:
+        except HTTPClientError as e:
             logger.warning(f"Telegram notification failed: {e}")
 
 
@@ -131,11 +131,10 @@ class GridBot:
     def _get_current_fear_greed(self) -> int:
         """Holt den aktuellen Fear & Greed Index"""
         try:
-            response = requests.get("https://api.alternative.me/fng/", timeout=10)
-            if response.status_code == 200:
-                data = response.json()
-                return int(data["data"][0]["value"])
-        except Exception as e:
+            http = get_http_client()
+            data = http.get("https://api.alternative.me/fng/")
+            return int(data["data"][0]["value"])
+        except HTTPClientError as e:
             logger.warning(f"Fear & Greed API error: {e}")
         return 50  # Neutral als Fallback
 

@@ -3,12 +3,16 @@ Historical Data Fetcher
 Holt historische Krypto-Daten von Binance (öffentliche API, kein Key nötig)
 """
 
+import logging
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
 
 import pandas as pd
-import requests
+
+from src.api.http_client import get_http_client
+
+logger = logging.getLogger("trading_bot")
 
 
 class BinanceDataFetcher:
@@ -68,10 +72,8 @@ class BinanceDataFetcher:
             end_ts = int(datetime.strptime(end_date, "%Y-%m-%d").timestamp() * 1000)
             params["endTime"] = end_ts
 
-        response = requests.get(f"{self.BASE_URL}/klines", params=params)
-        response.raise_for_status()
-
-        data = response.json()
+        http = get_http_client()
+        data = http.get(f"{self.BASE_URL}/klines", params=params, api_type="binance")
 
         df = pd.DataFrame(
             data,
@@ -128,7 +130,7 @@ class BinanceDataFetcher:
                 prices[symbol.replace("USDT", "")] = df["close"]
                 time.sleep(0.1)  # Rate limiting
             except Exception as e:
-                print(f"  Fehler bei {symbol}: {e}")
+                logger.warning(f"Fehler bei {symbol}: {e}")
 
         result = pd.DataFrame(prices)
         result = result.dropna()  # Nur Zeilen wo alle Coins Daten haben
@@ -137,12 +139,12 @@ class BinanceDataFetcher:
 
     def get_available_symbols(self) -> list[str]:
         """Gibt alle verfügbaren USDT Trading Pairs zurück"""
-        response = requests.get(f"{self.BASE_URL}/exchangeInfo")
-        response.raise_for_status()
+        http = get_http_client()
+        data = http.get(f"{self.BASE_URL}/exchangeInfo", api_type="binance")
 
         symbols = [
             s["symbol"]
-            for s in response.json()["symbols"]
+            for s in data["symbols"]
             if s["symbol"].endswith("USDT") and s["status"] == "TRADING"
         ]
 
@@ -152,7 +154,7 @@ class BinanceDataFetcher:
         """Speichert DataFrame im Cache"""
         path = self.CACHE_DIR / f"{name}.csv"
         df.to_csv(path)
-        print(f"Gespeichert: {path}")
+        logger.info(f"Cache gespeichert: {path}")
 
     def load_from_cache(self, name: str) -> pd.DataFrame | None:
         """Lädt DataFrame aus Cache"""

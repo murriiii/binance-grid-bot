@@ -8,12 +8,16 @@ Kosten: ~$3 pro 1M Input Tokens, ~$15 pro 1M Output Tokens (Sonnet)
 Bei normaler Nutzung: ~$0.01-0.05 pro Frage
 """
 
+import logging
 import os
 
-import requests
 from dotenv import load_dotenv
 
+from src.api.http_client import HTTPClientError, get_http_client
+
 load_dotenv()
+
+logger = logging.getLogger("trading_bot")
 
 
 class ClaudeAssistant:
@@ -47,7 +51,7 @@ Antworte auf Deutsch."""
     def __init__(self):
         self.api_key = os.getenv("ANTHROPIC_API_KEY")
         if not self.api_key:
-            print("⚠️  ANTHROPIC_API_KEY nicht gesetzt - Claude deaktiviert")
+            logger.warning("ANTHROPIC_API_KEY nicht gesetzt - Claude deaktiviert")
 
     def ask(self, question: str, context: str | None = None, max_tokens: int = 1024) -> str:
         """
@@ -70,7 +74,8 @@ Antworte auf Deutsch."""
             user_message = f"Kontext:\n{context}\n\nFrage: {question}"
 
         try:
-            response = requests.post(
+            http = get_http_client()
+            data = http.post(
                 self.API_URL,
                 headers={
                     "x-api-key": self.api_key,
@@ -86,13 +91,10 @@ Antworte auf Deutsch."""
                 timeout=30,
             )
 
-            if response.status_code == 200:
-                return response.json()["content"][0]["text"]
-            else:
-                return f"❌ API Fehler: {response.status_code} - {response.text}"
+            return data["content"][0]["text"]
 
-        except Exception as e:
-            return f"❌ Fehler: {e!s}"
+        except HTTPClientError as e:
+            return f"❌ API Fehler: {e!s}"
 
     def explain_trade(self, trade_info: dict) -> str:
         """Erklärt einen Trade im Detail"""
