@@ -157,17 +157,21 @@ class SocialSentimentProvider:
         - Galaxy Score (0-100)
         - Social Volume und Engagement
         - Alt Rank
+
+        HINWEIS: LunarCrush hat kein kostenloses Tier mehr ($90/Monat minimum).
+        Diese Methode gibt None zurück wenn kein API Key konfiguriert ist.
         """
         if not self.http:
-            return self._get_mock_lunarcrush(symbol)
+            logger.debug("LunarCrush: HTTP Client nicht verfügbar")
+            return None
+
+        if not self.lunarcrush_key:
+            logger.debug("LunarCrush: Kein API Key konfiguriert (kostenpflichtig)")
+            return None
 
         try:
-            # LunarCrush Public API (kostenlos, limitiert)
             url = f"{self.LUNARCRUSH_BASE_URL}/coins/{symbol.lower()}/v1"
-
-            headers = {}
-            if self.lunarcrush_key:
-                headers["Authorization"] = f"Bearer {self.lunarcrush_key}"
+            headers = {"Authorization": f"Bearer {self.lunarcrush_key}"}
 
             response = self.http.get(url, headers=headers, timeout=10)
 
@@ -188,21 +192,7 @@ class SocialSentimentProvider:
 
         except Exception as e:
             logger.error(f"LunarCrush API Fehler für {symbol}: {e}")
-            return self._get_mock_lunarcrush(symbol)
-
-    def _get_mock_lunarcrush(self, symbol: str) -> dict[str, Any]:
-        """Mock-Daten für LunarCrush wenn API nicht verfügbar"""
-        import random
-
-        return {
-            "galaxy_score": random.uniform(40, 80),
-            "alt_rank": random.randint(1, 100),
-            "social_volume": random.randint(1000, 50000),
-            "social_engagement": random.randint(5000, 100000),
-            "social_contributors": random.randint(500, 5000),
-            "social_dominance": random.uniform(0.1, 5.0),
-            "sentiment": random.uniform(2.0, 4.0),
-        }
+            return None
 
     # ═══════════════════════════════════════════════════════════════
     # REDDIT API
@@ -222,9 +212,12 @@ class SocialSentimentProvider:
         - Upvote Ratio
         - Comment Sentiment (einfache Keyword-Analyse)
         - Post Frequency
+
+        Benötigt REDDIT_CLIENT_ID und REDDIT_CLIENT_SECRET in .env
         """
         if not self.reddit:
-            return self._get_mock_reddit(symbol)
+            logger.debug("Reddit: PRAW nicht konfiguriert (REDDIT_CLIENT_ID/SECRET fehlt)")
+            return None
 
         try:
             mentions = 0
@@ -258,8 +251,13 @@ class SocialSentimentProvider:
                     logger.debug(f"Reddit Subreddit {subreddit_name} Fehler: {e}")
                     continue
 
+            # Keine Daten gefunden
+            if not sentiment_scores:
+                logger.debug(f"Reddit: Keine Posts für {symbol} gefunden")
+                return None
+
             # Aggregiere Sentiment
-            avg_sentiment = sum(sentiment_scores) / len(sentiment_scores) if sentiment_scores else 0
+            avg_sentiment = sum(sentiment_scores) / len(sentiment_scores)
 
             return {
                 "mentions": mentions,
@@ -271,7 +269,7 @@ class SocialSentimentProvider:
 
         except Exception as e:
             logger.error(f"Reddit API Fehler für {symbol}: {e}")
-            return self._get_mock_reddit(symbol)
+            return None
 
     def _get_search_terms(self, symbol: str) -> list[str]:
         """Generiere Suchbegriffe für ein Symbol"""
@@ -284,18 +282,6 @@ class SocialSentimentProvider:
             "DOT": ["Polkadot", "DOT", "$DOT"],
         }
         return symbol_map.get(symbol.upper(), [symbol, f"${symbol}"])
-
-    def _get_mock_reddit(self, symbol: str) -> dict[str, Any]:
-        """Mock-Daten für Reddit wenn API nicht verfügbar"""
-        import random
-
-        return {
-            "mentions": random.randint(10, 200),
-            "sentiment": random.uniform(-0.3, 0.5),
-            "total_score": random.randint(100, 5000),
-            "total_comments": random.randint(50, 1000),
-            "posts_analyzed": random.randint(10, 50),
-        }
 
     # ═══════════════════════════════════════════════════════════════
     # SENTIMENT ANALYSIS

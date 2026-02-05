@@ -304,6 +304,11 @@ class RegimeDetector:
         if market_data is None:
             market_data = self._get_current_market_data()
 
+        # Keine Daten verfügbar -> kann Regime nicht bestimmen
+        if market_data is None:
+            logger.warning("Regime Detection: Keine Marktdaten - überspringe Erkennung")
+            return None
+
         # Extrahiere Features für Prediction
         return_7d = market_data.get("return_7d", 0)
         volatility_7d = market_data.get("volatility_7d", 2)
@@ -404,10 +409,11 @@ class RegimeDetector:
                 confidence = 0.8
             return MarketRegime.SIDEWAYS, confidence, 0.2
 
-    def _get_current_market_data(self) -> dict:
+    def _get_current_market_data(self) -> dict | None:
         """Hole aktuelle Marktdaten aus DB"""
         if not self.conn:
-            return self._get_mock_market_data()
+            logger.debug("Regime Detection: Keine DB-Verbindung")
+            return None
 
         try:
             with self.conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -447,18 +453,8 @@ class RegimeDetector:
         except Exception as e:
             logger.debug(f"Market data fetch error: {e}")
 
-        return self._get_mock_market_data()
-
-    def _get_mock_market_data(self) -> dict:
-        """Mock-Daten für Testing"""
-        import random
-
-        return {
-            "return_7d": random.uniform(-10, 15),
-            "volatility_7d": random.uniform(1, 5),
-            "volume_trend": random.uniform(-0.3, 0.3),
-            "fear_greed_avg": random.randint(25, 75),
-        }
+        logger.debug("Regime Detection: Keine Marktdaten in DB verfügbar")
+        return None
 
     # ═══════════════════════════════════════════════════════════════
     # STRATEGY ADJUSTMENT

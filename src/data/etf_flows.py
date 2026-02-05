@@ -150,8 +150,7 @@ class ETFFlowTracker:
             data = self._scrape_farside(date)
 
         if data is None:
-            # Letzter Fallback: Mock
-            data = self._get_mock_data(date)
+            logger.debug("ETF Flows: Keine Daten verfügbar (APIs nicht erreichbar)")
 
         return data
 
@@ -256,30 +255,6 @@ class ETFFlowTracker:
         except (ValueError, TypeError):
             pass
         return None
-
-    def _get_mock_data(self, date: datetime) -> ETFFlowData:
-        """Mock-Daten wenn APIs nicht verfügbar"""
-        import random
-
-        total_flow = random.uniform(-500, 800)  # Mio USD
-
-        return ETFFlowData(
-            date=date,
-            btc_total_flow=total_flow,
-            btc_cumulative_flow=random.uniform(10000, 50000),
-            btc_aum=random.uniform(50000, 100000),
-            gbtc_flow=random.uniform(-300, 100),  # GBTC oft Outflows
-            ibit_flow=random.uniform(0, 400),  # BlackRock meist Inflows
-            fbtc_flow=random.uniform(0, 200),
-            arkb_flow=random.uniform(-50, 100),
-            bitb_flow=random.uniform(-30, 80),
-            eth_total_flow=random.uniform(-100, 200),
-            eth_cumulative_flow=random.uniform(1000, 5000),
-            flow_trend=self._determine_flow_trend(total_flow),
-            seven_day_avg=random.uniform(-100, 300),
-            thirty_day_avg=random.uniform(0, 200),
-            estimated_price_impact_pct=self._estimate_price_impact(total_flow),
-        )
 
     # ═══════════════════════════════════════════════════════════════
     # ANALYSIS

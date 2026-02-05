@@ -248,42 +248,8 @@ class TokenUnlockTracker:
             except Exception as e:
                 logger.debug(f"Manual unlock parse error: {e}")
 
-        # Mock: Generiere einige zufällige Unlocks für Testing
         if not unlocks:
-            unlocks = self._generate_mock_unlocks(days)
-
-        return unlocks
-
-    def _generate_mock_unlocks(self, days: int) -> list[TokenUnlock]:
-        """Generiere Mock-Unlocks für Testing"""
-        import random
-
-        symbols = ["SOL", "AVAX", "MATIC", "ARB", "OP", "APT", "SUI"]
-        unlock_types = ["CLIFF", "LINEAR", "INVESTOR", "TEAM"]
-        receivers = ["investors", "team", "foundation", "ecosystem"]
-
-        unlocks = []
-        now = datetime.now()
-
-        for _ in range(random.randint(3, 8)):
-            days_offset = random.randint(1, days)
-            unlock_pct = random.uniform(0.5, 5.0)
-            unlock_value = random.uniform(5_000_000, 100_000_000)
-
-            unlocks.append(
-                TokenUnlock(
-                    symbol=random.choice(symbols),
-                    unlock_date=now + timedelta(days=days_offset),
-                    unlock_amount=random.uniform(1_000_000, 50_000_000),
-                    unlock_value_usd=unlock_value,
-                    unlock_pct_of_supply=unlock_pct,
-                    unlock_type=random.choice(unlock_types),
-                    receiver=random.choice(receivers),
-                    expected_impact=self._assess_impact(unlock_pct, unlock_value),
-                    historical_reaction=random.uniform(-15, -2),
-                    days_until_unlock=days_offset,
-                )
-            )
+            logger.debug("Token Unlocks: Keine Daten verfügbar (APIs nicht erreichbar)")
 
         return unlocks
 
