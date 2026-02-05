@@ -1,3 +1,9 @@
+## v1.5.1 (2026-02-05)
+
+### Refactor
+
+- centralize HTTP requests through HTTPClient
+
 ## v1.5.0 (2026-02-05)
 
 ### Feat
