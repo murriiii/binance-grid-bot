@@ -52,9 +52,13 @@ DeepSeek AI (optional enhancement)
 
 Critical shared resources use the singleton pattern with `get_instance()` and `reset_instance()` methods:
 - `get_config()` - Global configuration from environment
-- `get_http_client()` - Centralized HTTP with retry/caching
+- `get_http_client()` - Centralized HTTP with retry/caching/file uploads
+- `DatabaseManager.get_instance()` - PostgreSQL connection pooling (1-10 connections)
 - `TelegramService.get_instance()` - Notification service
 - `MarketDataProvider.get_instance()` - Price data with caching
+- `WatchlistManager.get_instance()` - Multi-coin universe management
+- `CoinScanner.get_instance()` - Opportunity detection across coins
+- `PortfolioAllocator.get_instance()` - Kelly-based capital allocation
 - `CohortManager.get_instance()` - Parallel strategy variants
 - `CycleManager.get_instance()` - Weekly trading cycles
 - `SignalAnalyzer.get_instance()` - Signal breakdown storage
@@ -66,6 +70,30 @@ Critical shared resources use the singleton pattern with `get_instance()` and `r
 - `CVaRPositionSizer.get_instance()` - Risk-based position sizing
 - `DynamicGridStrategy.get_instance()` - ATR-based grid spacing
 
+### HTTP Client Pattern
+
+All HTTP requests go through the centralized HTTPClient (`src/api/http_client.py`):
+```python
+from src.api.http_client import HTTPClientError, get_http_client
+
+http = get_http_client()
+data = http.get(url, params=params, api_type="binance")
+data = http.post(url, json=payload, api_type="deepseek", files=files)
+```
+API types with default timeouts: `default` (10s), `deepseek` (30s), `telegram` (10s), `binance` (10s), `blockchain` (15s)
+
+### Database Access
+
+Use `DatabaseManager` from `src/data/database.py` for all PostgreSQL access:
+```python
+from src.data.database import get_db
+
+db = get_db()
+with db.get_cursor() as cur:
+    cur.execute("SELECT * FROM trades WHERE symbol = %s", (symbol,))
+    rows = cur.fetchall()
+```
+
 ### Key Modules
 
 | Module | Purpose |
@@ -74,6 +102,11 @@ Critical shared resources use the singleton pattern with `get_instance()` and `r
 | `src/core/config.py` | Dataclass configs loaded from env vars |
 | `src/core/cohort_manager.py` | Parallel strategy variants (conservative/balanced/aggressive/baseline) |
 | `src/core/cycle_manager.py` | Weekly trading cycles with performance tracking |
+| `src/api/http_client.py` | Centralized HTTP with retries, rate limits, file uploads |
+| `src/data/database.py` | PostgreSQL connection pooling (DatabaseManager) |
+| `src/data/watchlist.py` | Multi-coin universe (25+ coins, 6 categories) |
+| `src/scanner/coin_scanner.py` | Opportunity detection (technical, volume, sentiment scores) |
+| `src/portfolio/allocator.py` | Kelly-based allocation with constraints |
 | `src/strategies/grid_strategy.py` | Grid level calculation and order logic |
 | `src/strategies/dynamic_grid.py` | ATR-based grid spacing, asymmetric grids |
 | `src/data/memory.py` | PostgreSQL-based trading memory (RAG pattern) |
@@ -185,6 +218,10 @@ DATABASE_URL, REDIS_URL
 | Task | Schedule | Description |
 |------|----------|-------------|
 | Cycle Management | Sun 00:00 | End/start weekly cycles |
+| Watchlist Update | Every 30min | Update market data for all coins |
+| Opportunity Scan | Every 2h | Scan coins for trading opportunities |
+| Portfolio Rebalance | 06:00 daily | Check allocation constraints |
+| Coin Performance | 21:30 daily | Update per-coin metrics |
 | Regime Detection | Every 4h | HMM market regime update |
 | Signal Weights | 22:00 daily | Bayesian weight update |
 | Divergence Scan | Every 2h | RSI/MACD divergences |
