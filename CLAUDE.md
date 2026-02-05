@@ -32,6 +32,9 @@ cd docker && docker-compose up -d
 
 # View bot logs
 docker logs -f trading-bot
+
+# Run backtest
+python run_backtest.py
 ```
 
 ## Architecture Overview
@@ -65,8 +68,11 @@ Critical shared resources use the singleton pattern:
 | `src/strategies/grid_strategy.py` | Grid level calculation and order logic |
 | `src/data/memory.py` | PostgreSQL-based trading memory (RAG pattern) |
 | `src/data/sentiment.py` | Fear & Greed Index, social sentiment |
+| `src/data/playbook.py` | Self-learning Trading Playbook generator |
 | `src/risk/stop_loss.py` | Stop-loss management (fixed, trailing, ATR) |
 | `src/strategies/ai_enhanced.py` | DeepSeek AI integration with fallbacks |
+| `src/core/logging_system.py` | Structured JSON logging (TradingLogger) |
+| `src/analysis/weekly_export.py` | Weekly analysis export for optimization |
 
 ### Grid Strategy Logic
 
@@ -84,6 +90,30 @@ Trades are stored with full context in PostgreSQL:
 - Outcomes tracked at 1h, 24h, 7d intervals
 
 The Memory System (`TradingMemory`) retrieves similar historical trades for AI context generation.
+
+### Trading Playbook
+
+The Playbook (`config/TRADING_PLAYBOOK.md`) is a self-learning "experience memory":
+- Auto-generated weekly from trade outcomes (Sundays 19:00)
+- Included in DeepSeek prompts as system context
+- Contains Fear & Greed rules, success rates, anti-patterns
+- Historical versions stored in `config/playbook_history/`
+
+### Logging System
+
+All logs are JSON-structured in `logs/` directory:
+- `error.log` - Exceptions with full context
+- `trade.log` - Every trade with market data
+- `decision.log` - AI decisions with reasoning
+- `performance.log` - Daily/weekly metrics
+- `playbook.log` - Playbook updates
+
+### Weekly Analysis Export
+
+Automatic export every Saturday 23:00 to `analysis_exports/week_YYYYMMDD/`:
+- `analysis_export.json` - Structured performance data
+- `ANALYSIS_REPORT.md` - Human-readable summary
+- Used for Claude Code optimization workflow
 
 ### External APIs
 
@@ -117,9 +147,18 @@ DATABASE_URL, REDIS_URL
 
 - `trading-bot` - Main GridBot
 - `telegram-handler` - Telegram commands (separate process)
-- `scheduler` - Background tasks (daily summaries, market snapshots)
+- `scheduler` - Background tasks (daily summaries, market snapshots, playbook updates, weekly exports)
 - `postgres` - Trading memory database
 - `redis` - Caching
+
+### Key Scheduled Tasks
+
+| Task | Schedule | Description |
+|------|----------|-------------|
+| Pattern Learning | 21:00 daily | Analyze new trades |
+| Playbook Update | Sun 19:00 | Generate new playbook |
+| Weekly Export | Sat 23:00 | Create analysis export |
+| Outcome Update | Every 6h | Update trade outcomes |
 
 ## Testing Notes
 

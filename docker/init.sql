@@ -362,5 +362,398 @@ INSERT INTO learned_patterns (pattern_name, description, conditions) VALUES
     ('buy_whale_accumulation', 'Kaufen nach großem Whale-Kauf', '{"action": "BUY", "whale_signal": "accumulation"}')
 ON CONFLICT (pattern_name) DO NOTHING;
 
+-- ═══════════════════════════════════════════════════════════════
+-- COHORTS - Parallele Strategie-Varianten
+-- ═══════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS cohorts (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR(50) NOT NULL UNIQUE,  -- 'conservative', 'balanced', 'aggressive', 'baseline'
+    description TEXT,
+    config JSONB NOT NULL,  -- Strategie-Parameter
+    starting_capital DECIMAL(20, 2) DEFAULT 1000.00,
+    current_capital DECIMAL(20, 2) DEFAULT 1000.00,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_cohorts_active ON cohorts(is_active) WHERE is_active = true;
+
+-- ═══════════════════════════════════════════════════════════════
+-- TRADING_CYCLES - Wöchentliche Zyklen pro Cohort
+-- ═══════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS trading_cycles (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    cohort_id UUID REFERENCES cohorts(id) ON DELETE CASCADE,
+    cycle_number INTEGER NOT NULL,
+    start_date TIMESTAMPTZ NOT NULL,
+    end_date TIMESTAMPTZ,
+    status VARCHAR(20) DEFAULT 'active',  -- active, completed, cancelled
+
+    -- Cycle Capital
+    starting_capital DECIMAL(20, 2) NOT NULL DEFAULT 1000.00,
+    ending_capital DECIMAL(20, 2),
+    trades_count INTEGER DEFAULT 0,
+
+    -- Performance Metrics
+    total_pnl DECIMAL(20, 4),
+    total_pnl_pct DECIMAL(10, 4),
+    winning_trades INTEGER DEFAULT 0,
+    losing_trades INTEGER DEFAULT 0,
+    max_drawdown DECIMAL(10, 4),
+    max_drawdown_date TIMESTAMPTZ,
+
+    -- Risk Metrics
+    sharpe_ratio DECIMAL(10, 4),
+    sortino_ratio DECIMAL(10, 4),
+    calmar_ratio DECIMAL(10, 4),
+    volatility DECIMAL(10, 4),
+    kelly_fraction DECIMAL(10, 4),
+    var_95 DECIMAL(10, 4),
+    cvar_95 DECIMAL(10, 4),
+
+    -- Market Context Summary
+    avg_fear_greed DECIMAL(5, 2),
+    min_fear_greed INTEGER,
+    max_fear_greed INTEGER,
+    dominant_regime VARCHAR(20),  -- BULL, BEAR, SIDEWAYS
+    btc_performance_pct DECIMAL(10, 4),
+
+    -- Signal Performance (which signals worked)
+    signal_performance JSONB,  -- {"rsi": {"accuracy": 0.65, "pnl": 2.3}, ...}
+
+    -- Learnings
+    best_patterns JSONB,
+    worst_patterns JSONB,
+    recommendations TEXT,
+
+    -- Playbook
+    playbook_version_at_start INTEGER,
+    playbook_version_at_end INTEGER,
+
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    closed_at TIMESTAMPTZ,
+
+    UNIQUE(cohort_id, cycle_number)
+);
+
+CREATE INDEX idx_cycles_cohort ON trading_cycles(cohort_id);
+CREATE INDEX idx_cycles_number ON trading_cycles(cycle_number DESC);
+CREATE INDEX idx_cycles_status ON trading_cycles(status);
+CREATE INDEX idx_cycles_dates ON trading_cycles(start_date, end_date);
+
+-- ═══════════════════════════════════════════════════════════════
+-- SIGNAL_COMPONENTS - Signal-Breakdown pro Trade
+-- ═══════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS signal_components (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    trade_id UUID REFERENCES trades(id) ON DELETE CASCADE,
+    cycle_id UUID REFERENCES trading_cycles(id),
+    cohort_id UUID REFERENCES cohorts(id),
+    timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    -- Individual Signal Scores (-1 to +1)
+    fear_greed_signal DECIMAL(5, 4),  -- Contrarian interpretation
+    rsi_signal DECIMAL(5, 4),
+    macd_signal DECIMAL(5, 4),
+    trend_signal DECIMAL(5, 4),  -- SMA alignment
+    volume_signal DECIMAL(5, 4),
+    whale_signal DECIMAL(5, 4),
+    sentiment_signal DECIMAL(5, 4),
+    macro_signal DECIMAL(5, 4),
+
+    -- AI Signals
+    ai_direction_signal DECIMAL(5, 4),
+    ai_confidence DECIMAL(5, 4),
+    ai_risk_level VARCHAR(20),  -- LOW, MEDIUM, HIGH
+    playbook_alignment_score DECIMAL(5, 4),
+
+    -- Weights Used
+    weights_applied JSONB,  -- {"fear_greed": 0.15, "rsi": 0.20, ...}
+
+    -- Combined Scores
+    math_composite_score DECIMAL(5, 4),
+    ai_composite_score DECIMAL(5, 4),
+    final_score DECIMAL(5, 4),
+
+    -- Divergence Detection
+    has_divergence BOOLEAN DEFAULT FALSE,
+    divergence_type VARCHAR(50),  -- bullish_regular, bearish_hidden, etc.
+    divergence_strength DECIMAL(5, 4),
+
+    -- Outcome (updated later)
+    was_correct BOOLEAN,
+    outcome_contribution DECIMAL(10, 4),
+
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_signals_trade ON signal_components(trade_id);
+CREATE INDEX idx_signals_cycle ON signal_components(cycle_id);
+CREATE INDEX idx_signals_cohort ON signal_components(cohort_id);
+CREATE INDEX idx_signals_timestamp ON signal_components(timestamp DESC);
+CREATE INDEX idx_signals_divergence ON signal_components(has_divergence) WHERE has_divergence = true;
+
+-- ═══════════════════════════════════════════════════════════════
+-- CALCULATION_SNAPSHOTS - Alle Math-Berechnungen persistieren
+-- ═══════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS calculation_snapshots (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    cycle_id UUID REFERENCES trading_cycles(id),
+    cohort_id UUID REFERENCES cohorts(id),
+    trade_id UUID REFERENCES trades(id),  -- Optional: linked to specific trade
+
+    -- Position Sizing Calculations
+    kelly_fraction DECIMAL(10, 6),
+    half_kelly DECIMAL(10, 6),
+    optimal_position_size DECIMAL(20, 8),
+    max_position_size DECIMAL(20, 8),
+    position_size_used DECIMAL(20, 8),
+
+    -- Risk Metrics at This Point
+    current_sharpe DECIMAL(10, 4),
+    current_sortino DECIMAL(10, 4),
+    current_calmar DECIMAL(10, 4),
+    rolling_volatility_7d DECIMAL(10, 4),
+    rolling_volatility_30d DECIMAL(10, 4),
+    current_drawdown DECIMAL(10, 4),
+    max_drawdown_cycle DECIMAL(10, 4),
+
+    -- Value at Risk
+    var_95 DECIMAL(20, 4),
+    var_99 DECIMAL(20, 4),
+    cvar_95 DECIMAL(20, 4),
+    cvar_99 DECIMAL(20, 4),
+
+    -- Portfolio State
+    portfolio_value DECIMAL(20, 4),
+    cash_position DECIMAL(20, 4),
+    invested_position DECIMAL(20, 4),
+    exposure_pct DECIMAL(10, 4),
+    leverage DECIMAL(5, 2) DEFAULT 1.00,
+
+    -- Market State
+    btc_price DECIMAL(20, 2),
+    fear_greed INTEGER,
+    current_regime VARCHAR(20),
+
+    -- Correlation Matrix (for multi-asset)
+    correlation_matrix JSONB,
+
+    -- Win/Loss Stats
+    win_rate DECIMAL(5, 4),
+    profit_factor DECIMAL(10, 4),
+    avg_win DECIMAL(10, 4),
+    avg_loss DECIMAL(10, 4),
+    consecutive_wins INTEGER DEFAULT 0,
+    consecutive_losses INTEGER DEFAULT 0,
+
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_calc_timestamp ON calculation_snapshots(timestamp DESC);
+CREATE INDEX idx_calc_cycle ON calculation_snapshots(cycle_id);
+CREATE INDEX idx_calc_cohort ON calculation_snapshots(cohort_id);
+CREATE INDEX idx_calc_trade ON calculation_snapshots(trade_id);
+
+-- ═══════════════════════════════════════════════════════════════
+-- TRADE_PAIRS - BUY/SELL Paare für echtes P&L
+-- ═══════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS trade_pairs (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    cycle_id UUID REFERENCES trading_cycles(id),
+    cohort_id UUID REFERENCES cohorts(id),
+    symbol VARCHAR(20) NOT NULL,
+
+    -- Entry Trade
+    entry_trade_id UUID REFERENCES trades(id),
+    entry_timestamp TIMESTAMPTZ NOT NULL,
+    entry_price DECIMAL(20, 8) NOT NULL,
+    entry_quantity DECIMAL(20, 8) NOT NULL,
+    entry_value_usd DECIMAL(20, 4) NOT NULL,
+    entry_fee_usd DECIMAL(10, 4) DEFAULT 0,
+
+    -- Exit Trade (null if position still open)
+    exit_trade_id UUID REFERENCES trades(id),
+    exit_timestamp TIMESTAMPTZ,
+    exit_price DECIMAL(20, 8),
+    exit_quantity DECIMAL(20, 8),
+    exit_value_usd DECIMAL(20, 4),
+    exit_fee_usd DECIMAL(10, 4),
+
+    -- Position Details
+    position_type VARCHAR(10) DEFAULT 'LONG',  -- LONG, SHORT
+    status VARCHAR(20) DEFAULT 'open',  -- open, closed, partial
+    remaining_quantity DECIMAL(20, 8),
+
+    -- Calculated P&L
+    gross_pnl DECIMAL(20, 4),
+    net_pnl DECIMAL(20, 4),  -- After fees
+    pnl_pct DECIMAL(10, 4),
+    hold_duration_hours DECIMAL(10, 2),
+
+    -- Peak/Trough during hold
+    max_price_during_hold DECIMAL(20, 8),
+    min_price_during_hold DECIMAL(20, 8),
+    max_unrealized_pnl_pct DECIMAL(10, 4),
+    max_unrealized_loss_pct DECIMAL(10, 4),
+
+    -- Exit Reason
+    exit_reason VARCHAR(50),  -- target_hit, stop_loss, manual, cycle_end, trailing_stop
+
+    -- Market Context Comparison
+    entry_fear_greed INTEGER,
+    exit_fear_greed INTEGER,
+    entry_btc_price DECIMAL(20, 2),
+    exit_btc_price DECIMAL(20, 2),
+    entry_regime VARCHAR(20),
+    exit_regime VARCHAR(20),
+
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_pairs_cycle ON trade_pairs(cycle_id);
+CREATE INDEX idx_pairs_cohort ON trade_pairs(cohort_id);
+CREATE INDEX idx_pairs_symbol ON trade_pairs(symbol);
+CREATE INDEX idx_pairs_status ON trade_pairs(status);
+CREATE INDEX idx_pairs_entry ON trade_pairs(entry_timestamp DESC);
+
+-- ═══════════════════════════════════════════════════════════════
+-- REGIME_HISTORY - Markt-Regime Tracking
+-- ═══════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS regime_history (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    regime VARCHAR(20) NOT NULL,  -- BULL, BEAR, SIDEWAYS
+    regime_probability DECIMAL(5, 4),
+    transition_probability DECIMAL(5, 4),
+
+    -- Features used for detection
+    return_7d DECIMAL(10, 4),
+    volatility_7d DECIMAL(10, 4),
+    volume_trend DECIMAL(10, 4),
+    fear_greed_avg DECIMAL(5, 2),
+
+    -- Model Confidence
+    model_confidence DECIMAL(5, 4),
+    previous_regime VARCHAR(20),
+    regime_duration_hours INTEGER,
+
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_regime_timestamp ON regime_history(timestamp DESC);
+CREATE INDEX idx_regime_type ON regime_history(regime);
+
+-- ═══════════════════════════════════════════════════════════════
+-- SIGNAL_WEIGHTS - Bayesian Gewichtung über Zeit
+-- ═══════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS signal_weights (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    cohort_id UUID REFERENCES cohorts(id),
+
+    -- Current Weights
+    fear_greed_weight DECIMAL(5, 4),
+    rsi_weight DECIMAL(5, 4),
+    macd_weight DECIMAL(5, 4),
+    trend_weight DECIMAL(5, 4),
+    volume_weight DECIMAL(5, 4),
+    whale_weight DECIMAL(5, 4),
+    sentiment_weight DECIMAL(5, 4),
+    macro_weight DECIMAL(5, 4),
+    ai_weight DECIMAL(5, 4),
+
+    -- Weight Uncertainties (Bayesian)
+    weight_uncertainties JSONB,
+
+    -- Performance that led to this update
+    signal_accuracies JSONB,
+    learning_rate DECIMAL(5, 4),
+
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_weights_timestamp ON signal_weights(timestamp DESC);
+CREATE INDEX idx_weights_cohort ON signal_weights(cohort_id);
+
+-- ═══════════════════════════════════════════════════════════════
+-- ALTER EXISTING TABLES
+-- ═══════════════════════════════════════════════════════════════
+
+-- Add cohort_id and cycle_id to trades table
+ALTER TABLE trades ADD COLUMN IF NOT EXISTS cohort_id UUID REFERENCES cohorts(id);
+ALTER TABLE trades ADD COLUMN IF NOT EXISTS cycle_id UUID REFERENCES trading_cycles(id);
+
+CREATE INDEX IF NOT EXISTS idx_trades_cohort ON trades(cohort_id);
+CREATE INDEX IF NOT EXISTS idx_trades_cycle ON trades(cycle_id);
+
+-- ═══════════════════════════════════════════════════════════════
+-- VIEWS FOR ANALYSIS
+-- ═══════════════════════════════════════════════════════════════
+
+-- View: Cohort Comparison
+CREATE OR REPLACE VIEW v_cohort_comparison AS
+SELECT
+    c.name as cohort_name,
+    tc.cycle_number,
+    tc.starting_capital,
+    tc.ending_capital,
+    tc.total_pnl_pct,
+    tc.sharpe_ratio,
+    tc.max_drawdown,
+    tc.trades_count,
+    tc.winning_trades,
+    CASE WHEN tc.trades_count > 0
+        THEN ROUND(tc.winning_trades::DECIMAL / tc.trades_count * 100, 2)
+        ELSE 0 END as win_rate_pct,
+    tc.dominant_regime,
+    tc.avg_fear_greed
+FROM trading_cycles tc
+JOIN cohorts c ON tc.cohort_id = c.id
+WHERE tc.status = 'completed'
+ORDER BY tc.cycle_number DESC, c.name;
+
+-- View: Signal Effectiveness
+CREATE OR REPLACE VIEW v_signal_effectiveness AS
+SELECT
+    c.name as cohort_name,
+    tc.cycle_number,
+    COUNT(sc.id) as total_signals,
+    AVG(CASE WHEN sc.was_correct THEN 1 ELSE 0 END) as overall_accuracy,
+    AVG(CASE WHEN sc.fear_greed_signal > 0.3 AND sc.was_correct THEN 1
+             WHEN sc.fear_greed_signal > 0.3 THEN 0 END) as fear_greed_accuracy,
+    AVG(CASE WHEN sc.rsi_signal > 0.3 AND sc.was_correct THEN 1
+             WHEN sc.rsi_signal > 0.3 THEN 0 END) as rsi_accuracy,
+    AVG(CASE WHEN sc.ai_direction_signal > 0.3 AND sc.was_correct THEN 1
+             WHEN sc.ai_direction_signal > 0.3 THEN 0 END) as ai_accuracy
+FROM signal_components sc
+JOIN trading_cycles tc ON sc.cycle_id = tc.id
+JOIN cohorts c ON sc.cohort_id = c.id
+WHERE sc.was_correct IS NOT NULL
+GROUP BY c.name, tc.cycle_number
+ORDER BY tc.cycle_number DESC, c.name;
+
+-- ═══════════════════════════════════════════════════════════════
+-- INITIAL COHORTS
+-- ═══════════════════════════════════════════════════════════════
+INSERT INTO cohorts (name, description, config, starting_capital) VALUES
+    ('conservative', 'Konservative Strategie: Enge Grids, hohe Confidence',
+     '{"grid_range_pct": 2.0, "min_confidence": 0.7, "max_fear_greed": 40, "risk_tolerance": "low"}',
+     1000.00),
+    ('balanced', 'Ausgewogene Strategie: Standard Grids, Playbook-gesteuert',
+     '{"grid_range_pct": 5.0, "min_confidence": 0.5, "use_playbook": true, "risk_tolerance": "medium"}',
+     1000.00),
+    ('aggressive', 'Aggressive Strategie: Weite Grids, höheres Risiko',
+     '{"grid_range_pct": 8.0, "min_confidence": 0.3, "min_fear_greed": 0, "risk_tolerance": "high"}',
+     1000.00),
+    ('baseline', 'Baseline: Keine Änderungen, Woche 1 Strategie als Kontrolle',
+     '{"grid_range_pct": 5.0, "min_confidence": 0.5, "frozen": true, "risk_tolerance": "medium"}',
+     1000.00)
+ON CONFLICT (name) DO NOTHING;
+
 -- Fertig!
-SELECT 'Trading Bot Database initialized successfully!' as status;
+SELECT 'Trading Bot Database initialized successfully with Cohort System!' as status;

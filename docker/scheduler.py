@@ -597,6 +597,424 @@ def task_system_health_check():
 
 
 # ═══════════════════════════════════════════════════════════════
+# NEW TASKS - PHASE 2-5 ADDITIONS
+# ═══════════════════════════════════════════════════════════════
+
+
+def task_fetch_etf_flows():
+    """
+    Holt tägliche ETF-Flow Daten.
+    Läuft täglich um 10:00 (nach US-Marktschluss).
+    """
+    logger.info("Fetching ETF flow data...")
+
+    try:
+        from src.data.etf_flows import ETFFlowTracker
+
+        tracker = ETFFlowTracker.get_instance()
+        flows = tracker.fetch_and_store_daily()
+
+        if flows:
+            signal, reasoning = tracker.get_institutional_signal()
+            logger.info(f"ETF Flows: Signal={signal:.2f}, {reasoning}")
+
+            # Alert bei starkem Signal
+            if abs(signal) > 0.5:
+                direction = "📈 BULLISH" if signal > 0 else "📉 BEARISH"
+                telegram.send(f"""
+🏦 <b>ETF FLOW ALERT</b>
+
+{direction} Institutional Signal: {signal:.2f}
+
+{reasoning}
+""")
+
+    except Exception as e:
+        logger.error(f"ETF Flow Fetch Error: {e}")
+        trading_logger.error("ETF flow fetch failed", e, {"task": "fetch_etf_flows"})
+
+
+def task_fetch_social_sentiment():
+    """
+    Holt Social Media Sentiment Daten.
+    Läuft alle 4 Stunden.
+    """
+    logger.info("Fetching social sentiment...")
+
+    try:
+        from src.data.social_sentiment import SocialSentimentProvider
+
+        provider = SocialSentimentProvider.get_instance()
+
+        # Fetch für wichtige Symbole
+        symbols = ["BTC", "ETH", "SOL"]
+
+        for symbol in symbols:
+            metrics = provider.get_sentiment(symbol)
+
+            if metrics:
+                logger.info(
+                    f"Social Sentiment {symbol}: "
+                    f"Score={metrics.composite_sentiment:.2f}, "
+                    f"Volume={metrics.social_volume}"
+                )
+
+                # Alert bei extremem Sentiment
+                if abs(metrics.composite_sentiment) > 0.7:
+                    direction = "🚀 EUPHORIE" if metrics.composite_sentiment > 0 else "😰 PANIK"
+                    telegram.send(f"""
+📱 <b>SOCIAL SENTIMENT ALERT</b>
+
+{symbol}: {direction}
+Composite Score: {metrics.composite_sentiment:.2f}
+Social Volume: {metrics.social_volume:,}
+""")
+
+    except Exception as e:
+        logger.error(f"Social Sentiment Fetch Error: {e}")
+        trading_logger.error("Social sentiment fetch failed", e, {"task": "fetch_social_sentiment"})
+
+
+def task_fetch_token_unlocks():
+    """
+    Holt anstehende Token Unlock Events.
+    Läuft täglich um 08:00.
+    """
+    logger.info("Fetching token unlocks...")
+
+    try:
+        from src.data.token_unlocks import TokenUnlockTracker
+
+        tracker = TokenUnlockTracker.get_instance()
+        unlocks = tracker.fetch_and_store_upcoming(days=14)
+
+        # Finde signifikante Unlocks
+        significant = tracker.get_significant_unlocks(days=7, min_pct=2.0)
+
+        if significant:
+            message = "🔓 <b>SIGNIFIKANTE TOKEN UNLOCKS</b>\n\n"
+
+            for unlock in significant[:5]:
+                impact_emoji = "🔴" if unlock.expected_impact == "HIGH" else "🟡"
+                message += f"""
+{impact_emoji} <b>{unlock.symbol}</b>
+📅 {unlock.unlock_date.strftime("%d.%m.%Y")}
+📊 {unlock.unlock_pct_of_supply:.1f}% Supply
+💰 ${unlock.unlock_value_usd / 1_000_000:.1f}M
+"""
+
+            telegram.send(message)
+
+        logger.info(f"Token Unlocks: {len(unlocks)} total, {len(significant)} significant")
+
+    except Exception as e:
+        logger.error(f"Token Unlock Fetch Error: {e}")
+        trading_logger.error("Token unlock fetch failed", e, {"task": "fetch_token_unlocks"})
+
+
+def task_regime_detection():
+    """
+    Erkennt aktuelles Markt-Regime (BULL/BEAR/SIDEWAYS).
+    Läuft alle 4 Stunden.
+    """
+    logger.info("Running regime detection...")
+
+    try:
+        from src.analysis.regime_detection import RegimeDetector
+
+        detector = RegimeDetector.get_instance()
+
+        # Analysiere Hauptsymbol
+        regime_state = detector.detect_regime("BTCUSDT")
+
+        if regime_state:
+            logger.info(
+                f"Market Regime: {regime_state.regime.value} "
+                f"(probability: {regime_state.probability:.2f})"
+            )
+
+            # Speichere in DB
+            detector.store_regime(regime_state)
+
+            # Alert bei Regime-Wechsel
+            # (Vergleiche mit letztem gespeicherten Regime)
+            conn = get_db_connection()
+            if conn:
+                try:
+                    from psycopg2.extras import RealDictCursor
+
+                    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                        cur.execute("""
+                            SELECT regime FROM regime_history
+                            ORDER BY timestamp DESC
+                            OFFSET 1 LIMIT 1
+                        """)
+                        prev = cur.fetchone()
+
+                        if prev and prev["regime"] != regime_state.regime.value:
+                            telegram.send(f"""
+🔄 <b>REGIME CHANGE DETECTED</b>
+
+{prev["regime"]} → <b>{regime_state.regime.value}</b>
+
+Probability: {regime_state.probability:.1%}
+Confidence: {regime_state.model_confidence:.1%}
+
+<i>Signal-Gewichte werden angepasst.</i>
+""")
+                finally:
+                    conn.close()
+
+    except Exception as e:
+        logger.error(f"Regime Detection Error: {e}")
+        trading_logger.error("Regime detection failed", e, {"task": "regime_detection"})
+
+
+def task_update_signal_weights():
+    """
+    Aktualisiert Bayesian Signal Weights basierend auf Performance.
+    Läuft täglich um 22:00.
+    """
+    logger.info("Updating Bayesian signal weights...")
+
+    try:
+        from src.analysis.bayesian_weights import BayesianWeightLearner
+
+        learner = BayesianWeightLearner.get_instance()
+        result = learner.weekly_update()
+
+        updates_count = len(result.get("updates", []))
+        errors_count = len(result.get("errors", []))
+
+        logger.info(f"Bayesian Weights: {updates_count} updates, {errors_count} errors")
+
+        if updates_count > 0:
+            # Finde Global Update
+            global_update = None
+            for update in result["updates"]:
+                if update["type"] == "global":
+                    global_update = update
+                    break
+
+            if global_update:
+                # Top 3 Signale
+                weights = global_update["weights"]
+                top_signals = sorted(weights.items(), key=lambda x: x[1], reverse=True)[:3]
+
+                message = f"""
+📊 <b>SIGNAL WEIGHTS UPDATED</b>
+
+Confidence: {global_update["confidence"]:.1%}
+Sample Size: {global_update["sample_size"]} trades
+
+<b>Top Signals:</b>
+"""
+                for name, weight in top_signals:
+                    bar = "█" * int(weight * 20)
+                    message += f"• {name}: {weight:.1%} {bar}\n"
+
+                telegram.send(message)
+
+    except Exception as e:
+        logger.error(f"Signal Weight Update Error: {e}")
+        trading_logger.error("Signal weight update failed", e, {"task": "update_signal_weights"})
+
+
+def task_cycle_management():
+    """
+    Verwaltet Trading-Zyklen (wöchentlich).
+    Läuft Sonntag um 00:00.
+
+    - Schließt aktuellen Zyklus ab
+    - Berechnet alle Metriken
+    - Startet neuen Zyklus
+    - Erstellt Vergleichsreport
+    """
+    logger.info("Running cycle management...")
+
+    try:
+        from src.core.cycle_manager import CycleManager
+
+        manager = CycleManager.get_instance()
+
+        # Für jede aktive Cohort
+        conn = get_db_connection()
+        if not conn:
+            logger.error("Cycle Management: Keine DB-Verbindung")
+            return
+
+        try:
+            from psycopg2.extras import RealDictCursor
+
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("SELECT id, name FROM cohorts WHERE is_active = TRUE")
+                cohorts = cur.fetchall()
+
+            cycle_reports = []
+
+            for cohort in cohorts:
+                cohort_id = str(cohort["id"])
+                cohort_name = cohort["name"]
+
+                # Aktuellen Zyklus schließen
+                closed_cycle = manager.close_current_cycle(cohort_id)
+
+                if closed_cycle:
+                    logger.info(
+                        f"Cycle {closed_cycle.cycle_number} closed for {cohort_name}: "
+                        f"P&L={closed_cycle.total_pnl_pct:.2f}%"
+                    )
+                    cycle_reports.append(
+                        {
+                            "cohort": cohort_name,
+                            "cycle": closed_cycle.cycle_number,
+                            "pnl_pct": closed_cycle.total_pnl_pct or 0,
+                            "sharpe": closed_cycle.sharpe_ratio or 0,
+                            "trades": closed_cycle.total_trades or 0,
+                        }
+                    )
+
+                # Neuen Zyklus starten
+                new_cycle = manager.start_new_cycle(cohort_id)
+
+                if new_cycle:
+                    logger.info(f"Cycle {new_cycle.cycle_number} started for {cohort_name}")
+
+            # Sende Zusammenfassung
+            if cycle_reports:
+                message = "📅 <b>WÖCHENTLICHER ZYKLUSREPORT</b>\n\n"
+
+                # Sortiere nach Performance
+                sorted_reports = sorted(cycle_reports, key=lambda x: x["pnl_pct"], reverse=True)
+
+                for report in sorted_reports:
+                    emoji = "🏆" if report == sorted_reports[0] else "📊"
+                    pnl_emoji = "📈" if report["pnl_pct"] > 0 else "📉"
+
+                    message += f"""
+{emoji} <b>{report["cohort"].upper()}</b> (Zyklus {report["cycle"]})
+{pnl_emoji} P&L: {report["pnl_pct"]:+.2f}%
+📊 Sharpe: {report["sharpe"]:.2f}
+🔄 Trades: {report["trades"]}
+"""
+
+                # Winner
+                if len(sorted_reports) > 1:
+                    winner = sorted_reports[0]
+                    message += f"\n🏆 <b>Winner:</b> {winner['cohort'].upper()} mit {winner['pnl_pct']:+.2f}%"
+
+                telegram.send(message)
+
+        finally:
+            conn.close()
+
+    except Exception as e:
+        logger.error(f"Cycle Management Error: {e}")
+        trading_logger.error("Cycle management failed", e, {"task": "cycle_management"})
+
+
+def task_ab_test_check():
+    """
+    Prüft laufende A/B Tests auf statistische Signifikanz.
+    Läuft täglich um 23:00.
+    """
+    logger.info("Checking A/B tests...")
+
+    try:
+        from src.optimization.ab_testing import ABTestingFramework
+
+        framework = ABTestingFramework.get_instance()
+
+        # Hole alle laufenden Experimente
+        summaries = framework.get_all_experiments_summary()
+        running = [s for s in summaries if s.get("status") == "RUNNING"]
+
+        for exp in running:
+            exp_id = exp["id"]
+
+            # Prüfe auf frühes Stoppen
+            should_stop, reason = framework.check_early_stopping(exp_id)
+
+            if should_stop:
+                # Beende Experiment
+                result = framework.complete_experiment(exp_id, promote_winner=True)
+
+                if result:
+                    telegram.send(f"""
+🧪 <b>A/B TEST ABGESCHLOSSEN</b>
+
+<b>{exp["name"]}</b>
+Grund: {reason}
+
+<b>Ergebnis:</b>
+🏆 Winner: {result.winner}
+📊 p-Wert: {result.p_value:.4f}
+📈 Verbesserung: {result.winner_improvement:+.1f}%
+🎯 Signifikanz: {result.significance.value}
+""")
+            else:
+                # Log Status
+                logger.info(f"A/B Test '{exp['name']}': {reason}")
+
+    except Exception as e:
+        logger.error(f"A/B Test Check Error: {e}")
+        trading_logger.error("A/B test check failed", e, {"task": "ab_test_check"})
+
+
+def task_divergence_scan():
+    """
+    Scannt nach Divergenzen in wichtigen Symbolen.
+    Läuft alle 2 Stunden.
+    """
+    logger.info("Scanning for divergences...")
+
+    try:
+        from src.analysis.divergence_detector import DivergenceDetector
+
+        detector = DivergenceDetector.get_instance()
+
+        # Wichtige Symbole
+        symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+
+        for symbol in symbols:
+            analysis = detector.analyze(symbol, timeframe="1h")
+
+            if analysis.divergence_count > 0 and analysis.average_confidence > 0.6:
+                logger.info(
+                    f"Divergence found in {symbol}: "
+                    f"{analysis.dominant_type.value}, "
+                    f"confidence={analysis.average_confidence:.2f}"
+                )
+
+                # Alert bei starkem Signal
+                if abs(analysis.net_signal) > 0.5:
+                    direction = "🟢 BULLISH" if analysis.net_signal > 0 else "🔴 BEARISH"
+
+                    div_list = "\n".join(
+                        [
+                            f"• {d.indicator}: {d.divergence_type.value}"
+                            for d in analysis.divergences[:3]
+                        ]
+                    )
+
+                    telegram.send(f"""
+📊 <b>DIVERGENCE ALERT</b>
+
+<b>{symbol}</b>
+{direction} Signal: {analysis.net_signal:.2f}
+
+<b>Divergenzen:</b>
+{div_list}
+
+Confidence: {analysis.average_confidence:.1%}
+""")
+
+    except Exception as e:
+        logger.error(f"Divergence Scan Error: {e}")
+        trading_logger.error("Divergence scan failed", e, {"task": "divergence_scan"})
+
+
+# ═══════════════════════════════════════════════════════════════
 # MAIN
 # ═══════════════════════════════════════════════════════════════
 
@@ -647,6 +1065,34 @@ def main():
 
     # System Health Check alle 6 Stunden
     schedule.every(6).hours.do(task_system_health_check)
+
+    # ═══════════════════════════════════════════════════════════════
+    # NEW JOBS - PHASE 2-5 ADDITIONS
+    # ═══════════════════════════════════════════════════════════════
+
+    # ETF Flow Daten täglich um 10:00 (nach US-Marktschluss)
+    schedule.every().day.at("10:00").do(task_fetch_etf_flows)
+
+    # Social Sentiment alle 4 Stunden
+    schedule.every(4).hours.do(task_fetch_social_sentiment)
+
+    # Token Unlocks täglich um 08:00
+    schedule.every().day.at("08:00").do(task_fetch_token_unlocks)
+
+    # Regime Detection alle 4 Stunden
+    schedule.every(4).hours.do(task_regime_detection)
+
+    # Bayesian Signal Weights täglich um 22:00
+    schedule.every().day.at("22:00").do(task_update_signal_weights)
+
+    # Cycle Management wöchentlich Sonntag 00:00
+    schedule.every().sunday.at("00:00").do(task_cycle_management)
+
+    # A/B Test Check täglich um 23:00
+    schedule.every().day.at("23:00").do(task_ab_test_check)
+
+    # Divergence Scan alle 2 Stunden
+    schedule.every(2).hours.do(task_divergence_scan)
 
     logger.info("Scheduled jobs:")
     for job in schedule.get_jobs():

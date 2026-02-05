@@ -229,3 +229,188 @@ def mock_db_connection():
     mock_conn.cursor.return_value.__enter__ = MagicMock(return_value=mock_cursor)
     mock_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
     return mock_conn
+
+
+# ═══════════════════════════════════════════════════════════════
+# NEW MODULE FIXTURES (Phase 1-5)
+# ═══════════════════════════════════════════════════════════════
+
+
+@pytest.fixture
+def reset_new_singletons():
+    """Resettet alle neuen Singletons zwischen Tests"""
+    yield
+
+    # Reset all new singletons
+    try:
+        from src.core.cohort_manager import CohortManager
+
+        CohortManager.reset_instance()
+    except ImportError:
+        pass
+
+    try:
+        from src.core.cycle_manager import CycleManager
+
+        CycleManager.reset_instance()
+    except ImportError:
+        pass
+
+    try:
+        from src.analysis.signal_analyzer import SignalAnalyzer
+
+        SignalAnalyzer.reset_instance()
+    except ImportError:
+        pass
+
+    try:
+        from src.analysis.metrics_calculator import MetricsCalculator
+
+        MetricsCalculator.reset_instance()
+    except ImportError:
+        pass
+
+    try:
+        from src.analysis.regime_detection import RegimeDetector
+
+        RegimeDetector.reset_instance()
+    except ImportError:
+        pass
+
+    try:
+        from src.analysis.bayesian_weights import BayesianWeightLearner
+
+        BayesianWeightLearner.reset_instance()
+    except ImportError:
+        pass
+
+    try:
+        from src.analysis.divergence_detector import DivergenceDetector
+
+        DivergenceDetector.reset_instance()
+    except ImportError:
+        pass
+
+    try:
+        from src.data.social_sentiment import SocialSentimentProvider
+
+        SocialSentimentProvider.reset_instance()
+    except ImportError:
+        pass
+
+    try:
+        from src.data.etf_flows import ETFFlowTracker
+
+        ETFFlowTracker.reset_instance()
+    except ImportError:
+        pass
+
+    try:
+        from src.data.token_unlocks import TokenUnlockTracker
+
+        TokenUnlockTracker.reset_instance()
+    except ImportError:
+        pass
+
+    try:
+        from src.optimization.ab_testing import ABTestingFramework
+
+        ABTestingFramework.reset_instance()
+    except ImportError:
+        pass
+
+    try:
+        from src.risk.cvar_sizing import CVaRPositionSizer
+
+        CVaRPositionSizer.reset_instance()
+    except ImportError:
+        pass
+
+    try:
+        from src.strategies.dynamic_grid import DynamicGridStrategy
+
+        DynamicGridStrategy.reset_instance()
+    except ImportError:
+        pass
+
+
+@pytest.fixture
+def sample_ohlcv_data():
+    """Sample OHLCV data for technical analysis"""
+    import numpy as np
+
+    np.random.seed(42)
+    n = 100
+
+    # Generate realistic price data
+    returns = np.random.normal(0.001, 0.02, n)
+    close = 100 * np.cumprod(1 + returns)
+
+    # Generate high/low around close
+    volatility = np.abs(np.random.normal(0, 0.01, n))
+    high = close * (1 + volatility)
+    low = close * (1 - volatility)
+    open_price = close * (1 + np.random.normal(0, 0.005, n))
+
+    volume = np.random.uniform(1000000, 10000000, n)
+
+    return {
+        "open": open_price,
+        "high": high,
+        "low": low,
+        "close": close,
+        "volume": volume,
+    }
+
+
+@pytest.fixture
+def sample_returns():
+    """Sample return data for risk calculations"""
+    import numpy as np
+
+    np.random.seed(42)
+    # Generate 100 days of returns with realistic properties
+    returns = np.random.normal(0.001, 0.03, 100)  # Mean 0.1%, Std 3%
+    return returns
+
+
+@pytest.fixture
+def sample_trade_history():
+    """Sample trade history for signal analysis"""
+    return [
+        {"pnl": 50.0, "pnl_pct": 2.5, "was_correct": True},
+        {"pnl": -30.0, "pnl_pct": -1.5, "was_correct": False},
+        {"pnl": 80.0, "pnl_pct": 4.0, "was_correct": True},
+        {"pnl": -20.0, "pnl_pct": -1.0, "was_correct": False},
+        {"pnl": 60.0, "pnl_pct": 3.0, "was_correct": True},
+        {"pnl": 40.0, "pnl_pct": 2.0, "was_correct": True},
+        {"pnl": -45.0, "pnl_pct": -2.25, "was_correct": False},
+        {"pnl": 70.0, "pnl_pct": 3.5, "was_correct": True},
+    ]
+
+
+@pytest.fixture
+def sample_signals():
+    """Sample signal values for testing"""
+    return {
+        "fear_greed": 0.3,
+        "rsi": -0.2,
+        "macd": 0.5,
+        "trend": 0.4,
+        "volume": 0.1,
+        "whale": -0.1,
+        "sentiment": 0.2,
+        "macro": 0.0,
+        "ai": 0.3,
+    }
+
+
+@pytest.fixture
+def sample_cohort_config():
+    """Sample cohort configuration"""
+    return {
+        "grid_range_pct": 5.0,
+        "min_confidence": 0.5,
+        "max_position_pct": 0.25,
+        "risk_budget": 0.02,
+    }
