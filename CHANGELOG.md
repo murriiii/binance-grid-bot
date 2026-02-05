@@ -1,3 +1,9 @@
+## v1.5.0 (2026-02-05)
+
+### Feat
+
+- add Phase 6 Multi-Coin Trading System
+
 ## v1.4.0 (2026-02-05)
 
 ### Feat
