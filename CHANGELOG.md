@@ -1,3 +1,10 @@
+## v1.2.0 (2026-02-05)
+
+### Feat
+
+- add comprehensive logging system and weekly analysis export
+- add Trading Playbook learning system
+
 ## v1.1.1 (2026-02-05)
 
 ### Fix
