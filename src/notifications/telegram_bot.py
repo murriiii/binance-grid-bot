@@ -9,12 +9,12 @@ Setup:
 4. Schreibe deinem Bot eine Nachricht
 5. Hole deine Chat-ID (siehe get_chat_id())
 """
-import os
-import requests
+
 import io
+import os
 from datetime import datetime
-from typing import Optional, List, Dict
-from pathlib import Path
+
+import requests
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -32,8 +32,8 @@ class TelegramBot:
     """
 
     def __init__(self, token: str = None, chat_id: str = None):
-        self.token = token or os.getenv('TELEGRAM_BOT_TOKEN')
-        self.chat_id = chat_id or os.getenv('TELEGRAM_CHAT_ID')
+        self.token = token or os.getenv("TELEGRAM_BOT_TOKEN")
+        self.chat_id = chat_id or os.getenv("TELEGRAM_CHAT_ID")
         self.base_url = f"https://api.telegram.org/bot{self.token}"
 
         if not self.token:
@@ -42,10 +42,7 @@ class TelegramBot:
             print("⚠️  TELEGRAM_CHAT_ID nicht gesetzt!")
 
     def send_message(
-        self,
-        text: str,
-        parse_mode: str = "Markdown",
-        disable_notification: bool = False
+        self, text: str, parse_mode: str = "Markdown", disable_notification: bool = False
     ) -> bool:
         """
         Sendet eine Text-Nachricht.
@@ -63,23 +60,20 @@ class TelegramBot:
             response = requests.post(
                 f"{self.base_url}/sendMessage",
                 json={
-                    'chat_id': self.chat_id,
-                    'text': text,
-                    'parse_mode': parse_mode,
-                    'disable_notification': disable_notification
+                    "chat_id": self.chat_id,
+                    "text": text,
+                    "parse_mode": parse_mode,
+                    "disable_notification": disable_notification,
                 },
-                timeout=10
+                timeout=10,
             )
-            return response.json().get('ok', False)
+            return response.json().get("ok", False)
         except Exception as e:
             print(f"Telegram Fehler: {e}")
             return False
 
     def send_photo(
-        self,
-        photo_path: str = None,
-        photo_bytes: bytes = None,
-        caption: str = None
+        self, photo_path: str = None, photo_bytes: bytes = None, caption: str = None
     ) -> bool:
         """
         Sendet ein Bild/Chart.
@@ -95,28 +89,22 @@ class TelegramBot:
 
         try:
             if photo_path:
-                with open(photo_path, 'rb') as f:
-                    files = {'photo': f}
-                    data = {'chat_id': self.chat_id, 'caption': caption}
+                with open(photo_path, "rb") as f:
+                    files = {"photo": f}
+                    data = {"chat_id": self.chat_id, "caption": caption}
                     response = requests.post(
-                        f"{self.base_url}/sendPhoto",
-                        data=data,
-                        files=files,
-                        timeout=30
+                        f"{self.base_url}/sendPhoto", data=data, files=files, timeout=30
                     )
             elif photo_bytes:
-                files = {'photo': ('chart.png', io.BytesIO(photo_bytes), 'image/png')}
-                data = {'chat_id': self.chat_id, 'caption': caption}
+                files = {"photo": ("chart.png", io.BytesIO(photo_bytes), "image/png")}
+                data = {"chat_id": self.chat_id, "caption": caption}
                 response = requests.post(
-                    f"{self.base_url}/sendPhoto",
-                    data=data,
-                    files=files,
-                    timeout=30
+                    f"{self.base_url}/sendPhoto", data=data, files=files, timeout=30
                 )
             else:
                 return False
 
-            return response.json().get('ok', False)
+            return response.json().get("ok", False)
         except Exception as e:
             print(f"Telegram Photo Fehler: {e}")
             return False
@@ -128,16 +116,13 @@ class TelegramBot:
             return False
 
         try:
-            with open(file_path, 'rb') as f:
-                files = {'document': f}
-                data = {'chat_id': self.chat_id, 'caption': caption}
+            with open(file_path, "rb") as f:
+                files = {"document": f}
+                data = {"chat_id": self.chat_id, "caption": caption}
                 response = requests.post(
-                    f"{self.base_url}/sendDocument",
-                    data=data,
-                    files=files,
-                    timeout=30
+                    f"{self.base_url}/sendDocument", data=data, files=files, timeout=30
                 )
-            return response.json().get('ok', False)
+            return response.json().get("ok", False)
         except Exception as e:
             print(f"Telegram Document Fehler: {e}")
             return False
@@ -157,9 +142,9 @@ class TelegramBot:
         response = requests.get(f"{self.base_url}/getUpdates", timeout=10)
         data = response.json()
 
-        if data.get('result'):
-            for update in data['result']:
-                chat = update.get('message', {}).get('chat', {})
+        if data.get("result"):
+            for update in data["result"]:
+                chat = update.get("message", {}).get("chat", {})
                 print(f"Chat ID: {chat.get('id')}")
                 print(f"Username: {chat.get('username')}")
                 print(f"First Name: {chat.get('first_name')}")
@@ -183,7 +168,7 @@ class TradingNotifier:
         price: float,
         quantity: float,
         reasoning: str,
-        portfolio_value: float
+        portfolio_value: float,
     ):
         """Sendet Trade-Alert mit Begründung"""
         emoji = "🟢" if action == "BUY" else "🔴"
@@ -201,7 +186,7 @@ class TradingNotifier:
 💡 *Begründung:*
 _{reasoning}_
 
-⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+⏰ {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
 """
         self.bot.send_message(message)
 
@@ -210,22 +195,24 @@ _{reasoning}_
         portfolio_value: float,
         daily_pnl: float,
         daily_pnl_pct: float,
-        positions: Dict[str, float],
+        positions: dict[str, float],
         top_performer: str,
         worst_performer: str,
-        sentiment: str
+        sentiment: str,
     ):
         """Tägliche Portfolio-Zusammenfassung"""
         pnl_emoji = "📈" if daily_pnl >= 0 else "📉"
         pnl_sign = "+" if daily_pnl >= 0 else ""
 
-        positions_str = "\n".join([
-            f"├ {symbol}: `{value:.2f}%`"
-            for symbol, value in sorted(positions.items(), key=lambda x: -x[1])[:5]
-        ])
+        positions_str = "\n".join(
+            [
+                f"├ {symbol}: `{value:.2f}%`"
+                for symbol, value in sorted(positions.items(), key=lambda x: -x[1])[:5]
+            ]
+        )
 
         message = f"""
-{pnl_emoji} *TAGES-REPORT* {datetime.now().strftime('%Y-%m-%d')}
+{pnl_emoji} *TAGES-REPORT* {datetime.now().strftime("%Y-%m-%d")}
 
 💰 *Portfolio:* `${portfolio_value:,.2f}`
 {pnl_emoji} *Heute:* `{pnl_sign}${daily_pnl:,.2f}` ({pnl_sign}{daily_pnl_pct:.2f}%)
@@ -240,12 +227,7 @@ _{reasoning}_
 """
         self.bot.send_message(message)
 
-    def send_sentiment_alert(
-        self,
-        fear_greed: int,
-        signal: str,
-        reasoning: str
-    ):
+    def send_sentiment_alert(self, fear_greed: int, signal: str, reasoning: str):
         """Sentiment-Warnung bei extremen Werten"""
         if fear_greed < 25:
             emoji = "😱"
@@ -272,7 +254,7 @@ Signal: *{signal}*
 
 💡 _{reasoning}_
 
-⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+⏰ {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
 """
         self.bot.send_message(message)
 
@@ -284,7 +266,7 @@ Signal: *{signal}*
 Type: `{error_type}`
 Details: `{details}`
 
-⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+⏰ {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
 """
         self.bot.send_message(message)
 
@@ -296,7 +278,7 @@ Details: `{details}`
         sharpe: float,
         max_drawdown: float,
         total_trades: int,
-        win_rate: float
+        win_rate: float,
     ):
         """Backtest-Ergebnis"""
         emoji = "✅" if total_return > 0 else "❌"
@@ -307,15 +289,15 @@ Details: `{details}`
 💰 *Performance:*
 ├ Start: `${initial:,.2f}`
 ├ Ende: `${final:,.2f}`
-├ Return: `{total_return*100:+.2f}%`
+├ Return: `{total_return * 100:+.2f}%`
 ├ Sharpe: `{sharpe:.2f}`
-└ Max DD: `{max_drawdown*100:.2f}%`
+└ Max DD: `{max_drawdown * 100:.2f}%`
 
 📊 *Trades:*
 ├ Anzahl: `{total_trades}`
-└ Win-Rate: `{win_rate*100:.1f}%`
+└ Win-Rate: `{win_rate * 100:.1f}%`
 
-⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+⏰ {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
 """
         self.bot.send_message(message)
 

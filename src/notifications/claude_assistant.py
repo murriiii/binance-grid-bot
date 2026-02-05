@@ -7,9 +7,10 @@ Benötigt: ANTHROPIC_API_KEY in .env
 Kosten: ~$3 pro 1M Input Tokens, ~$15 pro 1M Output Tokens (Sonnet)
 Bei normaler Nutzung: ~$0.01-0.05 pro Frage
 """
+
 import os
+
 import requests
-from typing import Optional
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -44,16 +45,11 @@ Antworte präzise und technisch. Nutze Formeln wenn sinnvoll.
 Antworte auf Deutsch."""
 
     def __init__(self):
-        self.api_key = os.getenv('ANTHROPIC_API_KEY')
+        self.api_key = os.getenv("ANTHROPIC_API_KEY")
         if not self.api_key:
             print("⚠️  ANTHROPIC_API_KEY nicht gesetzt - Claude deaktiviert")
 
-    def ask(
-        self,
-        question: str,
-        context: Optional[str] = None,
-        max_tokens: int = 1024
-    ) -> str:
+    def ask(self, question: str, context: str | None = None, max_tokens: int = 1024) -> str:
         """
         Stelle eine Frage an Claude.
 
@@ -79,40 +75,38 @@ Antworte auf Deutsch."""
                 headers={
                     "x-api-key": self.api_key,
                     "content-type": "application/json",
-                    "anthropic-version": "2023-06-01"
+                    "anthropic-version": "2023-06-01",
                 },
                 json={
                     "model": self.MODEL,
                     "max_tokens": max_tokens,
                     "system": self.SYSTEM_PROMPT,
-                    "messages": [
-                        {"role": "user", "content": user_message}
-                    ]
+                    "messages": [{"role": "user", "content": user_message}],
                 },
-                timeout=30
+                timeout=30,
             )
 
             if response.status_code == 200:
-                return response.json()['content'][0]['text']
+                return response.json()["content"][0]["text"]
             else:
                 return f"❌ API Fehler: {response.status_code} - {response.text}"
 
         except Exception as e:
-            return f"❌ Fehler: {str(e)}"
+            return f"❌ Fehler: {e!s}"
 
     def explain_trade(self, trade_info: dict) -> str:
         """Erklärt einen Trade im Detail"""
         context = f"""
 Trade Info:
-- Aktion: {trade_info.get('action')}
-- Symbol: {trade_info.get('symbol')}
-- Preis: ${trade_info.get('price')}
-- Menge: {trade_info.get('quantity')}
-- Automatische Begründung: {trade_info.get('reasoning')}
+- Aktion: {trade_info.get("action")}
+- Symbol: {trade_info.get("symbol")}
+- Preis: ${trade_info.get("price")}
+- Menge: {trade_info.get("quantity")}
+- Automatische Begründung: {trade_info.get("reasoning")}
 """
         return self.ask(
             "Erkläre diesen Trade ausführlicher. Warum ist das mathematisch sinnvoll?",
-            context=context
+            context=context,
         )
 
     def analyze_portfolio(self, portfolio: dict, prices: dict) -> str:
@@ -124,7 +118,7 @@ Aktuelle Preise: {prices}
         return self.ask(
             "Analysiere dieses Portfolio. Ist die Diversifikation gut? "
             "Welche Risiken siehst du? Was würdest du ändern?",
-            context=context
+            context=context,
         )
 
 
@@ -143,25 +137,25 @@ class TelegramClaudeHandler:
         self.claude = claude
         self.last_trade = None  # Speichert letzten Trade für /explain
 
-    def handle_message(self, text: str) -> Optional[str]:
+    def handle_message(self, text: str) -> str | None:
         """
         Verarbeitet eingehende Telegram-Nachrichten.
 
         Returns:
             Antwort oder None wenn nicht relevant
         """
-        if text.startswith('/ask '):
+        if text.startswith("/ask "):
             question = text[5:].strip()
             if question:
                 return self.claude.ask(question)
             return "Usage: /ask <deine Frage>"
 
-        elif text.startswith('/explain'):
+        elif text.startswith("/explain"):
             if self.last_trade:
                 return self.claude.explain_trade(self.last_trade)
             return "Kein Trade zum Erklären. Warte auf den nächsten Trade."
 
-        elif text.startswith('/help'):
+        elif text.startswith("/help"):
             return """🤖 *Claude Assistant Befehle*
 
 /ask <frage> - Stelle eine Frage zu Trading/Portfolio
@@ -186,7 +180,7 @@ class CostTracker:
     """Trackt API-Kosten"""
 
     # Sonnet Preise (Stand 2024)
-    INPUT_COST_PER_1M = 3.00   # $3 pro 1M Input Tokens
+    INPUT_COST_PER_1M = 3.00  # $3 pro 1M Input Tokens
     OUTPUT_COST_PER_1M = 15.00  # $15 pro 1M Output Tokens
 
     def __init__(self):

@@ -6,11 +6,11 @@ Ergänzt die Markowitz-Optimierung mit Timing-Signalen:
 - Markowitz sagt WAS kaufen (beste Sharpe Ratio)
 - Technische Analyse sagt WANN kaufen (überkauft/überverkauft)
 """
-import numpy as np
-import pandas as pd
-from typing import Dict, List, Tuple, Optional
+
 from dataclasses import dataclass
 from enum import Enum
+
+import pandas as pd
 
 
 class Signal(Enum):
@@ -24,6 +24,7 @@ class Signal(Enum):
 @dataclass
 class TechnicalSignals:
     """Zusammenfassung aller technischen Signale"""
+
     symbol: str
     price: float
 
@@ -81,12 +82,8 @@ class TechnicalAnalyzer:
         return rsi
 
     def calculate_macd(
-        self,
-        prices: pd.Series,
-        fast: int = 12,
-        slow: int = 26,
-        signal: int = 9
-    ) -> Tuple[pd.Series, pd.Series, pd.Series]:
+        self, prices: pd.Series, fast: int = 12, slow: int = 26, signal: int = 9
+    ) -> tuple[pd.Series, pd.Series, pd.Series]:
         """
         Moving Average Convergence Divergence
 
@@ -104,11 +101,8 @@ class TechnicalAnalyzer:
         return macd_line, signal_line, histogram
 
     def calculate_bollinger_bands(
-        self,
-        prices: pd.Series,
-        period: int = 20,
-        std_dev: float = 2.0
-    ) -> Tuple[pd.Series, pd.Series, pd.Series]:
+        self, prices: pd.Series, period: int = 20, std_dev: float = 2.0
+    ) -> tuple[pd.Series, pd.Series, pd.Series]:
         """
         Bollinger Bands
 
@@ -124,7 +118,9 @@ class TechnicalAnalyzer:
 
         return upper, sma, lower
 
-    def calculate_atr(self, high: pd.Series, low: pd.Series, close: pd.Series, period: int = 14) -> pd.Series:
+    def calculate_atr(
+        self, high: pd.Series, low: pd.Series, close: pd.Series, period: int = 14
+    ) -> pd.Series:
         """
         Average True Range (Volatilitätsindikator)
 
@@ -159,9 +155,9 @@ class TechnicalAnalyzer:
         Returns:
             TechnicalSignals mit allen Indikatoren und Signalen
         """
-        close = df['close']
-        high = df.get('high', close)
-        low = df.get('low', close)
+        close = df["close"]
+        high = df.get("high", close)
+        low = df.get("low", close)
 
         # Berechne Indikatoren
         rsi = self.calculate_rsi(close)
@@ -273,10 +269,10 @@ class TechnicalAnalyzer:
             volatility=volatility,
             overall_signal=overall,
             confidence=confidence,
-            reasoning=reasoning
+            reasoning=reasoning,
         )
 
-    def get_entry_timing(self, signals: TechnicalSignals) -> Tuple[bool, str]:
+    def get_entry_timing(self, signals: TechnicalSignals) -> tuple[bool, str]:
         """
         Soll jetzt gekauft werden?
 
@@ -304,7 +300,7 @@ class TechnicalAnalyzer:
 
         return True, "Keine negativen Signale - Entry möglich"
 
-    def get_exit_timing(self, signals: TechnicalSignals, entry_price: float) -> Tuple[bool, str]:
+    def get_exit_timing(self, signals: TechnicalSignals, entry_price: float) -> tuple[bool, str]:
         """
         Soll jetzt verkauft werden?
 
@@ -337,7 +333,7 @@ def generate_ta_report(signals: TechnicalSignals) -> str:
         Signal.BUY: "🟢",
         Signal.NEUTRAL: "⚪",
         Signal.SELL: "🔴",
-        Signal.STRONG_SELL: "🔴🔴"
+        Signal.STRONG_SELL: "🔴🔴",
     }
 
     return f"""
@@ -357,7 +353,7 @@ def generate_ta_report(signals: TechnicalSignals) -> str:
 ├ Momentum: {signal_emoji[signals.momentum]} {signals.momentum.value}
 └ Overall: {signal_emoji[signals.overall_signal]} *{signals.overall_signal.value}*
 
-*Confidence:* {signals.confidence*100:.0f}%
+*Confidence:* {signals.confidence * 100:.0f}%
 
 _{signals.reasoning}_
 """

@@ -14,22 +14,24 @@ Das ist KEIN echtes ML-Training, sondern:
 - In-Context Learning
 - Pattern Recognition durch Beispiele
 """
+
+import json
 import logging
 import os
-from datetime import datetime, timedelta
-from typing import List, Dict, Optional, Tuple
-from dataclasses import dataclass, asdict
-import json
+from dataclasses import dataclass
+from datetime import datetime
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
-logger = logging.getLogger('trading_bot')
+logger = logging.getLogger("trading_bot")
 
 # PostgreSQL
 try:
     import psycopg2
     from psycopg2.extras import RealDictCursor
+
     POSTGRES_AVAILABLE = True
 except ImportError:
     POSTGRES_AVAILABLE = False
@@ -39,6 +41,7 @@ except ImportError:
 @dataclass
 class TradeRecord:
     """Ein Trade mit vollständigem Kontext"""
+
     # Trade Details
     timestamp: datetime
     action: str  # BUY, SELL, HOLD
@@ -55,26 +58,27 @@ class TradeRecord:
 
     # Entscheidungs-Kontext
     math_signal: str  # Was sagte Markowitz?
-    ai_signal: str    # Was sagte DeepSeek?
-    reasoning: str    # Vollständige Begründung
+    ai_signal: str  # Was sagte DeepSeek?
+    reasoning: str  # Vollständige Begründung
 
     # Ergebnis (wird später aktualisiert)
-    outcome_24h: Optional[float] = None  # PnL nach 24h
-    outcome_7d: Optional[float] = None   # PnL nach 7 Tagen
-    was_good_decision: Optional[bool] = None
+    outcome_24h: float | None = None  # PnL nach 24h
+    outcome_7d: float | None = None  # PnL nach 7 Tagen
+    was_good_decision: bool | None = None
 
 
 @dataclass
 class MarketSnapshot:
     """Markt-Zustand zu einem Zeitpunkt"""
+
     timestamp: datetime
     fear_greed: int
     btc_price: float
     total_market_cap: float
     btc_dominance: float
-    top_gainers: List[str]
-    top_losers: List[str]
-    trending_coins: List[str]
+    top_gainers: list[str]
+    top_losers: list[str]
+    trending_coins: list[str]
     notable_news: str
 
 
@@ -101,11 +105,11 @@ class TradingMemory:
 
         try:
             self.conn = psycopg2.connect(
-                host=os.getenv('POSTGRES_HOST', 'localhost'),
-                port=os.getenv('POSTGRES_PORT', 5432),
-                database=os.getenv('POSTGRES_DB', 'trading_bot'),
-                user=os.getenv('POSTGRES_USER', 'trading'),
-                password=os.getenv('POSTGRES_PASSWORD', '')
+                host=os.getenv("POSTGRES_HOST", "localhost"),
+                port=os.getenv("POSTGRES_PORT", 5432),
+                database=os.getenv("POSTGRES_DB", "trading_bot"),
+                user=os.getenv("POSTGRES_USER", "trading"),
+                password=os.getenv("POSTGRES_PASSWORD", ""),
             )
             logger.info("PostgreSQL verbunden")
             self._create_tables()
@@ -196,7 +200,8 @@ class TradingMemory:
             return -1
 
         with self.conn.cursor() as cur:
-            cur.execute("""
+            cur.execute(
+                """
                 INSERT INTO trades (
                     timestamp, action, symbol, price, quantity, value_usd,
                     fear_greed, btc_price, symbol_24h_change, market_trend,
@@ -204,18 +209,30 @@ class TradingMemory:
                 ) VALUES (
                     %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
                 ) RETURNING id
-            """, (
-                trade.timestamp, trade.action, trade.symbol, trade.price,
-                trade.quantity, trade.value_usd, trade.fear_greed,
-                trade.btc_price, trade.symbol_24h_change, trade.market_trend,
-                trade.math_signal, trade.ai_signal, trade.reasoning
-            ))
+            """,
+                (
+                    trade.timestamp,
+                    trade.action,
+                    trade.symbol,
+                    trade.price,
+                    trade.quantity,
+                    trade.value_usd,
+                    trade.fear_greed,
+                    trade.btc_price,
+                    trade.symbol_24h_change,
+                    trade.market_trend,
+                    trade.math_signal,
+                    trade.ai_signal,
+                    trade.reasoning,
+                ),
+            )
             trade_id = cur.fetchone()[0]
             self.conn.commit()
             return trade_id
 
-    def update_trade_outcome(self, trade_id: int, outcome_24h: float = None,
-                             outcome_7d: float = None):
+    def update_trade_outcome(
+        self, trade_id: int, outcome_24h: float = None, outcome_7d: float = None
+    ):
         """Aktualisiert das Ergebnis eines Trades"""
         if not self.conn:
             return
@@ -227,22 +244,21 @@ class TradingMemory:
                 # Simpel: > 0 = gut, aber mit Toleranz für Fees
                 was_good = outcome_24h > -0.5  # 0.5% Toleranz für Fees
 
-            cur.execute("""
+            cur.execute(
+                """
                 UPDATE trades
                 SET outcome_24h = COALESCE(%s, outcome_24h),
                     outcome_7d = COALESCE(%s, outcome_7d),
                     was_good_decision = COALESCE(%s, was_good_decision)
                 WHERE id = %s
-            """, (outcome_24h, outcome_7d, was_good, trade_id))
+            """,
+                (outcome_24h, outcome_7d, was_good, trade_id),
+            )
             self.conn.commit()
 
     def find_similar_situations(
-        self,
-        fear_greed: int,
-        symbol: str = None,
-        market_trend: str = None,
-        limit: int = 10
-    ) -> List[Dict]:
+        self, fear_greed: int, symbol: str = None, market_trend: str = None, limit: int = 10
+    ) -> list[dict]:
         """
         Findet ähnliche historische Situationen.
 
@@ -283,7 +299,7 @@ class TradingMemory:
             cur.execute(query, params)
             return cur.fetchall()
 
-    def get_pattern_stats(self, conditions: Dict) -> Dict:
+    def get_pattern_stats(self, conditions: dict) -> dict:
         """
         Analysiert wie gut bestimmte Bedingungen funktioniert haben.
 
@@ -307,40 +323,37 @@ class TradingMemory:
             """
             params = []
 
-            if 'fear_greed_min' in conditions:
+            if "fear_greed_min" in conditions:
                 query += " AND fear_greed >= %s"
-                params.append(conditions['fear_greed_min'])
+                params.append(conditions["fear_greed_min"])
 
-            if 'fear_greed_max' in conditions:
+            if "fear_greed_max" in conditions:
                 query += " AND fear_greed <= %s"
-                params.append(conditions['fear_greed_max'])
+                params.append(conditions["fear_greed_max"])
 
-            if 'action' in conditions:
+            if "action" in conditions:
                 query += " AND action = %s"
-                params.append(conditions['action'])
+                params.append(conditions["action"])
 
-            if 'symbol' in conditions:
+            if "symbol" in conditions:
                 query += " AND symbol = %s"
-                params.append(conditions['symbol'])
+                params.append(conditions["symbol"])
 
             cur.execute(query, params)
             result = cur.fetchone()
 
-            if result and result['total_trades'] > 0:
+            if result and result["total_trades"] > 0:
                 return {
-                    'total_trades': result['total_trades'],
-                    'success_rate': result['good_trades'] / result['total_trades'] * 100,
-                    'avg_24h_return': float(result['avg_24h_return'] or 0),
-                    'avg_7d_return': float(result['avg_7d_return'] or 0),
-                    'volatility': float(result['volatility'] or 0)
+                    "total_trades": result["total_trades"],
+                    "success_rate": result["good_trades"] / result["total_trades"] * 100,
+                    "avg_24h_return": float(result["avg_24h_return"] or 0),
+                    "avg_7d_return": float(result["avg_7d_return"] or 0),
+                    "volatility": float(result["volatility"] or 0),
                 }
             return {}
 
     def generate_context_for_ai(
-        self,
-        current_fear_greed: int,
-        symbol: str,
-        proposed_action: str
+        self, current_fear_greed: int, symbol: str, proposed_action: str
     ) -> str:
         """
         Generiert Kontext für DeepSeek basierend auf historischen Daten.
@@ -353,21 +366,13 @@ class TradingMemory:
         """
         # Finde ähnliche Situationen
         similar = self.find_similar_situations(
-            fear_greed=current_fear_greed,
-            symbol=symbol,
-            limit=10
+            fear_greed=current_fear_greed, symbol=symbol, limit=10
         )
 
         # Analysiere Pattern-Stats
-        buy_at_fear_stats = self.get_pattern_stats({
-            'fear_greed_max': 30,
-            'action': 'BUY'
-        })
+        buy_at_fear_stats = self.get_pattern_stats({"fear_greed_max": 30, "action": "BUY"})
 
-        buy_at_greed_stats = self.get_pattern_stats({
-            'fear_greed_min': 70,
-            'action': 'BUY'
-        })
+        buy_at_greed_stats = self.get_pattern_stats({"fear_greed_min": 70, "action": "BUY"})
 
         # Baue Kontext-String
         context = f"""
@@ -376,14 +381,16 @@ class TradingMemory:
 📊 ÄHNLICHE SITUATIONEN (Fear&Greed ±10 von {current_fear_greed}):
 """
         if similar:
-            good_count = sum(1 for s in similar if s.get('was_good_decision'))
+            good_count = sum(1 for s in similar if s.get("was_good_decision"))
             bad_count = len(similar) - good_count
 
             context += f"Gefunden: {len(similar)} ähnliche Trades\n"
-            context += f"Davon erfolgreich: {good_count} ({good_count/len(similar)*100:.0f}%)\n\n"
+            context += (
+                f"Davon erfolgreich: {good_count} ({good_count / len(similar) * 100:.0f}%)\n\n"
+            )
 
             for i, trade in enumerate(similar[:5], 1):
-                outcome = "✅" if trade.get('was_good_decision') else "❌"
+                outcome = "✅" if trade.get("was_good_decision") else "❌"
                 context += f"{i}. {outcome} {trade['action']} {trade['symbol']} "
                 context += f"bei F&G={trade['fear_greed']}: "
                 context += f"{trade['outcome_24h']:+.2f}% (24h)\n"
@@ -394,14 +401,14 @@ class TradingMemory:
 📈 PATTERN-ANALYSE:
 
 Käufe bei Fear (<30):
-  - Trades: {buy_at_fear_stats.get('total_trades', 0)}
-  - Erfolgsrate: {buy_at_fear_stats.get('success_rate', 0):.1f}%
-  - Avg Return: {buy_at_fear_stats.get('avg_24h_return', 0):+.2f}%
+  - Trades: {buy_at_fear_stats.get("total_trades", 0)}
+  - Erfolgsrate: {buy_at_fear_stats.get("success_rate", 0):.1f}%
+  - Avg Return: {buy_at_fear_stats.get("avg_24h_return", 0):+.2f}%
 
 Käufe bei Greed (>70):
-  - Trades: {buy_at_greed_stats.get('total_trades', 0)}
-  - Erfolgsrate: {buy_at_greed_stats.get('success_rate', 0):.1f}%
-  - Avg Return: {buy_at_greed_stats.get('avg_24h_return', 0):+.2f}%
+  - Trades: {buy_at_greed_stats.get("total_trades", 0)}
+  - Erfolgsrate: {buy_at_greed_stats.get("success_rate", 0):.1f}%
+  - Avg Return: {buy_at_greed_stats.get("avg_24h_return", 0):+.2f}%
 
 === AKTUELLE ENTSCHEIDUNG ===
 Vorgeschlagene Aktion: {proposed_action} {symbol}
@@ -433,8 +440,9 @@ Basierend auf meiner Historie, ist das eine gute Entscheidung?
             for pattern_name, conditions in patterns_to_check:
                 stats = self.get_pattern_stats(conditions)
 
-                if stats.get('total_trades', 0) >= 5:  # Mindestens 5 Samples
-                    cur.execute("""
+                if stats.get("total_trades", 0) >= 5:  # Mindestens 5 Samples
+                    cur.execute(
+                        """
                         INSERT INTO learned_patterns
                             (pattern_name, conditions, success_rate, sample_size, avg_return)
                         VALUES (%s, %s, %s, %s, %s)
@@ -444,13 +452,15 @@ Basierend auf meiner Historie, ist das eine gute Entscheidung?
                             sample_size = EXCLUDED.sample_size,
                             avg_return = EXCLUDED.avg_return,
                             last_updated = NOW()
-                    """, (
-                        pattern_name,
-                        json.dumps(conditions),
-                        stats['success_rate'],
-                        stats['total_trades'],
-                        stats['avg_24h_return']
-                    ))
+                    """,
+                        (
+                            pattern_name,
+                            json.dumps(conditions),
+                            stats["success_rate"],
+                            stats["total_trades"],
+                            stats["avg_24h_return"],
+                        ),
+                    )
 
             self.conn.commit()
 
@@ -490,15 +500,17 @@ Basierend auf meiner Historie, ist das eine gute Entscheidung?
 📊 *TRADING INSIGHTS*
 
 *Gesamt-Performance:*
-├ Trades: {stats['total_trades'] or 0}
-├ Erfolgsrate: {(stats['good_trades'] or 0) / max(stats['total_trades'] or 1, 1) * 100:.1f}%
-├ Avg Return: {stats['avg_return'] or 0:+.2f}%
-├ Bester Trade: {stats['best_trade'] or 0:+.2f}%
-└ Schlechtester: {stats['worst_trade'] or 0:+.2f}%
+├ Trades: {stats["total_trades"] or 0}
+├ Erfolgsrate: {(stats["good_trades"] or 0) / max(stats["total_trades"] or 1, 1) * 100:.1f}%
+├ Avg Return: {stats["avg_return"] or 0:+.2f}%
+├ Bester Trade: {stats["best_trade"] or 0:+.2f}%
+└ Schlechtester: {stats["worst_trade"] or 0:+.2f}%
 
 *Beste Strategien:*
 """
         for p in best_patterns:
-            report += f"• {p['pattern_name']}: {p['success_rate']:.1f}% ({p['sample_size']} Trades)\n"
+            report += (
+                f"• {p['pattern_name']}: {p['success_rate']:.1f}% ({p['sample_size']} Trades)\n"
+            )
 
         return report

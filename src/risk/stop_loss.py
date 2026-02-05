@@ -10,27 +10,27 @@ Typen:
 Wichtig: Stop-Loss schützt vor katastrophalen Verlusten,
 aber kann bei hoher Volatilität zu früh auslösen.
 """
-import logging
-from datetime import datetime
-from typing import Dict, List, Optional, Tuple
-from dataclasses import dataclass, field
-from enum import Enum
-import threading
-import time
 
-logger = logging.getLogger('trading_bot')
+import logging
+import threading
+from dataclasses import dataclass, field
+from datetime import datetime
+from enum import Enum
+
+logger = logging.getLogger("trading_bot")
 
 
 class StopType(Enum):
-    FIXED = "fixed"           # Fester Prozentsatz
-    TRAILING = "trailing"     # Folgt dem Preis
-    ATR = "atr"               # Volatilitätsbasiert
-    BREAK_EVEN = "break_even" # Auf Entry setzen nach X% Gewinn
+    FIXED = "fixed"  # Fester Prozentsatz
+    TRAILING = "trailing"  # Folgt dem Preis
+    ATR = "atr"  # Volatilitätsbasiert
+    BREAK_EVEN = "break_even"  # Auf Entry setzen nach X% Gewinn
 
 
 @dataclass
 class StopLossOrder:
     """Eine Stop-Loss Order"""
+
     id: str
     symbol: str
     entry_price: float
@@ -49,9 +49,9 @@ class StopLossOrder:
     created_at: datetime = field(default_factory=datetime.now)
 
     # Ergebnis
-    triggered_at: Optional[datetime] = None
-    triggered_price: Optional[float] = None
-    result_pnl_pct: Optional[float] = None
+    triggered_at: datetime | None = None
+    triggered_price: float | None = None
+    result_pnl_pct: float | None = None
 
     def __post_init__(self):
         if self.current_stop_price == 0:
@@ -82,21 +82,20 @@ class StopLossOrder:
             if current_price > self.highest_price:
                 self.highest_price = current_price
                 new_stop = current_price * (1 - self.trailing_distance / 100)
-                if new_stop > self.current_stop_price:
-                    self.current_stop_price = new_stop
+                self.current_stop_price = max(self.current_stop_price, new_stop)
 
         # ATR Stop: Dynamisch basierend auf Volatilität
         elif self.stop_type == StopType.ATR and current_atr:
             new_stop = current_price - (current_atr * self.atr_multiplier)
-            if new_stop > self.current_stop_price:
-                self.current_stop_price = new_stop
+            self.current_stop_price = max(self.current_stop_price, new_stop)
 
         # Break-Even: Nach X% Gewinn auf Entry setzen
         elif self.stop_type == StopType.BREAK_EVEN:
             pnl_pct = (current_price - self.entry_price) / self.entry_price * 100
             if pnl_pct >= self.stop_percentage:  # Z.B. nach 5% Gewinn
-                if self.current_stop_price < self.entry_price:
-                    self.current_stop_price = self.entry_price  # Break-Even
+                self.current_stop_price = max(
+                    self.current_stop_price, self.entry_price
+                )  # Break-Even
 
         # Check ob Stop getriggert
         if current_price <= self.current_stop_price:
@@ -112,15 +111,15 @@ class StopLossOrder:
         self.triggered_price = trigger_price
         self.result_pnl_pct = (trigger_price - self.entry_price) / self.entry_price * 100
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         return {
-            'id': self.id,
-            'symbol': self.symbol,
-            'entry_price': self.entry_price,
-            'current_stop': self.current_stop_price,
-            'stop_type': self.stop_type.value,
-            'is_active': self.is_active,
-            'distance_pct': (self.entry_price - self.current_stop_price) / self.entry_price * 100
+            "id": self.id,
+            "symbol": self.symbol,
+            "entry_price": self.entry_price,
+            "current_stop": self.current_stop_price,
+            "stop_type": self.stop_type.value,
+            "is_active": self.is_active,
+            "distance_pct": (self.entry_price - self.current_stop_price) / self.entry_price * 100,
         }
 
 
@@ -137,7 +136,7 @@ class StopLossManager:
     def __init__(self, db_connection=None, telegram_bot=None):
         self.db = db_connection
         self.telegram = telegram_bot
-        self.stops: Dict[str, StopLossOrder] = {}
+        self.stops: dict[str, StopLossOrder] = {}
         self.lock = threading.Lock()
 
         # Portfolio Protection
@@ -151,7 +150,7 @@ class StopLossManager:
         entry_price: float,
         quantity: float,
         stop_type: StopType = StopType.TRAILING,
-        stop_percentage: float = 5.0
+        stop_percentage: float = 5.0,
     ) -> StopLossOrder:
         """Erstellt einen neuen Stop-Loss"""
         import uuid
@@ -162,7 +161,7 @@ class StopLossManager:
             entry_price=entry_price,
             quantity=quantity,
             stop_type=stop_type,
-            stop_percentage=stop_percentage
+            stop_percentage=stop_percentage,
         )
 
         with self.lock:
@@ -173,7 +172,9 @@ class StopLossManager:
 
         return stop
 
-    def update_all(self, prices: Dict[str, float], atrs: Dict[str, float] = None) -> List[StopLossOrder]:
+    def update_all(
+        self, prices: dict[str, float], atrs: dict[str, float] = None
+    ) -> list[StopLossOrder]:
         """
         Aktualisiert alle Stops mit aktuellen Preisen.
 
@@ -219,7 +220,7 @@ Type: {stop.stop_type.value}
         # In DB aktualisieren
         self._update_db(stop)
 
-    def check_portfolio_drawdown(self, current_value: float) -> Tuple[bool, str]:
+    def check_portfolio_drawdown(self, current_value: float) -> tuple[bool, str]:
         """
         Prüft ob Portfolio-weiter Stop erreicht ist.
 
@@ -234,7 +235,10 @@ Type: {stop.stop_type.value}
 
         if drawdown <= -self.max_daily_drawdown_pct:
             self.portfolio_stopped = True
-            return True, f"Portfolio Drawdown {drawdown:.1f}% erreicht Maximum von {self.max_daily_drawdown_pct}%"
+            return (
+                True,
+                f"Portfolio Drawdown {drawdown:.1f}% erreicht Maximum von {self.max_daily_drawdown_pct}%",
+            )
 
         return False, ""
 
@@ -243,7 +247,7 @@ Type: {stop.stop_type.value}
         self.daily_start_value = start_value
         self.portfolio_stopped = False
 
-    def get_active_stops(self) -> List[Dict]:
+    def get_active_stops(self) -> list[dict]:
         """Gibt alle aktiven Stops zurück"""
         with self.lock:
             return [s.to_dict() for s in self.stops.values() if s.is_active]
@@ -263,15 +267,22 @@ Type: {stop.stop_type.value}
 
         try:
             with self.db.cursor() as cur:
-                cur.execute("""
+                cur.execute(
+                    """
                     INSERT INTO stop_loss_orders
                     (id, symbol, entry_price, stop_price, quantity, stop_type, is_active)
                     VALUES (%s, %s, %s, %s, %s, %s, %s)
-                """, (
-                    stop.id, stop.symbol, stop.entry_price,
-                    stop.current_stop_price, stop.quantity,
-                    stop.stop_type.value, stop.is_active
-                ))
+                """,
+                    (
+                        stop.id,
+                        stop.symbol,
+                        stop.entry_price,
+                        stop.current_stop_price,
+                        stop.quantity,
+                        stop.stop_type.value,
+                        stop.is_active,
+                    ),
+                )
                 self.db.commit()
         except Exception as e:
             logger.error(f"DB Error: {e}")
@@ -283,26 +294,29 @@ Type: {stop.stop_type.value}
 
         try:
             with self.db.cursor() as cur:
-                cur.execute("""
+                cur.execute(
+                    """
                     UPDATE stop_loss_orders
                     SET is_active = %s, triggered_at = %s,
                         triggered_price = %s, result_pnl = %s
                     WHERE id = %s
-                """, (
-                    stop.is_active, stop.triggered_at,
-                    stop.triggered_price, stop.result_pnl_pct, stop.id
-                ))
+                """,
+                    (
+                        stop.is_active,
+                        stop.triggered_at,
+                        stop.triggered_price,
+                        stop.result_pnl_pct,
+                        stop.id,
+                    ),
+                )
                 self.db.commit()
         except Exception as e:
             logger.error(f"DB Error: {e}")
 
 
 def get_recommended_stop(
-    symbol: str,
-    entry_price: float,
-    volatility: str,
-    risk_tolerance: str = "medium"
-) -> Tuple[StopType, float]:
+    symbol: str, entry_price: float, volatility: str, risk_tolerance: str = "medium"
+) -> tuple[StopType, float]:
     """
     Empfiehlt Stop-Loss Konfiguration basierend auf Volatilität und Risiko.
 
@@ -316,17 +330,13 @@ def get_recommended_stop(
         (stop_type, stop_percentage)
     """
     # Basis Stop-Prozent basierend auf Volatilität
-    base_stops = {
-        "LOW": 3.0,
-        "MEDIUM": 5.0,
-        "HIGH": 8.0
-    }
+    base_stops = {"LOW": 3.0, "MEDIUM": 5.0, "HIGH": 8.0}
 
     # Risiko-Multiplikator
     risk_mult = {
-        "low": 0.7,      # Engere Stops
+        "low": 0.7,  # Engere Stops
         "medium": 1.0,
-        "high": 1.3      # Weitere Stops
+        "high": 1.3,  # Weitere Stops
     }
 
     base = base_stops.get(volatility, 5.0)
@@ -337,7 +347,7 @@ def get_recommended_stop(
     if volatility == "LOW":
         stop_type = StopType.FIXED  # Bei niedriger Vola reicht fixed
     elif volatility == "HIGH":
-        stop_type = StopType.ATR    # Bei hoher Vola ATR-basiert
+        stop_type = StopType.ATR  # Bei hoher Vola ATR-basiert
     else:
         stop_type = StopType.TRAILING  # Standard: Trailing
 

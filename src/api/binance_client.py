@@ -1,16 +1,18 @@
 """Binance API Client Wrapper - mit Rate Limiting"""
+
+import logging
 import os
 import time
-import logging
 from collections import deque
 from threading import Lock
+
 from binance.client import Client
 from binance.exceptions import BinanceAPIException
 from dotenv import load_dotenv
 
 load_dotenv()
 
-logger = logging.getLogger('trading_bot')
+logger = logging.getLogger("trading_bot")
 
 
 class RateLimiter:
@@ -58,16 +60,18 @@ class BinanceClient:
 
     def __init__(self, testnet: bool = True):
         self.testnet = testnet
-        self.rate_limiter = RateLimiter(max_requests=1000, window_seconds=60)  # 1000 von 1200 zur Sicherheit
+        self.rate_limiter = RateLimiter(
+            max_requests=1000, window_seconds=60
+        )  # 1000 von 1200 zur Sicherheit
 
         if testnet:
-            self.api_key = os.getenv('BINANCE_TESTNET_API_KEY')
-            self.api_secret = os.getenv('BINANCE_TESTNET_API_SECRET')
+            self.api_key = os.getenv("BINANCE_TESTNET_API_KEY")
+            self.api_secret = os.getenv("BINANCE_TESTNET_API_SECRET")
             self.client = Client(self.api_key, self.api_secret, testnet=True)
             logger.info("Binance Client initialisiert (TESTNET)")
         else:
-            self.api_key = os.getenv('BINANCE_API_KEY')
-            self.api_secret = os.getenv('BINANCE_API_SECRET')
+            self.api_key = os.getenv("BINANCE_API_KEY")
+            self.api_secret = os.getenv("BINANCE_API_SECRET")
             self.client = Client(self.api_key, self.api_secret)
             logger.info("Binance Client initialisiert (LIVE)")
 
@@ -90,12 +94,16 @@ class BinanceClient:
                 # Rate Limit Error (429) - länger warten
                 if e.code == -1015:
                     wait_time = 60 * (attempt + 1)
-                    logger.warning(f"Rate limit hit, warte {wait_time}s (Versuch {attempt + 1}/{retries})")
+                    logger.warning(
+                        f"Rate limit hit, warte {wait_time}s (Versuch {attempt + 1}/{retries})"
+                    )
                     time.sleep(wait_time)
                 # Server Fehler (5xx) - kurz warten und retry
-                elif str(e.code).startswith('5'):
+                elif str(e.code).startswith("5"):
                     wait_time = 5 * (attempt + 1)
-                    logger.warning(f"Server error, warte {wait_time}s (Versuch {attempt + 1}/{retries})")
+                    logger.warning(
+                        f"Server error, warte {wait_time}s (Versuch {attempt + 1}/{retries})"
+                    )
                     time.sleep(wait_time)
                 else:
                     # Andere Fehler - nicht retry-fähig
@@ -103,13 +111,13 @@ class BinanceClient:
 
         raise last_error
 
-    def get_account_balance(self, asset: str = 'USDT') -> float:
+    def get_account_balance(self, asset: str = "USDT") -> float:
         """Gibt das verfügbare Guthaben für ein Asset zurück"""
         try:
             account = self._retry_call(self.client.get_account)
-            for balance in account['balances']:
-                if balance['asset'] == asset:
-                    return float(balance['free'])
+            for balance in account["balances"]:
+                if balance["asset"] == asset:
+                    return float(balance["free"])
             return 0.0
         except BinanceAPIException as e:
             logger.error(f"API Error (get_balance): {e}")
@@ -118,11 +126,8 @@ class BinanceClient:
     def get_current_price(self, symbol: str) -> float:
         """Aktueller Preis eines Trading-Pairs"""
         try:
-            ticker = self._rate_limited_call(
-                self.client.get_symbol_ticker,
-                symbol=symbol
-            )
-            return float(ticker['price'])
+            ticker = self._rate_limited_call(self.client.get_symbol_ticker, symbol=symbol)
+            return float(ticker["price"])
         except BinanceAPIException as e:
             logger.error(f"API Error (get_price): {e}")
             return 0.0
@@ -130,21 +135,20 @@ class BinanceClient:
     def get_symbol_info(self, symbol: str) -> dict:
         """Holt Informationen zu Mindestmengen etc."""
         try:
-            info = self._rate_limited_call(
-                self.client.get_symbol_info,
-                symbol
-            )
+            info = self._rate_limited_call(self.client.get_symbol_info, symbol)
             if not info:
                 logger.error(f"Symbol {symbol} nicht gefunden")
                 return None
 
-            filters = {f['filterType']: f for f in info['filters']}
+            filters = {f["filterType"]: f for f in info["filters"]}
 
             return {
-                'min_qty': float(filters['LOT_SIZE']['minQty']),
-                'max_qty': float(filters['LOT_SIZE']['maxQty']),
-                'step_size': float(filters['LOT_SIZE']['stepSize']),
-                'min_notional': float(filters.get('NOTIONAL', filters.get('MIN_NOTIONAL', {})).get('minNotional', 10)),
+                "min_qty": float(filters["LOT_SIZE"]["minQty"]),
+                "max_qty": float(filters["LOT_SIZE"]["maxQty"]),
+                "step_size": float(filters["LOT_SIZE"]["stepSize"]),
+                "min_notional": float(
+                    filters.get("NOTIONAL", filters.get("MIN_NOTIONAL", {})).get("minNotional", 10)
+                ),
             }
         except BinanceAPIException as e:
             logger.error(f"API Error (get_symbol_info): {e}")
@@ -154,67 +158,54 @@ class BinanceClient:
         """Market Buy mit Quote-Währung (z.B. USDT)"""
         try:
             order = self._retry_call(
-                self.client.order_market_buy,
-                symbol=symbol,
-                quoteOrderQty=quote_qty
+                self.client.order_market_buy, symbol=symbol, quoteOrderQty=quote_qty
             )
             logger.info(f"Market BUY: {symbol} für {quote_qty} USDT")
-            return {'success': True, 'order': order}
+            return {"success": True, "order": order}
         except BinanceAPIException as e:
             logger.error(f"Market BUY fehlgeschlagen: {e}")
-            return {'success': False, 'error': str(e)}
+            return {"success": False, "error": str(e)}
 
     def place_market_sell(self, symbol: str, quantity: float) -> dict:
         """Market Sell mit Menge"""
         try:
             order = self._retry_call(
-                self.client.order_market_sell,
-                symbol=symbol,
-                quantity=quantity
+                self.client.order_market_sell, symbol=symbol, quantity=quantity
             )
             logger.info(f"Market SELL: {quantity} {symbol}")
-            return {'success': True, 'order': order}
+            return {"success": True, "order": order}
         except BinanceAPIException as e:
             logger.error(f"Market SELL fehlgeschlagen: {e}")
-            return {'success': False, 'error': str(e)}
+            return {"success": False, "error": str(e)}
 
     def place_limit_buy(self, symbol: str, quantity: float, price: float) -> dict:
         """Limit Buy Order"""
         try:
             order = self._retry_call(
-                self.client.order_limit_buy,
-                symbol=symbol,
-                quantity=quantity,
-                price=str(price)
+                self.client.order_limit_buy, symbol=symbol, quantity=quantity, price=str(price)
             )
             logger.info(f"Limit BUY: {quantity} {symbol} @ {price}")
-            return {'success': True, 'order': order}
+            return {"success": True, "order": order}
         except BinanceAPIException as e:
             logger.error(f"Limit BUY fehlgeschlagen: {e}")
-            return {'success': False, 'error': str(e)}
+            return {"success": False, "error": str(e)}
 
     def place_limit_sell(self, symbol: str, quantity: float, price: float) -> dict:
         """Limit Sell Order"""
         try:
             order = self._retry_call(
-                self.client.order_limit_sell,
-                symbol=symbol,
-                quantity=quantity,
-                price=str(price)
+                self.client.order_limit_sell, symbol=symbol, quantity=quantity, price=str(price)
             )
             logger.info(f"Limit SELL: {quantity} {symbol} @ {price}")
-            return {'success': True, 'order': order}
+            return {"success": True, "order": order}
         except BinanceAPIException as e:
             logger.error(f"Limit SELL fehlgeschlagen: {e}")
-            return {'success': False, 'error': str(e)}
+            return {"success": False, "error": str(e)}
 
     def get_open_orders(self, symbol: str) -> list:
         """Alle offenen Orders für ein Symbol"""
         try:
-            return self._rate_limited_call(
-                self.client.get_open_orders,
-                symbol=symbol
-            )
+            return self._rate_limited_call(self.client.get_open_orders, symbol=symbol)
         except BinanceAPIException as e:
             logger.error(f"API Error (get_open_orders): {e}")
             return []
@@ -222,16 +213,12 @@ class BinanceClient:
     def cancel_order(self, symbol: str, order_id: int) -> dict:
         """Order stornieren"""
         try:
-            result = self._retry_call(
-                self.client.cancel_order,
-                symbol=symbol,
-                orderId=order_id
-            )
+            result = self._retry_call(self.client.cancel_order, symbol=symbol, orderId=order_id)
             logger.info(f"Order {order_id} storniert")
-            return {'success': True, 'result': result}
+            return {"success": True, "result": result}
         except BinanceAPIException as e:
             logger.error(f"Cancel Order fehlgeschlagen: {e}")
-            return {'success': False, 'error': str(e)}
+            return {"success": False, "error": str(e)}
 
     def get_order_status(self, symbol: str, order_id: int) -> dict:
         """
@@ -239,11 +226,7 @@ class BinanceClient:
         Returns dict mit 'status', 'executedQty', 'price' etc. oder None bei Fehler.
         """
         try:
-            order = self._rate_limited_call(
-                self.client.get_order,
-                symbol=symbol,
-                orderId=order_id
-            )
+            order = self._rate_limited_call(self.client.get_order, symbol=symbol, orderId=order_id)
             return order
         except BinanceAPIException as e:
             logger.warning(f"Order Status Error: {e}")
@@ -252,11 +235,7 @@ class BinanceClient:
     def get_all_orders(self, symbol: str, limit: int = 100) -> list:
         """Alle Orders für ein Symbol (inkl. gefüllte und cancelled)"""
         try:
-            return self._rate_limited_call(
-                self.client.get_all_orders,
-                symbol=symbol,
-                limit=limit
-            )
+            return self._rate_limited_call(self.client.get_all_orders, symbol=symbol, limit=limit)
         except BinanceAPIException as e:
             logger.error(f"Get All Orders Error: {e}")
             return []
@@ -264,17 +243,14 @@ class BinanceClient:
     def get_24h_ticker(self, symbol: str) -> dict:
         """24h Ticker Statistiken"""
         try:
-            ticker = self._rate_limited_call(
-                self.client.get_ticker,
-                symbol=symbol
-            )
+            ticker = self._rate_limited_call(self.client.get_ticker, symbol=symbol)
             return {
-                'price_change': float(ticker['priceChange']),
-                'price_change_percent': float(ticker['priceChangePercent']),
-                'high': float(ticker['highPrice']),
-                'low': float(ticker['lowPrice']),
-                'volume': float(ticker['volume']),
-                'quote_volume': float(ticker['quoteVolume'])
+                "price_change": float(ticker["priceChange"]),
+                "price_change_percent": float(ticker["priceChangePercent"]),
+                "high": float(ticker["highPrice"]),
+                "low": float(ticker["lowPrice"]),
+                "volume": float(ticker["volume"]),
+                "quote_volume": float(ticker["quoteVolume"]),
             }
         except BinanceAPIException as e:
             logger.error(f"API Error (get_24h_ticker): {e}")

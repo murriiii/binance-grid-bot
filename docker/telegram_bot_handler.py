@@ -10,40 +10,40 @@ Features:
 - /stops - Aktive Stop-Loss
 - Inline Buttons für Trade-Bestätigung
 """
+
+import logging
 import os
 import sys
-import asyncio
-import logging
 from datetime import datetime
 
 # Telegram Bot API
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
     Application,
-    CommandHandler,
     CallbackQueryHandler,
-    MessageHandler,
+    CommandHandler,
     ContextTypes,
-    filters
+    MessageHandler,
+    filters,
 )
 
 # Add parent to path
-sys.path.insert(0, '/app')
+sys.path.insert(0, "/app")
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
 # Logging
 logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
 # Config
-BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
-CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
-DEEPSEEK_API_KEY = os.getenv('DEEPSEEK_API_KEY')
+BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
 
 
 class TradingTelegramBot:
@@ -67,7 +67,7 @@ class TradingTelegramBot:
             "/stops - Aktive Stop-Loss\n"
             "/ta <symbol> - Technische Analyse\n"
             "/help - Alle Befehle\n",
-            parse_mode='Markdown'
+            parse_mode="Markdown",
         )
 
     async def cmd_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -101,7 +101,7 @@ class TradingTelegramBot:
 /alerts on|off - Benachrichtigungen
 /risk low|medium|high - Risiko-Level
 """
-        await update.message.reply_text(help_text, parse_mode='Markdown')
+        await update.message.reply_text(help_text, parse_mode="Markdown")
 
     async def cmd_status(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Portfolio Status"""
@@ -125,22 +125,22 @@ class TradingTelegramBot:
 └ Nächstes Rebalancing: `2d 4h`
 
 ⏰ {time}
-""".format(time=datetime.now().strftime('%Y-%m-%d %H:%M'))
+""".format(time=datetime.now().strftime("%Y-%m-%d %H:%M"))
 
         # Inline Buttons
         keyboard = [
             [
                 InlineKeyboardButton("📊 Details", callback_data="details"),
-                InlineKeyboardButton("🔄 Refresh", callback_data="refresh_status")
+                InlineKeyboardButton("🔄 Refresh", callback_data="refresh_status"),
             ],
             [
                 InlineKeyboardButton("📈 Performance", callback_data="performance"),
-                InlineKeyboardButton("⚙️ Einstellungen", callback_data="settings")
-            ]
+                InlineKeyboardButton("⚙️ Einstellungen", callback_data="settings"),
+            ],
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
 
-        await update.message.reply_text(status, parse_mode='Markdown', reply_markup=reply_markup)
+        await update.message.reply_text(status, parse_mode="Markdown", reply_markup=reply_markup)
 
     async def cmd_market(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Markt-Übersicht"""
@@ -169,12 +169,12 @@ class TradingTelegramBot:
         keyboard = [
             [
                 InlineKeyboardButton("🧠 AI Analyse", callback_data="ai_market"),
-                InlineKeyboardButton("🐋 Whale Details", callback_data="whale_details")
+                InlineKeyboardButton("🐋 Whale Details", callback_data="whale_details"),
             ]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
 
-        await update.message.reply_text(market, parse_mode='Markdown', reply_markup=reply_markup)
+        await update.message.reply_text(market, parse_mode="Markdown", reply_markup=reply_markup)
 
     async def cmd_ask(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """AI Frage"""
@@ -182,39 +182,45 @@ class TradingTelegramBot:
             await update.message.reply_text("Usage: /ask <deine Frage>")
             return
 
-        question = ' '.join(context.args)
+        question = " ".join(context.args)
 
         # Zeige "typing" während AI antwortet
-        await update.message.chat.send_action('typing')
+        await update.message.chat.send_action("typing")
 
         # DeepSeek API Call
         import requests
+
         try:
             response = requests.post(
-                'https://api.deepseek.com/v1/chat/completions',
+                "https://api.deepseek.com/v1/chat/completions",
                 headers={
-                    'Authorization': f'Bearer {DEEPSEEK_API_KEY}',
-                    'Content-Type': 'application/json'
+                    "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
+                    "Content-Type": "application/json",
                 },
                 json={
-                    'model': 'deepseek-chat',
-                    'messages': [
-                        {'role': 'system', 'content': 'Du bist ein Trading-Assistent. Antworte präzise auf Deutsch.'},
-                        {'role': 'user', 'content': question}
+                    "model": "deepseek-chat",
+                    "messages": [
+                        {
+                            "role": "system",
+                            "content": "Du bist ein Trading-Assistent. Antworte präzise auf Deutsch.",
+                        },
+                        {"role": "user", "content": question},
                     ],
-                    'max_tokens': 500
+                    "max_tokens": 500,
                 },
-                timeout=30
+                timeout=30,
             )
 
             if response.status_code == 200:
-                answer = response.json()['choices'][0]['message']['content']
-                await update.message.reply_text(f"🧠 *AI Antwort:*\n\n{answer}", parse_mode='Markdown')
+                answer = response.json()["choices"][0]["message"]["content"]
+                await update.message.reply_text(
+                    f"🧠 *AI Antwort:*\n\n{answer}", parse_mode="Markdown"
+                )
             else:
                 await update.message.reply_text("❌ API Fehler")
 
         except Exception as e:
-            await update.message.reply_text(f"❌ Fehler: {str(e)}")
+            await update.message.reply_text(f"❌ Fehler: {e!s}")
 
     async def cmd_stops(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Zeige aktive Stop-Loss Orders"""
@@ -240,12 +246,12 @@ class TradingTelegramBot:
         keyboard = [
             [
                 InlineKeyboardButton("➕ Neuer Stop", callback_data="new_stop"),
-                InlineKeyboardButton("✏️ Bearbeiten", callback_data="edit_stops")
+                InlineKeyboardButton("✏️ Bearbeiten", callback_data="edit_stops"),
             ]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
 
-        await update.message.reply_text(stops, parse_mode='Markdown', reply_markup=reply_markup)
+        await update.message.reply_text(stops, parse_mode="Markdown", reply_markup=reply_markup)
 
     async def cmd_ta(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Technische Analyse"""
@@ -281,12 +287,12 @@ _RSI neutral, MACD bullish crossover, Preis über SMAs_
         keyboard = [
             [
                 InlineKeyboardButton("📈 Chart", callback_data=f"chart_{symbol}"),
-                InlineKeyboardButton("🛒 Buy", callback_data=f"buy_{symbol}")
+                InlineKeyboardButton("🛒 Buy", callback_data=f"buy_{symbol}"),
             ]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
 
-        await update.message.reply_text(ta, parse_mode='Markdown', reply_markup=reply_markup)
+        await update.message.reply_text(ta, parse_mode="Markdown", reply_markup=reply_markup)
 
     # ═══════════════════════════════════════════════════════════════
     # CALLBACK HANDLERS (Button Clicks)
@@ -346,15 +352,13 @@ _Gutes Entry-Timing, RSI neutral, Trend bullish_
         keyboard = [
             [
                 InlineKeyboardButton("✅ Bestätigen", callback_data=f"confirm_buy_{symbol}"),
-                InlineKeyboardButton("❌ Abbrechen", callback_data="cancel_buy")
+                InlineKeyboardButton("❌ Abbrechen", callback_data="cancel_buy"),
             ],
-            [
-                InlineKeyboardButton("📊 Mehr Details", callback_data=f"details_{symbol}")
-            ]
+            [InlineKeyboardButton("📊 Mehr Details", callback_data=f"details_{symbol}")],
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
 
-        await query.edit_message_text(message, parse_mode='Markdown', reply_markup=reply_markup)
+        await query.edit_message_text(message, parse_mode="Markdown", reply_markup=reply_markup)
 
     async def show_settings(self, query):
         """Zeigt Einstellungen"""
@@ -379,15 +383,13 @@ _Gutes Entry-Timing, RSI neutral, Trend bullish_
         keyboard = [
             [
                 InlineKeyboardButton("🔔 Alerts", callback_data="settings_alerts"),
-                InlineKeyboardButton("⚠️ Risiko", callback_data="settings_risk")
+                InlineKeyboardButton("⚠️ Risiko", callback_data="settings_risk"),
             ],
-            [
-                InlineKeyboardButton("🔙 Zurück", callback_data="back_status")
-            ]
+            [InlineKeyboardButton("🔙 Zurück", callback_data="back_status")],
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
 
-        await query.edit_message_text(message, parse_mode='Markdown', reply_markup=reply_markup)
+        await query.edit_message_text(message, parse_mode="Markdown", reply_markup=reply_markup)
 
     # ═══════════════════════════════════════════════════════════════
     # MESSAGE HANDLER
@@ -398,7 +400,7 @@ _Gutes Entry-Timing, RSI neutral, Trend bullish_
         text = update.message.text
 
         # Wenn es eine Frage ist, an AI weiterleiten
-        if '?' in text:
+        if "?" in text:
             context.args = text.split()
             await self.cmd_ask(update, context)
         else:
@@ -439,5 +441,5 @@ def main():
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

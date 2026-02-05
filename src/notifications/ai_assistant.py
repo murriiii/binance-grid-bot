@@ -9,10 +9,11 @@ DeepSeek Preise (Stand 2024):
 
 Das macht professionelle AI-Features auch bei kleinem Portfolio sinnvoll.
 """
+
 import os
-import requests
-from typing import Optional, List, Dict
 from datetime import datetime
+
+import requests
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -52,8 +53,8 @@ Nutze mathematische Notation wenn sinnvoll (LaTeX-Style).
 Sei direkt - keine Floskeln."""
 
     def __init__(self):
-        self.api_key = os.getenv('DEEPSEEK_API_KEY')
-        self.conversation_history: List[Dict] = []
+        self.api_key = os.getenv("DEEPSEEK_API_KEY")
+        self.conversation_history: list[dict] = []
         self.total_tokens_used = 0
 
         if not self.api_key:
@@ -62,9 +63,9 @@ Sei direkt - keine Floskeln."""
     def ask(
         self,
         question: str,
-        context: Optional[str] = None,
+        context: str | None = None,
         max_tokens: int = 1024,
-        keep_history: bool = False
+        keep_history: bool = False,
     ) -> str:
         """
         Stelle eine Frage an DeepSeek.
@@ -98,24 +99,24 @@ Sei direkt - keine Floskeln."""
                 self.API_URL,
                 headers={
                     "Authorization": f"Bearer {self.api_key}",
-                    "Content-Type": "application/json"
+                    "Content-Type": "application/json",
                 },
                 json={
                     "model": self.MODEL,
                     "messages": messages,
                     "max_tokens": max_tokens,
-                    "temperature": 0.7
+                    "temperature": 0.7,
                 },
-                timeout=60
+                timeout=60,
             )
 
             if response.status_code == 200:
                 data = response.json()
-                answer = data['choices'][0]['message']['content']
+                answer = data["choices"][0]["message"]["content"]
 
                 # Token-Tracking
-                usage = data.get('usage', {})
-                self.total_tokens_used += usage.get('total_tokens', 0)
+                usage = data.get("usage", {})
+                self.total_tokens_used += usage.get("total_tokens", 0)
 
                 # History speichern
                 if keep_history:
@@ -127,37 +128,37 @@ Sei direkt - keine Floskeln."""
                 return f"❌ API Fehler: {response.status_code} - {response.text}"
 
         except Exception as e:
-            return f"❌ Fehler: {str(e)}"
+            return f"❌ Fehler: {e!s}"
 
     def clear_history(self):
         """Löscht Konversations-History"""
         self.conversation_history = []
 
-    def analyze_market(self, fear_greed: int, trending: List[str], prices: Dict) -> str:
+    def analyze_market(self, fear_greed: int, trending: list[str], prices: dict) -> str:
         """Tägliche Markt-Analyse"""
         context = f"""
 Aktuelle Marktdaten:
 - Fear & Greed Index: {fear_greed}
-- Trending Coins: {', '.join(trending)}
+- Trending Coins: {", ".join(trending)}
 - Preise (24h): {prices}
-Datum: {datetime.now().strftime('%Y-%m-%d')}
+Datum: {datetime.now().strftime("%Y-%m-%d")}
 """
         return self.ask(
             "Erstelle eine kurze Markt-Analyse. Was bedeutet der aktuelle Fear&Greed? "
             "Welche Chancen/Risiken siehst du? Max 150 Wörter.",
             context=context,
-            max_tokens=500
+            max_tokens=500,
         )
 
-    def enhance_trade_reasoning(self, trade: Dict, portfolio_context: str) -> str:
+    def enhance_trade_reasoning(self, trade: dict, portfolio_context: str) -> str:
         """Erweitert die automatische Trade-Begründung"""
         context = f"""
 Trade:
-- Aktion: {trade.get('action')}
-- Asset: {trade.get('symbol')}
-- Preis: ${trade.get('price')}
-- Wert: ${trade.get('value')}
-- Auto-Begründung: {trade.get('reasoning')}
+- Aktion: {trade.get("action")}
+- Asset: {trade.get("symbol")}
+- Preis: ${trade.get("price")}
+- Wert: ${trade.get("value")}
+- Auto-Begründung: {trade.get("reasoning")}
 
 Portfolio-Kontext:
 {portfolio_context}
@@ -166,7 +167,7 @@ Portfolio-Kontext:
             "Erkläre diesen Trade verständlich in 2-3 Sätzen. "
             "Warum ist das mathematisch/strategisch sinnvoll?",
             context=context,
-            max_tokens=300
+            max_tokens=300,
         )
 
     def explain_concept(self, concept: str) -> str:
@@ -175,7 +176,7 @@ Portfolio-Kontext:
             f"Erkläre das Konzept '{concept}' im Kontext von Krypto-Trading. "
             "Nutze mathematische Notation wo sinnvoll. "
             "Gib ein praktisches Beispiel.",
-            max_tokens=800
+            max_tokens=800,
         )
 
     def analyze_coin(self, symbol: str, price_history: str, social_data: str) -> str:
@@ -189,7 +190,7 @@ Social Daten: {social_data}
             f"Analysiere {symbol}. Stärken, Schwächen, aktuelles Momentum? "
             "Sollte der Bot die Position erhöhen/reduzieren?",
             context=context,
-            max_tokens=500
+            max_tokens=500,
         )
 
     def get_cost_estimate(self) -> str:
@@ -226,37 +227,37 @@ class TelegramAIHandler:
         self.ai = DeepSeekAssistant()
         self.last_trade = None
 
-    def handle_message(self, text: str, context: Dict = None) -> Optional[str]:
+    def handle_message(self, text: str, context: dict = None) -> str | None:
         """Verarbeitet Telegram-Nachrichten"""
 
         text = text.strip()
 
-        if text.startswith('/ask '):
+        if text.startswith("/ask "):
             question = text[5:].strip()
             return self.ai.ask(question, keep_history=True)
 
-        elif text.startswith('/market'):
-            fg = context.get('fear_greed', 50) if context else 50
-            trending = context.get('trending', []) if context else []
-            prices = context.get('prices', {}) if context else {}
+        elif text.startswith("/market"):
+            fg = context.get("fear_greed", 50) if context else 50
+            trending = context.get("trending", []) if context else []
+            prices = context.get("prices", {}) if context else {}
             return self.ai.analyze_market(fg, trending, prices)
 
-        elif text.startswith('/explain '):
+        elif text.startswith("/explain "):
             concept = text[9:].strip()
             return self.ai.explain_concept(concept)
 
-        elif text.startswith('/coin '):
+        elif text.startswith("/coin "):
             symbol = text[6:].strip().upper()
             return self.ai.analyze_coin(symbol, "N/A", "N/A")
 
-        elif text.startswith('/cost'):
+        elif text.startswith("/cost"):
             return self.ai.get_cost_estimate()
 
-        elif text.startswith('/clear'):
+        elif text.startswith("/clear"):
             self.ai.clear_history()
             return "✅ Konversations-History gelöscht."
 
-        elif text.startswith('/aihelp'):
+        elif text.startswith("/aihelp"):
             return """🤖 *AI Assistant Befehle*
 
 /ask <frage> - Stelle eine beliebige Frage
@@ -275,24 +276,24 @@ class TelegramAIHandler:
 
         return None
 
-    def enhance_and_send_trade(self, trade: Dict, portfolio_context: str):
+    def enhance_and_send_trade(self, trade: dict, portfolio_context: str):
         """Erweitert Trade-Begründung mit AI und sendet via Telegram"""
         # Erweiterte Begründung holen
         enhanced = self.ai.enhance_trade_reasoning(trade, portfolio_context)
 
-        emoji = "🟢" if trade['action'] == "BUY" else "🔴"
+        emoji = "🟢" if trade["action"] == "BUY" else "🔴"
 
         message = f"""
 {emoji} *TRADE EXECUTED*
 
-*{trade['action']}* {trade['symbol']}
-├ Preis: `${trade['price']:,.2f}`
-├ Menge: `{trade['quantity']:.6f}`
-└ Wert: `${trade['value']:,.2f}`
+*{trade["action"]}* {trade["symbol"]}
+├ Preis: `${trade["price"]:,.2f}`
+├ Menge: `{trade["quantity"]:.6f}`
+└ Wert: `${trade["value"]:,.2f}`
 
 💡 *Begründung:*
 _{enhanced}_
 
-⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+⏰ {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
 """
         self.telegram.send_message(message)

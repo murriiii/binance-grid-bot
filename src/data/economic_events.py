@@ -10,28 +10,29 @@ Wichtige Events:
 - Bitcoin ETF Flows
 - Große Token Unlocks
 """
-import logging
-from datetime import datetime, timedelta
-from typing import List, Dict, Optional
-from dataclasses import dataclass
 
-from src.api.http_client import get_http_client, HTTPClientError
+import logging
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+
+from src.api.http_client import HTTPClientError, get_http_client
 from src.core.config import get_config
 
-logger = logging.getLogger('trading_bot')
+logger = logging.getLogger("trading_bot")
 
 
 @dataclass
 class EconomicEvent:
     """Ein wirtschaftliches Ereignis"""
+
     date: datetime
     name: str
     country: str
     impact: str  # HIGH, MEDIUM, LOW
     category: str  # FOMC, CPI, NFP, CRYPTO, GEOPOLITICAL
-    previous: Optional[str] = None
-    forecast: Optional[str] = None
-    actual: Optional[str] = None
+    previous: str | None = None
+    forecast: str | None = None
+    actual: str | None = None
 
     def is_upcoming(self, hours: int = 24) -> bool:
         """Ist das Event in den nächsten X Stunden?"""
@@ -40,7 +41,7 @@ class EconomicEvent:
     def crypto_impact_analysis(self) -> str:
         """Wie beeinflusst das Event Krypto?"""
         analyses = {
-            'FOMC': """
+            "FOMC": """
                 Fed Zinsentscheidung:
                 - Zinserhöhung → BEARISH (Liquidität sinkt, Dollar stärker)
                 - Zinssenkung → BULLISH (Mehr Liquidität, Risk-On)
@@ -49,19 +50,19 @@ class EconomicEvent:
 
                 Typische Reaktion: BTC ±3-8% am Tag der Entscheidung
             """,
-            'CPI': """
+            "CPI": """
                 Inflationsdaten (CPI):
                 - Höher als erwartet → BEARISH (Fed bleibt hawkish)
                 - Niedriger als erwartet → BULLISH (Fed könnte lockern)
 
                 Typische Reaktion: BTC ±2-5% bei Überraschungen
             """,
-            'NFP': """
+            "NFP": """
                 Arbeitsmarktdaten:
                 - Starker Arbeitsmarkt → Gemischt (gut für Wirtschaft, aber Fed bleibt streng)
                 - Schwacher Arbeitsmarkt → Kurzfristig bearish, dann bullish (Fed lockert)
             """,
-            'CRYPTO': """
+            "CRYPTO": """
                 Krypto-spezifisch:
                 - ETF Zuflüsse → BULLISH
                 - ETF Abflüsse → BEARISH
@@ -85,33 +86,33 @@ class EconomicCalendar:
 
     # Wichtige Events die wir tracken
     HIGH_IMPACT_EVENTS = [
-        'FOMC',
-        'Fed Interest Rate Decision',
-        'CPI',
-        'Core CPI',
-        'Non-Farm Payrolls',
-        'NFP',
-        'ECB Interest Rate',
-        'GDP',
-        'PCE',
-        'Unemployment Rate',
+        "FOMC",
+        "Fed Interest Rate Decision",
+        "CPI",
+        "Core CPI",
+        "Non-Farm Payrolls",
+        "NFP",
+        "ECB Interest Rate",
+        "GDP",
+        "PCE",
+        "Unemployment Rate",
     ]
 
     CRYPTO_EVENTS = [
-        'Bitcoin ETF',
-        'Ethereum ETF',
-        'SEC',
-        'Token Unlock',
-        'Halving',
+        "Bitcoin ETF",
+        "Ethereum ETF",
+        "SEC",
+        "Token Unlock",
+        "Halving",
     ]
 
     def __init__(self):
         self.http = get_http_client()
         self.config = get_config()
-        self.cached_events: List[EconomicEvent] = []
+        self.cached_events: list[EconomicEvent] = []
         self.last_fetch: datetime = None
 
-    def fetch_upcoming_events(self, days: int = 7) -> List[EconomicEvent]:
+    def fetch_upcoming_events(self, days: int = 7) -> list[EconomicEvent]:
         """
         Holt anstehende wirtschaftliche Events.
         Kombiniert mehrere kostenlose Quellen.
@@ -132,7 +133,7 @@ class EconomicCalendar:
 
         return events
 
-    def _fetch_from_investing_com(self, days: int = 7) -> List[EconomicEvent]:
+    def _fetch_from_investing_com(self, days: int = 7) -> list[EconomicEvent]:
         """
         Holt Events von Investing.com.
         Kostenloser Endpoint, Rate-Limited.
@@ -146,36 +147,36 @@ class EconomicCalendar:
             data = self.http.get(
                 self.config.api.economic_calendar_url,
                 params={
-                    'from': datetime.now().strftime('%Y-%m-%dT00:00:00.000Z'),
-                    'to': end_date.strftime('%Y-%m-%dT23:59:59.000Z'),
-                    'countries': 'US,EU,GB,JP,CN',
-                    'importance': '2,3',  # Medium und High
+                    "from": datetime.now().strftime("%Y-%m-%dT00:00:00.000Z"),
+                    "to": end_date.strftime("%Y-%m-%dT23:59:59.000Z"),
+                    "countries": "US,EU,GB,JP,CN",
+                    "importance": "2,3",  # Medium und High
                 },
                 headers={
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
                 },
-                api_type='default'
+                api_type="default",
             )
 
-            for item in data.get('result', []):
+            for item in data.get("result", []):
                 try:
                     # Parse Event
-                    importance = item.get('importance', 0)
-                    impact = 'HIGH' if importance >= 3 else 'MEDIUM' if importance >= 2 else 'LOW'
+                    importance = item.get("importance", 0)
+                    impact = "HIGH" if importance >= 3 else "MEDIUM" if importance >= 2 else "LOW"
 
                     # Kategorisieren
-                    title = item.get('title', '').upper()
+                    title = item.get("title", "").upper()
                     category = self._categorize_event(title)
 
                     event = EconomicEvent(
-                        date=datetime.fromisoformat(item.get('date', '').replace('Z', '+00:00')),
-                        name=item.get('title', 'Unknown'),
-                        country=item.get('country', 'US'),
+                        date=datetime.fromisoformat(item.get("date", "").replace("Z", "+00:00")),
+                        name=item.get("title", "Unknown"),
+                        country=item.get("country", "US"),
                         impact=impact,
                         category=category,
-                        previous=str(item.get('previous', '')),
-                        forecast=str(item.get('forecast', '')),
-                        actual=str(item.get('actual', ''))
+                        previous=str(item.get("previous", "")),
+                        forecast=str(item.get("forecast", "")),
+                        actual=str(item.get("actual", "")),
                     )
                     events.append(event)
                 except Exception:
@@ -190,22 +191,22 @@ class EconomicCalendar:
         """Kategorisiert ein Event basierend auf dem Titel"""
         title_upper = title.upper()
 
-        if any(x in title_upper for x in ['FOMC', 'FED', 'FEDERAL RESERVE', 'INTEREST RATE']):
-            return 'FOMC'
-        elif any(x in title_upper for x in ['CPI', 'CONSUMER PRICE', 'INFLATION']):
-            return 'CPI'
-        elif any(x in title_upper for x in ['NFP', 'NON-FARM', 'NONFARM', 'PAYROLL', 'EMPLOYMENT']):
-            return 'NFP'
-        elif any(x in title_upper for x in ['GDP', 'GROSS DOMESTIC']):
-            return 'GDP'
-        elif any(x in title_upper for x in ['ECB', 'EUROPEAN CENTRAL']):
-            return 'ECB'
-        elif any(x in title_upper for x in ['ETF', 'SEC', 'BITCOIN', 'CRYPTO']):
-            return 'CRYPTO'
+        if any(x in title_upper for x in ["FOMC", "FED", "FEDERAL RESERVE", "INTEREST RATE"]):
+            return "FOMC"
+        elif any(x in title_upper for x in ["CPI", "CONSUMER PRICE", "INFLATION"]):
+            return "CPI"
+        elif any(x in title_upper for x in ["NFP", "NON-FARM", "NONFARM", "PAYROLL", "EMPLOYMENT"]):
+            return "NFP"
+        elif any(x in title_upper for x in ["GDP", "GROSS DOMESTIC"]):
+            return "GDP"
+        elif any(x in title_upper for x in ["ECB", "EUROPEAN CENTRAL"]):
+            return "ECB"
+        elif any(x in title_upper for x in ["ETF", "SEC", "BITCOIN", "CRYPTO"]):
+            return "CRYPTO"
         else:
-            return 'OTHER'
+            return "OTHER"
 
-    def _get_recurring_events(self, days: int = 7) -> List[EconomicEvent]:
+    def _get_recurring_events(self, days: int = 7) -> list[EconomicEvent]:
         """
         Gibt bekannte wiederkehrende Events zurück.
         FOMC Meetings sind im Voraus bekannt.
@@ -234,13 +235,15 @@ class EconomicCalendar:
 
         for fomc_date in fomc_dates:
             if now <= fomc_date <= end_date:
-                events.append(EconomicEvent(
-                    date=fomc_date,
-                    name='FOMC Meeting - Interest Rate Decision',
-                    country='US',
-                    impact='HIGH',
-                    category='FOMC'
-                ))
+                events.append(
+                    EconomicEvent(
+                        date=fomc_date,
+                        name="FOMC Meeting - Interest Rate Decision",
+                        country="US",
+                        impact="HIGH",
+                        category="FOMC",
+                    )
+                )
 
         # CPI Release (typischerweise ~10.-15. jeden Monats, 8:30 EST)
         # Vereinfacht: Prüfe ob wir nahe dem 12. des Monats sind
@@ -248,25 +251,26 @@ class EconomicCalendar:
             potential_cpi = datetime(
                 now.year if now.month + month_offset <= 12 else now.year + 1,
                 (now.month + month_offset - 1) % 12 + 1,
-                12, 13, 30  # 8:30 EST = 13:30 UTC
+                12,
+                13,
+                30,  # 8:30 EST = 13:30 UTC
             )
             if now <= potential_cpi <= end_date:
-                events.append(EconomicEvent(
-                    date=potential_cpi,
-                    name='CPI (Consumer Price Index)',
-                    country='US',
-                    impact='HIGH',
-                    category='CPI'
-                ))
+                events.append(
+                    EconomicEvent(
+                        date=potential_cpi,
+                        name="CPI (Consumer Price Index)",
+                        country="US",
+                        impact="HIGH",
+                        category="CPI",
+                    )
+                )
 
         return events
 
-    def get_upcoming_high_impact(self, hours: int = 48) -> List[EconomicEvent]:
+    def get_upcoming_high_impact(self, hours: int = 48) -> list[EconomicEvent]:
         """Gibt nur High-Impact Events der nächsten X Stunden zurück"""
-        return [
-            e for e in self.cached_events
-            if e.impact == 'HIGH' and e.is_upcoming(hours)
-        ]
+        return [e for e in self.cached_events if e.impact == "HIGH" and e.is_upcoming(hours)]
 
     def should_trade_today(self) -> tuple[bool, str]:
         """
@@ -285,11 +289,11 @@ class EconomicCalendar:
         event_names = [e.name for e in upcoming]
 
         # FOMC ist besonders wichtig
-        if any('FOMC' in e or 'Fed' in e for e in event_names):
+        if any("FOMC" in e or "Fed" in e for e in event_names):
             return False, f"⚠️ FOMC heute - erhöhte Volatilität erwartet. Events: {event_names}"
 
         # CPI auch wichtig
-        if any('CPI' in e for e in event_names):
+        if any("CPI" in e for e in event_names):
             return False, f"⚠️ CPI Release heute - warte auf Daten. Events: {event_names}"
 
         return True, f"High-Impact Events heute: {event_names} - mit Vorsicht handeln"
@@ -300,7 +304,7 @@ class CryptoSpecificEvents:
     Krypto-spezifische Events die den Markt beeinflussen.
     """
 
-    def get_token_unlocks(self) -> List[Dict]:
+    def get_token_unlocks(self) -> list[dict]:
         """
         Holt anstehende Token Unlocks.
 
@@ -311,7 +315,7 @@ class CryptoSpecificEvents:
         # TODO: Implementiere API-Call zu Token Unlocks Service
         return []
 
-    def get_etf_flows(self) -> Dict:
+    def get_etf_flows(self) -> dict:
         """
         Bitcoin/Ethereum ETF Zu-/Abflüsse.
 
@@ -319,13 +323,9 @@ class CryptoSpecificEvents:
         """
         # TODO: Implementiere Fetching von ETF Flow Daten
         # Quellen: BitMEX Research, The Block, etc.
-        return {
-            'btc_etf_flow_24h': 0,
-            'eth_etf_flow_24h': 0,
-            'trend': 'NEUTRAL'
-        }
+        return {"btc_etf_flow_24h": 0, "eth_etf_flow_24h": 0, "trend": "NEUTRAL"}
 
-    def get_upcoming_crypto_events(self) -> List[Dict]:
+    def get_upcoming_crypto_events(self) -> list[dict]:
         """
         Krypto-spezifische Events (Upgrades, Forks, etc.)
         """
@@ -342,7 +342,7 @@ class MacroAnalyzer:
         self.calendar = EconomicCalendar()
         self.crypto_events = CryptoSpecificEvents()
 
-    def get_macro_context(self) -> Dict:
+    def get_macro_context(self) -> dict:
         """
         Erstellt einen Makro-Kontext für die AI.
 
@@ -352,11 +352,11 @@ class MacroAnalyzer:
         etf_flows = self.crypto_events.get_etf_flows()
 
         return {
-            'should_trade': should_trade,
-            'reason': reason,
-            'etf_flows': etf_flows,
-            'upcoming_events': self.calendar.get_upcoming_high_impact(48),
-            'timestamp': datetime.now().isoformat()
+            "should_trade": should_trade,
+            "reason": reason,
+            "etf_flows": etf_flows,
+            "upcoming_events": self.calendar.get_upcoming_high_impact(48),
+            "timestamp": datetime.now().isoformat(),
         }
 
     def generate_macro_prompt(self) -> str:
@@ -368,20 +368,20 @@ class MacroAnalyzer:
         prompt = f"""
 === MAKROÖKONOMISCHER KONTEXT ===
 
-📅 Trading-Empfehlung heute: {"✅ JA" if context['should_trade'] else "⚠️ VORSICHT"}
-Grund: {context['reason']}
+📅 Trading-Empfehlung heute: {"✅ JA" if context["should_trade"] else "⚠️ VORSICHT"}
+Grund: {context["reason"]}
 
 📊 ETF Flows (24h):
-- Bitcoin ETF: {context['etf_flows'].get('btc_etf_flow_24h', 'N/A')} Mio USD
-- Ethereum ETF: {context['etf_flows'].get('eth_etf_flow_24h', 'N/A')} Mio USD
-- Trend: {context['etf_flows'].get('trend', 'N/A')}
+- Bitcoin ETF: {context["etf_flows"].get("btc_etf_flow_24h", "N/A")} Mio USD
+- Ethereum ETF: {context["etf_flows"].get("eth_etf_flow_24h", "N/A")} Mio USD
+- Trend: {context["etf_flows"].get("trend", "N/A")}
 
 📆 Anstehende High-Impact Events:
 """
-        for event in context['upcoming_events'][:5]:
+        for event in context["upcoming_events"][:5]:
             prompt += f"- {event.date.strftime('%Y-%m-%d %H:%M')}: {event.name} ({event.country})\n"
 
-        if not context['upcoming_events']:
+        if not context["upcoming_events"]:
             prompt += "- Keine High-Impact Events in den nächsten 48h\n"
 
         prompt += """

@@ -12,20 +12,21 @@ Kostenlose Quellen:
 - Blockchain Explorer APIs
 - CryptoQuant (limitiert)
 """
-import logging
-from datetime import datetime, timedelta
-from typing import List, Dict, Optional
-from dataclasses import dataclass
 
-from src.api.http_client import get_http_client, HTTPClientError
+import logging
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+
+from src.api.http_client import HTTPClientError, get_http_client
 from src.core.config import get_config
 
-logger = logging.getLogger('trading_bot')
+logger = logging.getLogger("trading_bot")
 
 
 @dataclass
 class WhaleTransaction:
     """Eine große Krypto-Transaktion"""
+
     timestamp: datetime
     symbol: str
     amount: float
@@ -33,18 +34,18 @@ class WhaleTransaction:
     tx_type: str  # transfer, exchange_deposit, exchange_withdrawal
     from_owner: str  # exchange name or "unknown wallet"
     to_owner: str
-    tx_hash: Optional[str] = None
+    tx_hash: str | None = None
 
     @property
     def is_exchange_deposit(self) -> bool:
         """Wurde an eine Exchange gesendet?"""
-        exchanges = ['binance', 'coinbase', 'kraken', 'okx', 'bybit', 'kucoin', 'bitfinex']
+        exchanges = ["binance", "coinbase", "kraken", "okx", "bybit", "kucoin", "bitfinex"]
         return any(ex in self.to_owner.lower() for ex in exchanges)
 
     @property
     def is_exchange_withdrawal(self) -> bool:
         """Wurde von einer Exchange abgezogen?"""
-        exchanges = ['binance', 'coinbase', 'kraken', 'okx', 'bybit', 'kucoin', 'bitfinex']
+        exchanges = ["binance", "coinbase", "kraken", "okx", "bybit", "kucoin", "bitfinex"]
         return any(ex in self.from_owner.lower() for ex in exchanges)
 
     @property
@@ -99,17 +100,17 @@ class WhaleAlertTracker:
         self.db = db_connection
         self.http = get_http_client()
         self.config = get_config()
-        self.recent_alerts: List[WhaleTransaction] = []
+        self.recent_alerts: list[WhaleTransaction] = []
 
     def get_threshold(self, symbol: str) -> float:
         thresholds = {
-            'BTC': self.config.whale.btc_threshold,
-            'ETH': self.config.whale.eth_threshold,
-            'DEFAULT': self.config.whale.default_threshold
+            "BTC": self.config.whale.btc_threshold,
+            "ETH": self.config.whale.eth_threshold,
+            "DEFAULT": self.config.whale.default_threshold,
         }
-        return thresholds.get(symbol, thresholds['DEFAULT'])
+        return thresholds.get(symbol, thresholds["DEFAULT"])
 
-    def fetch_recent_whales(self, hours: int = 24) -> List[WhaleTransaction]:
+    def fetch_recent_whales(self, hours: int = 24) -> list[WhaleTransaction]:
         """
         Holt Whale-Transaktionen der letzten X Stunden.
         Verwendet kostenlose APIs:
@@ -127,7 +128,7 @@ class WhaleAlertTracker:
 
         return whales
 
-    def _fetch_btc_whales(self, hours: int = 24) -> List[WhaleTransaction]:
+    def _fetch_btc_whales(self, hours: int = 24) -> list[WhaleTransaction]:
         """
         Holt große BTC-Transaktionen von Blockchain.com.
         Kostenlos, kein API-Key benötigt.
@@ -137,18 +138,13 @@ class WhaleAlertTracker:
 
         try:
             # Hole aktuelle unbestätigte Transaktionen
-            data = self.http.get(
-                self.config.api.blockchain_url,
-                api_type='blockchain'
-            )
+            data = self.http.get(self.config.api.blockchain_url, api_type="blockchain")
 
             btc_price = self._get_btc_price()
 
-            for tx in data.get('txs', [])[:50]:  # Maximal 50 prüfen
+            for tx in data.get("txs", [])[:50]:  # Maximal 50 prüfen
                 # Berechne Gesamtoutput
-                total_output_satoshi = sum(
-                    out.get('value', 0) for out in tx.get('out', [])
-                )
+                total_output_satoshi = sum(out.get("value", 0) for out in tx.get("out", []))
                 total_btc = total_output_satoshi / 1e8
 
                 if total_btc < threshold_btc:
@@ -158,22 +154,22 @@ class WhaleAlertTracker:
                 from_addr = "Unknown Wallet"
                 to_addr = "Unknown Wallet"
 
-                if tx.get('inputs') and tx['inputs'][0].get('prev_out'):
-                    prev_out = tx['inputs'][0]['prev_out']
-                    from_addr = self._identify_address(prev_out.get('addr', ''))
+                if tx.get("inputs") and tx["inputs"][0].get("prev_out"):
+                    prev_out = tx["inputs"][0]["prev_out"]
+                    from_addr = self._identify_address(prev_out.get("addr", ""))
 
-                if tx.get('out') and tx['out'][0].get('addr'):
-                    to_addr = self._identify_address(tx['out'][0]['addr'])
+                if tx.get("out") and tx["out"][0].get("addr"):
+                    to_addr = self._identify_address(tx["out"][0]["addr"])
 
                 whale = WhaleTransaction(
-                    timestamp=datetime.fromtimestamp(tx.get('time', datetime.now().timestamp())),
-                    symbol='BTC',
+                    timestamp=datetime.fromtimestamp(tx.get("time", datetime.now().timestamp())),
+                    symbol="BTC",
                     amount=total_btc,
                     amount_usd=total_btc * btc_price,
                     tx_type=self._determine_tx_type(from_addr, to_addr),
                     from_owner=from_addr,
                     to_owner=to_addr,
-                    tx_hash=tx.get('hash')
+                    tx_hash=tx.get("hash"),
                 )
 
                 whales.append(whale)
@@ -188,10 +184,10 @@ class WhaleAlertTracker:
         try:
             data = self.http.get(
                 f"{self.config.api.coingecko_url}/simple/price",
-                params={'ids': 'bitcoin', 'vs_currencies': 'usd'},
-                api_type='default'
+                params={"ids": "bitcoin", "vs_currencies": "usd"},
+                api_type="default",
             )
-            return data['bitcoin']['usd']
+            return data["bitcoin"]["usd"]
         except HTTPClientError as e:
             logger.warning(f"BTC Price API Error: {e}")
             return 100000  # Fallback
@@ -206,12 +202,12 @@ class WhaleAlertTracker:
 
         # Bekannte Exchange Cold Wallets (Beispiele)
         known_addresses = {
-            'bc1qm34lsc65zpw79lxes69zkqmk6ee3ewf0j77s3h': 'Binance',
-            '3M219KR5vEneNb47ewrPfWyb5jQ2DjxRP6': 'Binance',
-            'bc1qgdjqv0av3q56jvd82tkdjpy7gdp9ut8tlqmgrpmv24sq90ecnvqqjwvw97': 'Bitfinex',
-            '1Kr6QSydW9bFQG1mXiPNNu6WpJGmUa9i1g': 'Bitfinex',
-            'bc1q4c8n5t00jmj8temxdgcc3t32nkg2wjwz24lywv': 'Kraken',
-            '3FHNBLobJnbCTFTVakh5TXmEneyf5PT61B': 'Coinbase',
+            "bc1qm34lsc65zpw79lxes69zkqmk6ee3ewf0j77s3h": "Binance",
+            "3M219KR5vEneNb47ewrPfWyb5jQ2DjxRP6": "Binance",
+            "bc1qgdjqv0av3q56jvd82tkdjpy7gdp9ut8tlqmgrpmv24sq90ecnvqqjwvw97": "Bitfinex",
+            "1Kr6QSydW9bFQG1mXiPNNu6WpJGmUa9i1g": "Bitfinex",
+            "bc1q4c8n5t00jmj8temxdgcc3t32nkg2wjwz24lywv": "Kraken",
+            "3FHNBLobJnbCTFTVakh5TXmEneyf5PT61B": "Coinbase",
         }
 
         for known_addr, name in known_addresses.items():
@@ -223,7 +219,7 @@ class WhaleAlertTracker:
 
     def _determine_tx_type(self, from_owner: str, to_owner: str) -> str:
         """Bestimmt den Transaktionstyp"""
-        exchanges = ['binance', 'coinbase', 'kraken', 'okx', 'bybit', 'kucoin', 'bitfinex']
+        exchanges = ["binance", "coinbase", "kraken", "okx", "bybit", "kucoin", "bitfinex"]
 
         from_is_exchange = any(ex in from_owner.lower() for ex in exchanges)
         to_is_exchange = any(ex in to_owner.lower() for ex in exchanges)
@@ -235,11 +231,7 @@ class WhaleAlertTracker:
         else:
             return "transfer"
 
-    def analyze_whale_activity(
-        self,
-        symbol: str,
-        hours: int = 24
-    ) -> Dict:
+    def analyze_whale_activity(self, symbol: str, hours: int = 24) -> dict:
         """
         Analysiert Whale-Aktivität für ein Symbol.
 
@@ -253,18 +245,20 @@ class WhaleAlertTracker:
                 'reasoning': str
             }
         """
-        whales = [w for w in self.recent_alerts
-                  if w.symbol == symbol
-                  and w.timestamp > datetime.now() - timedelta(hours=hours)]
+        whales = [
+            w
+            for w in self.recent_alerts
+            if w.symbol == symbol and w.timestamp > datetime.now() - timedelta(hours=hours)
+        ]
 
         if not whales:
             return {
-                'net_flow': 0,
-                'total_deposits': 0,
-                'total_withdrawals': 0,
-                'signal': 'NEUTRAL',
-                'confidence': 0.0,
-                'reasoning': 'Keine signifikanten Whale-Bewegungen'
+                "net_flow": 0,
+                "total_deposits": 0,
+                "total_withdrawals": 0,
+                "signal": "NEUTRAL",
+                "confidence": 0.0,
+                "reasoning": "Keine signifikanten Whale-Bewegungen",
             }
 
         deposits = sum(w.amount_usd for w in whales if w.is_exchange_deposit)
@@ -273,29 +267,29 @@ class WhaleAlertTracker:
 
         # Bestimme Signal
         if net_flow > self.get_threshold(symbol) * 2:
-            signal = 'BULLISH'
+            signal = "BULLISH"
             confidence = min(0.8, net_flow / (self.get_threshold(symbol) * 5))
             reasoning = f"Starke Akkumulation: ${net_flow:,.0f} netto von Exchanges abgezogen"
         elif net_flow < -self.get_threshold(symbol) * 2:
-            signal = 'BEARISH'
+            signal = "BEARISH"
             confidence = min(0.8, abs(net_flow) / (self.get_threshold(symbol) * 5))
             reasoning = f"Verkaufsdruck: ${abs(net_flow):,.0f} netto auf Exchanges eingezahlt"
         else:
-            signal = 'NEUTRAL'
+            signal = "NEUTRAL"
             confidence = 0.3
             reasoning = "Keine eindeutige Richtung bei Whale-Flows"
 
         return {
-            'net_flow': net_flow,
-            'total_deposits': deposits,
-            'total_withdrawals': withdrawals,
-            'signal': signal,
-            'confidence': confidence,
-            'reasoning': reasoning,
-            'whale_count': len(whales)
+            "net_flow": net_flow,
+            "total_deposits": deposits,
+            "total_withdrawals": withdrawals,
+            "signal": signal,
+            "confidence": confidence,
+            "reasoning": reasoning,
+            "whale_count": len(whales),
         }
 
-    def get_trading_signal(self, symbols: List[str]) -> Dict:
+    def get_trading_signal(self, symbols: list[str]) -> dict:
         """
         Aggregiertes Signal für mehrere Symbole.
         """
@@ -304,20 +298,20 @@ class WhaleAlertTracker:
             signals[symbol] = self.analyze_whale_activity(symbol)
 
         # Gesamt-Signal
-        bullish_count = sum(1 for s in signals.values() if s['signal'] == 'BULLISH')
-        bearish_count = sum(1 for s in signals.values() if s['signal'] == 'BEARISH')
+        bullish_count = sum(1 for s in signals.values() if s["signal"] == "BULLISH")
+        bearish_count = sum(1 for s in signals.values() if s["signal"] == "BEARISH")
 
         if bullish_count > bearish_count + 1:
-            overall = 'BULLISH'
+            overall = "BULLISH"
         elif bearish_count > bullish_count + 1:
-            overall = 'BEARISH'
+            overall = "BEARISH"
         else:
-            overall = 'NEUTRAL'
+            overall = "NEUTRAL"
 
         return {
-            'overall_signal': overall,
-            'by_symbol': signals,
-            'summary': f"Bullish: {bullish_count}, Bearish: {bearish_count}, Neutral: {len(symbols) - bullish_count - bearish_count}"
+            "overall_signal": overall,
+            "by_symbol": signals,
+            "summary": f"Bullish: {bullish_count}, Bearish: {bearish_count}, Neutral: {len(symbols) - bullish_count - bearish_count}",
         }
 
     def save_to_db(self, whale: WhaleTransaction) -> bool:
@@ -327,16 +321,25 @@ class WhaleAlertTracker:
 
         try:
             with self.db.cursor() as cur:
-                cur.execute("""
+                cur.execute(
+                    """
                     INSERT INTO whale_alerts
                     (timestamp, symbol, amount, amount_usd, transaction_type,
                      from_owner, to_owner, is_significant, potential_impact)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-                """, (
-                    whale.timestamp, whale.symbol, whale.amount,
-                    whale.amount_usd, whale.tx_type, whale.from_owner,
-                    whale.to_owner, True, whale.potential_impact
-                ))
+                """,
+                    (
+                        whale.timestamp,
+                        whale.symbol,
+                        whale.amount,
+                        whale.amount_usd,
+                        whale.tx_type,
+                        whale.from_owner,
+                        whale.to_owner,
+                        True,
+                        whale.potential_impact,
+                    ),
+                )
                 self.db.commit()
                 return True
         except Exception as e:
@@ -351,4 +354,5 @@ class WhaleAlertWebSocket:
 
     TODO: Implementieren wenn kostenpflichtiger API-Zugang vorhanden
     """
+
     pass

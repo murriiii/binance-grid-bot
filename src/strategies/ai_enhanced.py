@@ -13,25 +13,27 @@ Was AI NICHT macht:
 - High-Frequency Trading (zu langsam)
 - Order Flow analysieren (braucht andere Daten)
 """
+
 import logging
 import os
-import requests
-from typing import Dict, List, Optional, Tuple
-from datetime import datetime
 from dataclasses import dataclass
+from datetime import datetime
 
-logger = logging.getLogger('trading_bot')
+import requests
+
+logger = logging.getLogger("trading_bot")
 
 
 @dataclass
 class AISignal:
     """AI-generiertes Trading-Signal"""
-    direction: str       # "BULLISH", "BEARISH", "NEUTRAL"
-    confidence: float    # 0.0 - 1.0
-    reasoning: str       # Ausführliche Begründung
-    action: str          # "BUY", "SELL", "HOLD", "REDUCE"
-    affected_assets: List[str]
-    risk_level: str      # "LOW", "MEDIUM", "HIGH"
+
+    direction: str  # "BULLISH", "BEARISH", "NEUTRAL"
+    confidence: float  # 0.0 - 1.0
+    reasoning: str  # Ausführliche Begründung
+    action: str  # "BUY", "SELL", "HOLD", "REDUCE"
+    affected_assets: list[str]
+    risk_level: str  # "LOW", "MEDIUM", "HIGH"
 
 
 class AITradingEnhancer:
@@ -76,8 +78,8 @@ Antworte IMMER in diesem JSON-Format:
     RETRY_DELAYS = [2, 5, 10]  # Sekunden zwischen Retries
 
     def __init__(self):
-        self.api_key = os.getenv('DEEPSEEK_API_KEY')
-        self.last_error_time: Optional[datetime] = None
+        self.api_key = os.getenv("DEEPSEEK_API_KEY")
+        self.last_error_time: datetime | None = None
         self.consecutive_errors = 0
 
     def _get_fallback_response(self, reason: str) -> str:
@@ -105,38 +107,44 @@ Antworte IMMER in diesem JSON-Format:
                     self.API_URL,
                     headers={
                         "Authorization": f"Bearer {self.api_key}",
-                        "Content-Type": "application/json"
+                        "Content-Type": "application/json",
                     },
                     json={
                         "model": "deepseek-chat",
                         "messages": [
                             {"role": "system", "content": self.ANALYSIS_PROMPT},
-                            {"role": "user", "content": user_prompt}
+                            {"role": "user", "content": user_prompt},
                         ],
                         "max_tokens": 500,
-                        "temperature": 0.3  # Niedrig für konsistentere Outputs
+                        "temperature": 0.3,  # Niedrig für konsistentere Outputs
                     },
-                    timeout=self.TIMEOUT_SECONDS
+                    timeout=self.TIMEOUT_SECONDS,
                 )
 
                 # Erfolgreiche Antwort
                 if response.status_code == 200:
                     self.consecutive_errors = 0
-                    return response.json()['choices'][0]['message']['content']
+                    return response.json()["choices"][0]["message"]["content"]
 
                 # Rate Limit (429) - längere Pause
                 if response.status_code == 429:
                     wait_time = self.RETRY_DELAYS[attempt] * 3
-                    logger.warning(f"DeepSeek Rate Limit, warte {wait_time}s (Versuch {attempt + 1}/{self.MAX_RETRIES})")
+                    logger.warning(
+                        f"DeepSeek Rate Limit, warte {wait_time}s (Versuch {attempt + 1}/{self.MAX_RETRIES})"
+                    )
                     import time
+
                     time.sleep(wait_time)
                     continue
 
                 # Server Fehler (5xx) - kurze Pause und Retry
                 if 500 <= response.status_code < 600:
                     wait_time = self.RETRY_DELAYS[attempt]
-                    logger.warning(f"DeepSeek Server Error {response.status_code}, warte {wait_time}s")
+                    logger.warning(
+                        f"DeepSeek Server Error {response.status_code}, warte {wait_time}s"
+                    )
                     import time
+
                     time.sleep(wait_time)
                     continue
 
@@ -149,13 +157,17 @@ Antworte IMMER in diesem JSON-Format:
                 logger.warning(f"DeepSeek Timeout (Versuch {attempt + 1}/{self.MAX_RETRIES})")
                 if attempt < self.MAX_RETRIES - 1:
                     import time
+
                     time.sleep(self.RETRY_DELAYS[attempt])
 
             except requests.ConnectionError:
                 last_error = "Connection Error"
-                logger.warning(f"DeepSeek Connection Error (Versuch {attempt + 1}/{self.MAX_RETRIES})")
+                logger.warning(
+                    f"DeepSeek Connection Error (Versuch {attempt + 1}/{self.MAX_RETRIES})"
+                )
                 if attempt < self.MAX_RETRIES - 1:
                     import time
+
                     time.sleep(self.RETRY_DELAYS[attempt])
 
             except Exception as e:
@@ -167,7 +179,9 @@ Antworte IMMER in diesem JSON-Format:
         self.consecutive_errors += 1
         self.last_error_time = datetime.now()
 
-        return self._get_fallback_response(f"API nicht erreichbar nach {self.MAX_RETRIES} Versuchen: {last_error}")
+        return self._get_fallback_response(
+            f"API nicht erreichbar nach {self.MAX_RETRIES} Versuchen: {last_error}"
+        )
 
     def is_api_healthy(self) -> bool:
         """Prüft ob die API kürzlich funktioniert hat"""
@@ -180,17 +194,19 @@ Antworte IMMER in diesem JSON-Format:
                 return False
         return True
 
-    def analyze_news(self, news_items: List[Dict]) -> AISignal:
+    def analyze_news(self, news_items: list[dict]) -> AISignal:
         """
         Analysiert Krypto-News und leitet Signale ab.
 
         Input: Liste von News mit 'title', 'summary', 'source', 'timestamp'
         Output: Trading-Signal
         """
-        news_text = "\n".join([
-            f"- [{n.get('source', 'Unknown')}] {n.get('title', '')}: {n.get('summary', '')}"
-            for n in news_items[:10]  # Max 10 News
-        ])
+        news_text = "\n".join(
+            [
+                f"- [{n.get('source', 'Unknown')}] {n.get('title', '')}: {n.get('summary', '')}"
+                for n in news_items[:10]  # Max 10 News
+            ]
+        )
 
         prompt = f"""Analysiere diese Krypto-News und gib ein Trading-Signal:
 
@@ -209,9 +225,9 @@ Beachte:
     def analyze_sentiment_context(
         self,
         fear_greed: int,
-        social_volume: Dict[str, float],
-        trending_coins: List[str],
-        portfolio_positions: Dict[str, float]
+        social_volume: dict[str, float],
+        trending_coins: list[str],
+        portfolio_positions: dict[str, float],
     ) -> AISignal:
         """
         Interpretiert Sentiment-Daten im Kontext des Portfolios.
@@ -226,7 +242,7 @@ Beachte:
 SENTIMENT DATEN:
 - Fear & Greed Index: {fear_greed}/100
 - Social Volume (24h change): {social_volume}
-- Trending Coins: {', '.join(trending_coins)}
+- Trending Coins: {", ".join(trending_coins)}
 
 MEIN PORTFOLIO:
 {portfolio_positions}
@@ -242,11 +258,7 @@ Beachte die Contrarian-Regel: Extreme Fear kann Kaufgelegenheit sein.
         return self._parse_signal(result)
 
     def explain_anomaly(
-        self,
-        asset: str,
-        price_change_24h: float,
-        volume_change_24h: float,
-        recent_news: str = ""
+        self, asset: str, price_change_24h: float, volume_change_24h: float, recent_news: str = ""
     ) -> str:
         """
         Erklärt ungewöhnliche Preisbewegungen.
@@ -260,7 +272,7 @@ Beachte die Contrarian-Regel: Extreme Fear kann Kaufgelegenheit sein.
 Asset: {asset}
 Preis-Änderung (24h): {price_change_24h:+.1f}%
 Volumen-Änderung (24h): {volume_change_24h:+.1f}%
-News: {recent_news if recent_news else 'Keine bekannten News'}
+News: {recent_news if recent_news else "Keine bekannten News"}
 
 Erkläre mögliche Gründe für diese Bewegung.
 Ist das fundamental gerechtfertigt oder übertrieben?
@@ -270,11 +282,11 @@ Sollte man kaufen, verkaufen oder abwarten?
 
     def multi_factor_decision(
         self,
-        math_signal: Dict,      # Von Markowitz/Sharpe
-        sentiment_signal: Dict,  # Von Fear & Greed
-        news_signal: Optional[Dict],  # Von News-Analyse
-        portfolio_state: Dict
-    ) -> Tuple[str, float, str]:
+        math_signal: dict,  # Von Markowitz/Sharpe
+        sentiment_signal: dict,  # Von Fear & Greed
+        news_signal: dict | None,  # Von News-Analyse
+        portfolio_state: dict,
+    ) -> tuple[str, float, str]:
         """
         Kombiniert mehrere Signale zu einer finalen Entscheidung.
 
@@ -294,7 +306,7 @@ SENTIMENT SIGNAL (Fear & Greed, Social):
 {sentiment_signal}
 
 NEWS SIGNAL:
-{news_signal if news_signal else 'Keine relevanten News'}
+{news_signal if news_signal else "Keine relevanten News"}
 
 AKTUELLES PORTFOLIO:
 {portfolio_state}
@@ -316,29 +328,29 @@ Aufgabe:
 
         try:
             # Extrahiere JSON aus Response (falls Text drumherum)
-            start = json_str.find('{')
-            end = json_str.rfind('}') + 1
+            start = json_str.find("{")
+            end = json_str.rfind("}") + 1
             if start >= 0 and end > start:
                 data = json.loads(json_str[start:end])
             else:
                 raise ValueError("No JSON found")
 
             return AISignal(
-                direction=data.get('direction', 'NEUTRAL'),
-                confidence=float(data.get('confidence', 0.0)),
-                reasoning=data.get('reasoning', 'Keine Begründung'),
-                action=data.get('action', 'HOLD'),
-                affected_assets=data.get('affected_assets', []),
-                risk_level=data.get('risk_level', 'MEDIUM')
+                direction=data.get("direction", "NEUTRAL"),
+                confidence=float(data.get("confidence", 0.0)),
+                reasoning=data.get("reasoning", "Keine Begründung"),
+                action=data.get("action", "HOLD"),
+                affected_assets=data.get("affected_assets", []),
+                risk_level=data.get("risk_level", "MEDIUM"),
             )
         except Exception as e:
             return AISignal(
                 direction="NEUTRAL",
                 confidence=0.0,
-                reasoning=f"Parse-Fehler: {str(e)}",
+                reasoning=f"Parse-Fehler: {e!s}",
                 action="HOLD",
                 affected_assets=[],
-                risk_level="HIGH"
+                risk_level="HIGH",
             )
 
 
@@ -386,56 +398,55 @@ class HybridStrategy:
         self.ai = AITradingEnhancer() if use_ai else None
 
     def make_decision(
-        self,
-        math_recommendation: Dict,
-        market_data: Dict,
-        news: List[Dict] = None
-    ) -> Dict:
+        self, math_recommendation: dict, market_data: dict, news: list[dict] = None
+    ) -> dict:
         """
         Finale Entscheidung mit optionalem AI-Enhancement.
         """
         result = {
-            'base_decision': math_recommendation,
-            'ai_enhanced': False,
-            'final_action': math_recommendation.get('action', 'HOLD'),
-            'confidence': math_recommendation.get('confidence', 0.5),
-            'reasoning': math_recommendation.get('reasoning', '')
+            "base_decision": math_recommendation,
+            "ai_enhanced": False,
+            "final_action": math_recommendation.get("action", "HOLD"),
+            "confidence": math_recommendation.get("confidence", 0.5),
+            "reasoning": math_recommendation.get("reasoning", ""),
         }
 
         if not self.use_ai or not self.ai:
             return result
 
         # AI-Enhancement
-        result['ai_enhanced'] = True
+        result["ai_enhanced"] = True
 
         # 1. News-Check (wenn News vorhanden)
         if news:
             news_signal = self.ai.analyze_news(news)
             if news_signal.risk_level == "HIGH" and news_signal.direction == "BEARISH":
                 # Red Flag: Reduziere oder blockiere
-                result['final_action'] = "REDUCE" if result['final_action'] == "BUY" else result['final_action']
-                result['confidence'] *= 0.5
-                result['reasoning'] += f"\n⚠️ AI-News-Warnung: {news_signal.reasoning}"
+                result["final_action"] = (
+                    "REDUCE" if result["final_action"] == "BUY" else result["final_action"]
+                )
+                result["confidence"] *= 0.5
+                result["reasoning"] += f"\n⚠️ AI-News-Warnung: {news_signal.reasoning}"
 
         # 2. Sentiment-Context
         sentiment_signal = self.ai.analyze_sentiment_context(
-            fear_greed=market_data.get('fear_greed', 50),
-            social_volume=market_data.get('social_volume', {}),
-            trending_coins=market_data.get('trending', []),
-            portfolio_positions=market_data.get('positions', {})
+            fear_greed=market_data.get("fear_greed", 50),
+            social_volume=market_data.get("social_volume", {}),
+            trending_coins=market_data.get("trending", []),
+            portfolio_positions=market_data.get("positions", {}),
         )
 
         # Contrarian-Logik
-        fg = market_data.get('fear_greed', 50)
-        if fg < 25 and result['final_action'] == "BUY":
+        fg = market_data.get("fear_greed", 50)
+        if fg < 25 and result["final_action"] == "BUY":
             # Extreme Fear + Buy = Gutes Timing
-            result['confidence'] *= 1.2
-            result['reasoning'] += "\n✅ AI: Extreme Fear ist historisch guter Einstieg"
-        elif fg > 75 and result['final_action'] == "BUY":
+            result["confidence"] *= 1.2
+            result["reasoning"] += "\n✅ AI: Extreme Fear ist historisch guter Einstieg"
+        elif fg > 75 and result["final_action"] == "BUY":
             # Extreme Greed + Buy = Schlechtes Timing
-            result['confidence'] *= 0.7
-            result['reasoning'] += "\n⚠️ AI: Extreme Greed, vorsichtig mit neuen Positionen"
+            result["confidence"] *= 0.7
+            result["reasoning"] += "\n⚠️ AI: Extreme Greed, vorsichtig mit neuen Positionen"
 
-        result['ai_reasoning'] = sentiment_signal.reasoning
+        result["ai_reasoning"] = sentiment_signal.reasoning
 
         return result

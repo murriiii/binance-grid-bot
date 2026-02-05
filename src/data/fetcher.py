@@ -2,12 +2,13 @@
 Historical Data Fetcher
 Holt historische Krypto-Daten von Binance (öffentliche API, kein Key nötig)
 """
-import requests
-import pandas as pd
+
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import List, Optional
-import time
+
+import pandas as pd
+import requests
 
 
 class BinanceDataFetcher:
@@ -21,16 +22,16 @@ class BinanceDataFetcher:
 
     # Beliebte Altcoins für unser Portfolio
     DEFAULT_ALTCOINS = [
-        "BTCUSDT",   # Bitcoin - Referenz
-        "ETHUSDT",   # Ethereum - Large Cap
-        "SOLUSDT",   # Solana - High Performance L1
+        "BTCUSDT",  # Bitcoin - Referenz
+        "ETHUSDT",  # Ethereum - Large Cap
+        "SOLUSDT",  # Solana - High Performance L1
         "AVAXUSDT",  # Avalanche - L1
         "LINKUSDT",  # Chainlink - Oracle
-        "DOTUSDT",   # Polkadot - Interoperability
-        "MATICUSDT", # Polygon - L2
-        "ARBUSDT",   # Arbitrum - L2
-        "OPUSDT",    # Optimism - L2
-        "INJUSDT",   # Injective - DeFi
+        "DOTUSDT",  # Polkadot - Interoperability
+        "MATICUSDT",  # Polygon - L2
+        "ARBUSDT",  # Arbitrum - L2
+        "OPUSDT",  # Optimism - L2
+        "INJUSDT",  # Injective - DeFi
     ]
 
     def __init__(self):
@@ -40,9 +41,9 @@ class BinanceDataFetcher:
         self,
         symbol: str,
         interval: str = "1d",
-        start_date: Optional[str] = None,
-        end_date: Optional[str] = None,
-        limit: int = 1000
+        start_date: str | None = None,
+        end_date: str | None = None,
+        limit: int = 1000,
     ) -> pd.DataFrame:
         """
         Holt Kline/Candlestick Daten.
@@ -57,11 +58,7 @@ class BinanceDataFetcher:
         Returns:
             DataFrame mit OHLCV Daten
         """
-        params = {
-            "symbol": symbol,
-            "interval": interval,
-            "limit": limit
-        }
+        params = {"symbol": symbol, "interval": interval, "limit": limit}
 
         if start_date:
             start_ts = int(datetime.strptime(start_date, "%Y-%m-%d").timestamp() * 1000)
@@ -76,29 +73,38 @@ class BinanceDataFetcher:
 
         data = response.json()
 
-        df = pd.DataFrame(data, columns=[
-            'open_time', 'open', 'high', 'low', 'close', 'volume',
-            'close_time', 'quote_volume', 'trades', 'taker_buy_base',
-            'taker_buy_quote', 'ignore'
-        ])
+        df = pd.DataFrame(
+            data,
+            columns=[
+                "open_time",
+                "open",
+                "high",
+                "low",
+                "close",
+                "volume",
+                "close_time",
+                "quote_volume",
+                "trades",
+                "taker_buy_base",
+                "taker_buy_quote",
+                "ignore",
+            ],
+        )
 
         # Konvertierungen
-        df['timestamp'] = pd.to_datetime(df['open_time'], unit='ms')
-        df['open'] = df['open'].astype(float)
-        df['high'] = df['high'].astype(float)
-        df['low'] = df['low'].astype(float)
-        df['close'] = df['close'].astype(float)
-        df['volume'] = df['volume'].astype(float)
+        df["timestamp"] = pd.to_datetime(df["open_time"], unit="ms")
+        df["open"] = df["open"].astype(float)
+        df["high"] = df["high"].astype(float)
+        df["low"] = df["low"].astype(float)
+        df["close"] = df["close"].astype(float)
+        df["volume"] = df["volume"].astype(float)
 
-        df.set_index('timestamp', inplace=True)
+        df.set_index("timestamp", inplace=True)
 
-        return df[['open', 'high', 'low', 'close', 'volume']]
+        return df[["open", "high", "low", "close", "volume"]]
 
     def fetch_multiple_symbols(
-        self,
-        symbols: List[str] = None,
-        interval: str = "1d",
-        days: int = 365
+        self, symbols: list[str] = None, interval: str = "1d", days: int = 365
     ) -> pd.DataFrame:
         """
         Holt Daten für mehrere Symbole und erstellt Price-Matrix.
@@ -117,12 +123,9 @@ class BinanceDataFetcher:
             print(f"Fetching {symbol}...")
             try:
                 df = self.fetch_klines(
-                    symbol=symbol,
-                    interval=interval,
-                    start_date=start_date,
-                    end_date=end_date
+                    symbol=symbol, interval=interval, start_date=start_date, end_date=end_date
                 )
-                prices[symbol.replace("USDT", "")] = df['close']
+                prices[symbol.replace("USDT", "")] = df["close"]
                 time.sleep(0.1)  # Rate limiting
             except Exception as e:
                 print(f"  Fehler bei {symbol}: {e}")
@@ -132,15 +135,15 @@ class BinanceDataFetcher:
 
         return result
 
-    def get_available_symbols(self) -> List[str]:
+    def get_available_symbols(self) -> list[str]:
         """Gibt alle verfügbaren USDT Trading Pairs zurück"""
         response = requests.get(f"{self.BASE_URL}/exchangeInfo")
         response.raise_for_status()
 
         symbols = [
-            s['symbol'] for s in response.json()['symbols']
-            if s['symbol'].endswith('USDT')
-            and s['status'] == 'TRADING'
+            s["symbol"]
+            for s in response.json()["symbols"]
+            if s["symbol"].endswith("USDT") and s["status"] == "TRADING"
         ]
 
         return sorted(symbols)
@@ -151,7 +154,7 @@ class BinanceDataFetcher:
         df.to_csv(path)
         print(f"Gespeichert: {path}")
 
-    def load_from_cache(self, name: str) -> Optional[pd.DataFrame]:
+    def load_from_cache(self, name: str) -> pd.DataFrame | None:
         """Lädt DataFrame aus Cache"""
         path = self.CACHE_DIR / f"{name}.csv"
         if path.exists():
@@ -168,7 +171,7 @@ if __name__ == "__main__":
 
     print(f"\nDaten geladen: {len(prices)} Tage, {len(prices.columns)} Coins")
     print(f"Coins: {list(prices.columns)}")
-    print(f"\nLetzte Preise:")
+    print("\nLetzte Preise:")
     print(prices.tail())
 
     fetcher.save_to_cache(prices, "altcoin_prices_365d")

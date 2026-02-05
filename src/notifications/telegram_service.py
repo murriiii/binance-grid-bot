@@ -2,15 +2,16 @@
 Zentraler Telegram Service für alle Benachrichtigungen.
 Ersetzt alle verstreuten Telegram-Implementierungen.
 """
-import os
+
 import io
 import logging
-from typing import Optional
+import os
 from datetime import datetime
+from typing import Optional
 
-from src.api.http_client import get_http_client, HTTPClientError
+from src.api.http_client import HTTPClientError, get_http_client
 
-logger = logging.getLogger('trading_bot')
+logger = logging.getLogger("trading_bot")
 
 
 class TelegramService:
@@ -29,11 +30,11 @@ class TelegramService:
         telegram.send_urgent("Alert!")
     """
 
-    _instance: Optional['TelegramService'] = None
+    _instance: Optional["TelegramService"] = None
 
     def __init__(self):
-        self.token = os.getenv('TELEGRAM_BOT_TOKEN')
-        self.chat_id = os.getenv('TELEGRAM_CHAT_ID')
+        self.token = os.getenv("TELEGRAM_BOT_TOKEN")
+        self.chat_id = os.getenv("TELEGRAM_CHAT_ID")
         self.enabled = bool(self.token and self.chat_id)
         self.http = get_http_client()
 
@@ -41,17 +42,14 @@ class TelegramService:
             logger.warning("Telegram Service nicht konfiguriert (Token oder Chat-ID fehlt)")
 
     @classmethod
-    def get_instance(cls) -> 'TelegramService':
+    def get_instance(cls) -> "TelegramService":
         """Singleton-Instanz"""
         if cls._instance is None:
             cls._instance = cls()
         return cls._instance
 
     def send(
-        self,
-        message: str,
-        parse_mode: str = 'HTML',
-        disable_notification: bool = False
+        self, message: str, parse_mode: str = "HTML", disable_notification: bool = False
     ) -> bool:
         """
         Sendet eine Nachricht.
@@ -71,12 +69,12 @@ class TelegramService:
             self.http.post(
                 f"https://api.telegram.org/bot{self.token}/sendMessage",
                 json={
-                    'chat_id': self.chat_id,
-                    'text': message,
-                    'parse_mode': parse_mode,
-                    'disable_notification': disable_notification
+                    "chat_id": self.chat_id,
+                    "text": message,
+                    "parse_mode": parse_mode,
+                    "disable_notification": disable_notification,
                 },
-                api_type='telegram'
+                api_type="telegram",
             )
             return True
         except HTTPClientError as e:
@@ -93,7 +91,7 @@ class TelegramService:
         symbol: str,
         price: float,
         quantity: float,
-        profit_loss: Optional[float] = None
+        profit_loss: float | None = None,
     ) -> bool:
         """Sendet eine formatierte Trade-Benachrichtigung"""
         emoji = "🟢" if trade_type == "BUY" else "🔴"
@@ -115,13 +113,13 @@ Quantity: {quantity}{pnl_text}
         daily_change: float,
         trades_today: int,
         win_rate: float,
-        fear_greed: int
+        fear_greed: int,
     ) -> bool:
         """Sendet den täglichen Report"""
         trend = "Bullish" if fear_greed > 50 else "Bearish" if fear_greed < 30 else "Neutral"
 
         message = f"""
-📊 <b>TAGES-REPORT</b> {datetime.now().strftime('%Y-%m-%d')}
+📊 <b>TAGES-REPORT</b> {datetime.now().strftime("%Y-%m-%d")}
 
 💰 <b>Portfolio:</b> <code>${portfolio_value:.2f}</code>
 📈 <b>Heute:</b> <code>{daily_change:+.2f}%</code>
@@ -138,11 +136,7 @@ Quantity: {quantity}{pnl_text}
         return self.send(message, disable_notification=True)
 
     def send_stop_loss_alert(
-        self,
-        symbol: str,
-        trigger_price: float,
-        stop_price: float,
-        quantity: float
+        self, symbol: str, trigger_price: float, stop_price: float, quantity: float
     ) -> bool:
         """Sendet Stop-Loss Warnung"""
         message = f"""
@@ -162,7 +156,7 @@ Menge: {quantity}
         amount_usd: float,
         direction: str,
         from_owner: str,
-        to_owner: str
+        to_owner: str,
     ) -> bool:
         """Sendet Whale-Alert"""
         emoji = "🔴🐋" if direction == "BEARISH" else "🟢🐋" if direction == "BULLISH" else "🐋"
@@ -181,10 +175,7 @@ Impact: <b>{direction}</b>
 
     def send_macro_alert(self, events: list) -> bool:
         """Sendet Makro-Event Warnung"""
-        event_list = "\n".join([
-            f"• {e['date']}: {e['name']}"
-            for e in events[:5]
-        ])
+        event_list = "\n".join([f"• {e['date']}: {e['name']}" for e in events[:5]])
 
         message = f"""
 ⚠️ <b>MACRO ALERT</b>
@@ -219,11 +210,7 @@ Fear & Greed Index: <code>{value}</code> ({classification})
 """
         return self.send(message)
 
-    def send_photo(
-        self,
-        photo_bytes: bytes,
-        caption: Optional[str] = None
-    ) -> bool:
+    def send_photo(self, photo_bytes: bytes, caption: str | None = None) -> bool:
         """Sendet ein Foto/Chart"""
         if not self.enabled:
             return False
@@ -231,17 +218,17 @@ Fear & Greed Index: <code>{value}</code> ({classification})
         try:
             import requests
 
-            files = {'photo': ('chart.png', io.BytesIO(photo_bytes), 'image/png')}
-            data = {'chat_id': self.chat_id}
+            files = {"photo": ("chart.png", io.BytesIO(photo_bytes), "image/png")}
+            data = {"chat_id": self.chat_id}
             if caption:
-                data['caption'] = caption
-                data['parse_mode'] = 'HTML'
+                data["caption"] = caption
+                data["parse_mode"] = "HTML"
 
             response = requests.post(
                 f"https://api.telegram.org/bot{self.token}/sendPhoto",
                 data=data,
                 files=files,
-                timeout=30
+                timeout=30,
             )
             return response.status_code == 200
 

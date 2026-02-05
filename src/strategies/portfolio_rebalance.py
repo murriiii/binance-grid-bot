@@ -2,12 +2,12 @@
 Portfolio Rebalancing Strategy
 Kombiniert Markowitz-Optimierung mit dynamischer Risiko-Skalierung
 """
-import pandas as pd
-import numpy as np
-from typing import Dict, List, Tuple
-from datetime import datetime, timedelta
 
-from src.models.portfolio import PortfolioOptimizer, RiskScaler, KellyCriterion
+from datetime import datetime
+
+import pandas as pd
+
+from src.models.portfolio import PortfolioOptimizer, RiskScaler
 
 
 class PortfolioRebalanceStrategy:
@@ -36,14 +36,11 @@ class PortfolioRebalanceStrategy:
 
         self.risk_scaler = RiskScaler()
         self.last_rebalance: datetime = None
-        self.target_weights: Dict[str, float] = {}
+        self.target_weights: dict[str, float] = {}
 
     def calculate_target_weights(
-        self,
-        price_history: pd.DataFrame,
-        portfolio_value: float,
-        available_coins: List[str]
-    ) -> Tuple[Dict[str, float], str]:
+        self, price_history: pd.DataFrame, portfolio_value: float, available_coins: list[str]
+    ) -> tuple[dict[str, float], str]:
         """
         Berechnet Ziel-Gewichtung basierend auf:
         1. Portfolio-Größe (Risiko-Skalierung)
@@ -86,7 +83,7 @@ class PortfolioRebalanceStrategy:
 
             optimization_reasoning = (
                 f"Markowitz-Optimierung (Sharpe): "
-                f"Top-Picks: {', '.join([f'{k}:{v*100:.1f}%' for k,v in sorted(optimal_altcoin_weights.items(), key=lambda x: -x[1])[:3]])}"
+                f"Top-Picks: {', '.join([f'{k}:{v * 100:.1f}%' for k, v in sorted(optimal_altcoin_weights.items(), key=lambda x: -x[1])[:3]])}"
             )
         else:
             # Fallback: Gleichverteilung
@@ -101,11 +98,11 @@ class PortfolioRebalanceStrategy:
 
     def get_rebalance_trades(
         self,
-        current_positions: Dict[str, float],
-        target_weights: Dict[str, float],
-        prices: Dict[str, float],
-        portfolio_value: float
-    ) -> List[Dict]:
+        current_positions: dict[str, float],
+        target_weights: dict[str, float],
+        prices: dict[str, float],
+        portfolio_value: float,
+    ) -> list[dict]:
         """
         Berechnet nötige Trades für Rebalancing.
         Minimiert Trades durch Threshold.
@@ -136,19 +133,23 @@ class PortfolioRebalanceStrategy:
                 continue
 
             if trade_value > 0:
-                trades.append({
-                    'action': 'BUY',
-                    'symbol': coin,
-                    'value': trade_value,
-                    'reason': f"Untergewichtet ({current_w*100:.1f}% → {target_w*100:.1f}%)"
-                })
+                trades.append(
+                    {
+                        "action": "BUY",
+                        "symbol": coin,
+                        "value": trade_value,
+                        "reason": f"Untergewichtet ({current_w * 100:.1f}% → {target_w * 100:.1f}%)",
+                    }
+                )
             else:
-                trades.append({
-                    'action': 'SELL',
-                    'symbol': coin,
-                    'value': abs(trade_value),
-                    'reason': f"Übergewichtet ({current_w*100:.1f}% → {target_w*100:.1f}%)"
-                })
+                trades.append(
+                    {
+                        "action": "SELL",
+                        "symbol": coin,
+                        "value": abs(trade_value),
+                        "reason": f"Übergewichtet ({current_w * 100:.1f}% → {target_w * 100:.1f}%)",
+                    }
+                )
 
         return trades
 
@@ -156,10 +157,10 @@ class PortfolioRebalanceStrategy:
 def portfolio_rebalance_strategy(
     engine,
     timestamp: datetime,
-    prices: Dict[str, float],
+    prices: dict[str, float],
     price_history: pd.DataFrame,
     rebalance_interval_days: int = 7,
-    **kwargs
+    **kwargs,
 ):
     """
     Strategy-Funktion für den Backtester.
@@ -167,16 +168,16 @@ def portfolio_rebalance_strategy(
     Rebalanciert das Portfolio basierend auf Markowitz-Optimierung
     und dynamischer Risiko-Skalierung.
     """
-    strategy = kwargs.get('_strategy_instance')
+    strategy = kwargs.get("_strategy_instance")
     if strategy is None:
         strategy = PortfolioRebalanceStrategy()
-        kwargs['_strategy_instance'] = strategy
+        kwargs["_strategy_instance"] = strategy
 
     # Initial: Alles in Cash, noch keine Positionen
     if not engine.positions and engine.cash > 0:
         # Erstes Investment
         portfolio_value = engine.cash
-        available_coins = [c for c in prices.keys() if c in price_history.columns]
+        available_coins = [c for c in prices if c in price_history.columns]
 
         # Hole historische Daten bis zu diesem Zeitpunkt
         historical = price_history[price_history.index <= timestamp]
@@ -191,8 +192,11 @@ def portfolio_rebalance_strategy(
                 amount = portfolio_value * weight
                 if amount >= 1.0:  # Min Trade
                     engine.execute_buy(
-                        timestamp, coin, amount, prices[coin],
-                        f"Initial Allocation: {weight*100:.1f}% | {reasoning}"
+                        timestamp,
+                        coin,
+                        amount,
+                        prices[coin],
+                        f"Initial Allocation: {weight * 100:.1f}% | {reasoning}",
                     )
         return
 
@@ -207,7 +211,7 @@ def portfolio_rebalance_strategy(
 
     # Hole historische Daten
     historical = price_history[price_history.index <= timestamp]
-    available_coins = [c for c in prices.keys() if c in historical.columns]
+    available_coins = [c for c in prices if c in historical.columns]
 
     # Berechne neue Ziel-Gewichtungen
     target_weights, reasoning = strategy.calculate_target_weights(
@@ -220,20 +224,26 @@ def portfolio_rebalance_strategy(
     )
 
     # Führe Trades aus (Sells zuerst für Liquidität)
-    sells = [t for t in trades if t['action'] == 'SELL']
-    buys = [t for t in trades if t['action'] == 'BUY']
+    sells = [t for t in trades if t["action"] == "SELL"]
+    buys = [t for t in trades if t["action"] == "BUY"]
 
     for trade in sells:
-        qty = trade['value'] / prices[trade['symbol']]
+        qty = trade["value"] / prices[trade["symbol"]]
         engine.execute_sell(
-            timestamp, trade['symbol'], qty, prices[trade['symbol']],
-            f"Rebalance: {trade['reason']} | {reasoning}"
+            timestamp,
+            trade["symbol"],
+            qty,
+            prices[trade["symbol"]],
+            f"Rebalance: {trade['reason']} | {reasoning}",
         )
 
     for trade in buys:
         engine.execute_buy(
-            timestamp, trade['symbol'], trade['value'], prices[trade['symbol']],
-            f"Rebalance: {trade['reason']} | {reasoning}"
+            timestamp,
+            trade["symbol"],
+            trade["value"],
+            prices[trade["symbol"]],
+            f"Rebalance: {trade['reason']} | {reasoning}",
         )
 
     strategy.last_rebalance = timestamp

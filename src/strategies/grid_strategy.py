@@ -1,10 +1,10 @@
 """Grid Trading Strategy - mit min_qty Validierung"""
-from dataclasses import dataclass
-from typing import List
-import math
-import logging
 
-logger = logging.getLogger('trading_bot')
+import logging
+import math
+from dataclasses import dataclass
+
+logger = logging.getLogger("trading_bot")
 
 
 @dataclass
@@ -24,14 +24,14 @@ class GridStrategy:
         upper_price: float,
         num_grids: int,
         total_investment: float,
-        symbol_info: dict
+        symbol_info: dict,
     ):
         self.lower_price = lower_price
         self.upper_price = upper_price
         self.num_grids = num_grids
         self.total_investment = total_investment
         self.symbol_info = symbol_info
-        self.levels: List[GridLevel] = []
+        self.levels: list[GridLevel] = []
         self.skipped_levels = 0  # Zählt ungültige Levels
 
         self._calculate_grid_levels()
@@ -45,9 +45,9 @@ class GridStrategy:
         investment_per_grid = self.total_investment / self.num_grids
 
         # Symbol-Limits
-        min_qty = self.symbol_info.get('min_qty', 0)
-        step_size = self.symbol_info.get('step_size', 0.00001)
-        min_notional = self.symbol_info.get('min_notional', 10)
+        min_qty = self.symbol_info.get("min_qty", 0)
+        step_size = self.symbol_info.get("step_size", 0.00001)
+        min_notional = self.symbol_info.get("min_notional", 10)
 
         for i in range(self.num_grids + 1):
             price = self.lower_price + (i * grid_spacing)
@@ -77,11 +77,7 @@ class GridStrategy:
             price_precision = self._get_price_precision()
             rounded_price = round(price, price_precision)
 
-            self.levels.append(GridLevel(
-                price=rounded_price,
-                quantity=quantity,
-                valid=True
-            ))
+            self.levels.append(GridLevel(price=rounded_price, quantity=quantity, valid=True))
 
         # Warnung wenn zu wenige gültige Levels
         if len(self.levels) < 2:
@@ -91,8 +87,7 @@ class GridStrategy:
             )
 
         logger.info(
-            f"Grid berechnet: {len(self.levels)} gültige Levels, "
-            f"{self.skipped_levels} übersprungen"
+            f"Grid berechnet: {len(self.levels)} gültige Levels, {self.skipped_levels} übersprungen"
         )
 
     def _get_price_precision(self) -> int:
@@ -111,19 +106,13 @@ class GridStrategy:
 
         for level in self.levels:
             if level.price < current_price:
-                buy_orders.append({
-                    'price': level.price,
-                    'quantity': level.quantity,
-                    'type': 'BUY'
-                })
+                buy_orders.append({"price": level.price, "quantity": level.quantity, "type": "BUY"})
             elif level.price > current_price:
-                sell_orders.append({
-                    'price': level.price,
-                    'quantity': level.quantity,
-                    'type': 'SELL'
-                })
+                sell_orders.append(
+                    {"price": level.price, "quantity": level.quantity, "type": "SELL"}
+                )
 
-        return {'buy_orders': buy_orders, 'sell_orders': sell_orders}
+        return {"buy_orders": buy_orders, "sell_orders": sell_orders}
 
     def on_buy_filled(self, price: float) -> dict:
         """Wenn ein Buy gefüllt wurde, platziere Sell darüber"""
@@ -134,11 +123,11 @@ class GridStrategy:
                 if i + 1 < len(self.levels):
                     next_level = self.levels[i + 1]
                     return {
-                        'action': 'PLACE_SELL',
-                        'price': next_level.price,
-                        'quantity': level.quantity
+                        "action": "PLACE_SELL",
+                        "price": next_level.price,
+                        "quantity": level.quantity,
                     }
-        return {'action': 'NONE'}
+        return {"action": "NONE"}
 
     def on_sell_filled(self, price: float) -> dict:
         """Wenn ein Sell gefüllt wurde, platziere Buy darunter"""
@@ -149,19 +138,19 @@ class GridStrategy:
                 if i - 1 >= 0:
                     prev_level = self.levels[i - 1]
                     return {
-                        'action': 'PLACE_BUY',
-                        'price': prev_level.price,
-                        'quantity': prev_level.quantity
+                        "action": "PLACE_BUY",
+                        "price": prev_level.price,
+                        "quantity": prev_level.quantity,
                     }
-        return {'action': 'NONE'}
+        return {"action": "NONE"}
 
     def print_grid(self):
         """Debug: Zeigt das Grid an"""
-        logger.info(f"{'='*50}")
+        logger.info(f"{'=' * 50}")
         logger.info(f"Grid Strategy: {self.lower_price} - {self.upper_price}")
         logger.info(f"Levels: {self.num_grids}, Investment: {self.total_investment}")
-        logger.info(f"{'='*50}")
+        logger.info(f"{'=' * 50}")
         for level in reversed(self.levels):
             status = "●" if level.filled else "○"
             logger.info(f"  {status} {level.price:>10.2f} | Qty: {level.quantity:.6f}")
-        logger.info(f"{'='*50}")
+        logger.info(f"{'=' * 50}")

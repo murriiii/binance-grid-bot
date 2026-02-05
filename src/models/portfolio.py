@@ -2,10 +2,11 @@
 Portfolio Optimization Models
 Basierend auf klassischer Portfolio-Theorie (Markowitz et al.)
 """
+
+from dataclasses import dataclass
+
 import numpy as np
 import pandas as pd
-from dataclasses import dataclass
-from typing import List, Dict, Tuple
 from scipy.optimize import minimize
 
 
@@ -13,7 +14,7 @@ from scipy.optimize import minimize
 class Asset:
     symbol: str
     expected_return: float  # Annualisiert
-    volatility: float       # Standardabweichung annualisiert
+    volatility: float  # Standardabweichung annualisiert
     weight: float = 0.0
 
 
@@ -33,7 +34,7 @@ class PortfolioOptimizer:
         self.returns_data: pd.DataFrame = None
         self.cov_matrix: np.ndarray = None
         self.mean_returns: np.ndarray = None
-        self.assets: List[str] = []
+        self.assets: list[str] = []
 
     def load_returns(self, price_data: pd.DataFrame):
         """
@@ -70,7 +71,7 @@ class PortfolioOptimizer:
         """Für Minimierung (scipy minimiert)"""
         return -self.sharpe_ratio(weights)
 
-    def optimize_sharpe(self) -> Dict[str, float]:
+    def optimize_sharpe(self) -> dict[str, float]:
         """
         Findet Portfolio mit maximaler Sharpe Ratio.
         Returns: Dict mit Asset -> Gewichtung
@@ -78,51 +79,45 @@ class PortfolioOptimizer:
         n_assets = len(self.assets)
 
         # Constraints: Gewichte summieren zu 1, alle >= 0
-        constraints = {'type': 'eq', 'fun': lambda w: np.sum(w) - 1}
+        constraints = {"type": "eq", "fun": lambda w: np.sum(w) - 1}
         bounds = tuple((0, 1) for _ in range(n_assets))
 
         # Startpunkt: Gleichgewichtung
-        initial_weights = np.array([1/n_assets] * n_assets)
+        initial_weights = np.array([1 / n_assets] * n_assets)
 
         result = minimize(
             self.negative_sharpe,
             initial_weights,
-            method='SLSQP',
+            method="SLSQP",
             bounds=bounds,
-            constraints=constraints
+            constraints=constraints,
         )
 
         optimal_weights = result.x
-        return {
-            asset: round(weight, 4)
-            for asset, weight in zip(self.assets, optimal_weights)
-        }
+        return {asset: round(weight, 4) for asset, weight in zip(self.assets, optimal_weights)}
 
-    def optimize_min_variance(self) -> Dict[str, float]:
+    def optimize_min_variance(self) -> dict[str, float]:
         """
         Minimum-Varianz Portfolio.
         Für risiko-averse Investoren.
         """
         n_assets = len(self.assets)
 
-        constraints = {'type': 'eq', 'fun': lambda w: np.sum(w) - 1}
+        constraints = {"type": "eq", "fun": lambda w: np.sum(w) - 1}
         bounds = tuple((0, 1) for _ in range(n_assets))
-        initial_weights = np.array([1/n_assets] * n_assets)
+        initial_weights = np.array([1 / n_assets] * n_assets)
 
         result = minimize(
             self.portfolio_volatility,
             initial_weights,
-            method='SLSQP',
+            method="SLSQP",
             bounds=bounds,
-            constraints=constraints
+            constraints=constraints,
         )
 
-        return {
-            asset: round(weight, 4)
-            for asset, weight in zip(self.assets, result.x)
-        }
+        return {asset: round(weight, 4) for asset, weight in zip(self.assets, result.x)}
 
-    def efficient_frontier(self, n_points: int = 50) -> List[Tuple[float, float]]:
+    def efficient_frontier(self, n_points: int = 50) -> list[tuple[float, float]]:
         """
         Berechnet die Effizienzgrenze.
         Returns: Liste von (Volatilität, Return) Tupeln
@@ -139,16 +134,16 @@ class PortfolioOptimizer:
 
         for target in target_returns:
             constraints = [
-                {'type': 'eq', 'fun': lambda w: np.sum(w) - 1},
-                {'type': 'eq', 'fun': lambda w, t=target: self.portfolio_return(w) - t}
+                {"type": "eq", "fun": lambda w: np.sum(w) - 1},
+                {"type": "eq", "fun": lambda w, t=target: self.portfolio_return(w) - t},
             ]
 
             result = minimize(
                 self.portfolio_volatility,
-                np.array([1/n_assets] * n_assets),
-                method='SLSQP',
+                np.array([1 / n_assets] * n_assets),
+                method="SLSQP",
                 bounds=bounds,
-                constraints=constraints
+                constraints=constraints,
             )
 
             if result.success:
@@ -176,7 +171,7 @@ class KellyCriterion:
     def optimal_fraction(
         win_rate: float,
         win_loss_ratio: float,
-        fraction: float = 0.25  # 25% Kelly für Sicherheit
+        fraction: float = 0.25,  # 25% Kelly für Sicherheit
     ) -> float:
         """
         Berechnet optimale Positionsgröße.
@@ -210,18 +205,18 @@ class RiskScaler:
     Vermögen wird Kapitalerhalt wichtiger.
     """
 
-    def __init__(self, thresholds: List[Tuple[float, float]] = None):
+    def __init__(self, thresholds: list[tuple[float, float]] = None):
         """
         Args:
             thresholds: Liste von (Portfolio-Größe, Altcoin-Anteil)
                         Sortiert nach Größe aufsteigend
         """
         self.thresholds = thresholds or [
-            (0, 0.80),      # <100€: 80% Altcoins
-            (100, 0.60),    # 100-500€: 60% Altcoins
-            (500, 0.40),    # 500-1000€: 40% Altcoins
-            (1000, 0.25),   # 1000-5000€: 25% Altcoins
-            (5000, 0.15),   # >5000€: 15% Altcoins
+            (0, 0.80),  # <100€: 80% Altcoins
+            (100, 0.60),  # 100-500€: 60% Altcoins
+            (500, 0.40),  # 500-1000€: 40% Altcoins
+            (1000, 0.25),  # 1000-5000€: 25% Altcoins
+            (5000, 0.15),  # >5000€: 15% Altcoins
         ]
 
     def get_altcoin_allocation(self, portfolio_value: float) -> float:

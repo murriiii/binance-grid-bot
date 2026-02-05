@@ -7,27 +7,29 @@ Führt regelmäßige Tasks aus:
 - Wöchentliches Rebalancing
 - Outcome Tracking für vergangene Trades
 """
+
+import logging
 import sys
 import time
-import schedule
-import logging
-from datetime import datetime, timedelta
+from datetime import datetime
+
 import psycopg2
+import schedule
 from psycopg2.extras import RealDictCursor
 
-sys.path.insert(0, '/app')
+sys.path.insert(0, "/app")
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
-from src.notifications.telegram_service import get_telegram
-from src.data.market_data import get_market_data
 from src.core.config import get_config
+from src.data.market_data import get_market_data
+from src.notifications.telegram_service import get_telegram
 
 # Logging
 logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
@@ -52,6 +54,7 @@ def get_db_connection():
 # ═══════════════════════════════════════════════════════════════
 # SCHEDULED TASKS
 # ═══════════════════════════════════════════════════════════════
+
 
 def task_daily_summary():
     """Tägliche Portfolio-Zusammenfassung um 20:00"""
@@ -81,25 +84,25 @@ def task_daily_summary():
                 FROM portfolio_snapshots
                 ORDER BY timestamp DESC LIMIT 1
             """)
-            portfolio = cur.fetchone() or {'total_value_usd': 10, 'daily_pnl_pct': 0}
+            portfolio = cur.fetchone() or {"total_value_usd": 10, "daily_pnl_pct": 0}
 
         conn.close()
 
         # Marktdaten über zentralen Provider
         fear_greed = market_data.get_fear_greed()
-        btc_price = market_data.get_price('BTCUSDT')
+        btc_price = market_data.get_price("BTCUSDT")
 
-        trade_count = today_stats['trade_count'] or 0
-        wins = today_stats['wins'] or 0
+        trade_count = today_stats["trade_count"] or 0
+        wins = today_stats["wins"] or 0
         win_rate = (wins / trade_count * 100) if trade_count > 0 else 0
 
         # Verwende den zentralen TelegramService
         telegram.send_daily_summary(
-            portfolio_value=portfolio['total_value_usd'],
-            daily_change=portfolio['daily_pnl_pct'],
+            portfolio_value=portfolio["total_value_usd"],
+            daily_change=portfolio["daily_pnl_pct"],
             trades_today=trade_count,
             win_rate=win_rate,
-            fear_greed=fear_greed.value
+            fear_greed=fear_greed.value,
         )
 
         # Chart generieren
@@ -114,10 +117,12 @@ def generate_performance_chart():
     """Generiert und sendet Performance-Chart"""
     try:
         import matplotlib
-        matplotlib.use('Agg')
+
+        matplotlib.use("Agg")
+        import io
+
         import matplotlib.pyplot as plt
         import numpy as np
-        import io
 
         conn = get_db_connection()
         if not conn:
@@ -140,20 +145,20 @@ def generate_performance_chart():
             dates = range(days)
             values = 10 * np.cumprod(1 + np.random.normal(0.001, 0.02, days))
         else:
-            dates = [d['date'] for d in data]
-            values = [d['total_value_usd'] for d in data]
+            dates = [d["date"] for d in data]
+            values = [d["total_value_usd"] for d in data]
 
-        plt.style.use('dark_background')
-        fig, ax = plt.subplots(figsize=(10, 6), facecolor='#1a1a2e')
-        ax.set_facecolor('#1a1a2e')
-        ax.plot(range(len(values)), values, color='#00ff88', linewidth=2)
-        ax.fill_between(range(len(values)), values, alpha=0.3, color='#00ff88')
-        ax.set_title('Portfolio Performance (30 Tage)', color='white', fontsize=14)
-        ax.tick_params(colors='gray')
+        plt.style.use("dark_background")
+        fig, ax = plt.subplots(figsize=(10, 6), facecolor="#1a1a2e")
+        ax.set_facecolor("#1a1a2e")
+        ax.plot(range(len(values)), values, color="#00ff88", linewidth=2)
+        ax.fill_between(range(len(values)), values, alpha=0.3, color="#00ff88")
+        ax.set_title("Portfolio Performance (30 Tage)", color="white", fontsize=14)
+        ax.tick_params(colors="gray")
         ax.grid(True, alpha=0.3)
 
         buf = io.BytesIO()
-        plt.savefig(buf, format='png', dpi=150, facecolor='#1a1a2e', bbox_inches='tight')
+        plt.savefig(buf, format="png", dpi=150, facecolor="#1a1a2e", bbox_inches="tight")
         buf.seek(0)
         plt.close()
 
@@ -174,24 +179,24 @@ def task_market_snapshot():
     try:
         # Marktdaten über zentralen Provider sammeln
         fear_greed = market_data.get_fear_greed()
-        btc_price = market_data.get_price('BTCUSDT')
+        btc_price = market_data.get_price("BTCUSDT")
         btc_dominance = market_data.get_btc_dominance()
 
         # In DB speichern
         with conn.cursor() as cur:
-            cur.execute("""
+            cur.execute(
+                """
                 INSERT INTO market_snapshots
                 (timestamp, fear_greed, btc_price, btc_dominance)
                 VALUES (%s, %s, %s, %s)
-            """, (
-                datetime.now(),
-                fear_greed.value,
-                btc_price,
-                btc_dominance
-            ))
+            """,
+                (datetime.now(), fear_greed.value, btc_price, btc_dominance),
+            )
             conn.commit()
 
-        logger.info(f"Market Snapshot saved: F&G={fear_greed.value}, BTC=${btc_price:,.0f}, Dom={btc_dominance:.1f}%")
+        logger.info(
+            f"Market Snapshot saved: F&G={fear_greed.value}, BTC=${btc_price:,.0f}, Dom={btc_dominance:.1f}%"
+        )
 
     except Exception as e:
         logger.error(f"Market Snapshot Error: {e}")
@@ -219,26 +224,29 @@ def task_check_stops():
 
             for stop in stops:
                 # Preis für spezifisches Symbol holen
-                current_price = market_data.get_price(stop['symbol'])
+                current_price = market_data.get_price(stop["symbol"])
 
-                if current_price <= stop['stop_price']:
+                if current_price <= stop["stop_price"]:
                     # Stop triggered!
                     logger.warning(f"STOP TRIGGERED: {stop['symbol']} @ {current_price}")
 
                     # Update DB
-                    cur.execute("""
+                    cur.execute(
+                        """
                         UPDATE stop_loss_orders
                         SET is_active = false, triggered_at = NOW()
                         WHERE id = %s
-                    """, (stop['id'],))
+                    """,
+                        (stop["id"],),
+                    )
                     conn.commit()
 
                     # Telegram Alert über zentralen Service
                     telegram.send_stop_loss_alert(
-                        symbol=stop['symbol'],
+                        symbol=stop["symbol"],
                         trigger_price=current_price,
-                        stop_price=stop['stop_price'],
-                        quantity=stop['quantity']
+                        stop_price=stop["stop_price"],
+                        quantity=stop["quantity"],
                     )
 
     except Exception as e:
@@ -269,17 +277,20 @@ def task_update_outcomes():
 
             for trade in trades:
                 # Preis für spezifisches Symbol holen
-                current_price = market_data.get_price(trade['symbol'])
+                current_price = market_data.get_price(trade["symbol"])
 
                 # Outcome berechnen
-                pct_change = ((current_price - trade['price']) / trade['price']) * 100
-                if trade['action'] == 'SELL':
+                pct_change = ((current_price - trade["price"]) / trade["price"]) * 100
+                if trade["action"] == "SELL":
                     pct_change = -pct_change
 
                 # Update
-                cur.execute("""
+                cur.execute(
+                    """
                     UPDATE trades SET outcome_24h = %s WHERE id = %s
-                """, (pct_change, trade['id']))
+                """,
+                    (pct_change, trade["id"]),
+                )
 
                 logger.info(f"Updated outcome for trade {trade['id']}: {pct_change:+.2f}%")
 
@@ -318,14 +329,13 @@ def task_macro_check():
 
         calendar = EconomicCalendar()
         events = calendar.fetch_upcoming_events(days=2)
-        high_impact = [e for e in events if e.impact == 'HIGH']
+        high_impact = [e for e in events if e.impact == "HIGH"]
 
         if high_impact:
             # Verwende den zentralen TelegramService
-            telegram.send_macro_alert([
-                {'date': e.date.strftime('%d.%m %H:%M'), 'name': e.name}
-                for e in high_impact[:5]
-            ])
+            telegram.send_macro_alert(
+                [{"date": e.date.strftime("%d.%m %H:%M"), "name": e.name} for e in high_impact[:5]]
+            )
         else:
             logger.info("Keine High-Impact Events in den nächsten 48h")
 
@@ -364,7 +374,7 @@ def task_whale_check():
                     amount_usd=whale.amount_usd,
                     direction=whale.potential_impact,
                     from_owner=whale.from_owner,
-                    to_owner=whale.to_owner
+                    to_owner=whale.to_owner,
                 )
 
     except Exception as e:
@@ -374,6 +384,7 @@ def task_whale_check():
 # ═══════════════════════════════════════════════════════════════
 # MAIN
 # ═══════════════════════════════════════════════════════════════
+
 
 def main():
     """Hauptfunktion - Scheduler Setup"""
@@ -423,5 +434,5 @@ def main():
         time.sleep(60)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
