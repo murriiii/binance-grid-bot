@@ -1,3 +1,9 @@
+## v1.6.0 (2026-02-05)
+
+### Feat
+
+- complete Phase A - all critical pre-testing fixes
+
 ## v1.5.1 (2026-02-05)
 
 ### Refactor
