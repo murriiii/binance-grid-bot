@@ -381,6 +381,108 @@ def task_whale_check():
         logger.error(f"Whale Check Error: {e}")
 
 
+def task_update_playbook():
+    """
+    Aktualisiert das Trading Playbook basierend auf Trade-Historie.
+    Läuft wöchentlich (Sonntag 19:00) nach dem Rebalancing.
+
+    Das Playbook ist das "Erfahrungsgedächtnis" des Bots:
+    - Analysiert welche Strategien funktioniert haben
+    - Identifiziert Anti-Patterns (was vermieden werden sollte)
+    - Generiert automatisch Regeln aus Daten
+    - Wird bei jedem DeepSeek API-Call als Kontext verwendet
+    """
+    logger.info("Updating Trading Playbook...")
+
+    conn = get_db_connection()
+    if not conn:
+        logger.error("Playbook Update: Keine DB-Verbindung")
+        telegram.send("⚠️ Playbook Update: DB nicht erreichbar")
+        return
+
+    try:
+        from src.data.playbook import TradingPlaybook
+
+        playbook = TradingPlaybook(db_connection=conn)
+        result = playbook.analyze_and_update()
+
+        if "error" in result:
+            logger.error(f"Playbook Update Fehler: {result['error']}")
+            telegram.send(f"⚠️ Playbook Update Fehler: {result['error']}")
+        else:
+            # Erfolgreiche Aktualisierung
+            version = result.get("version", 0)
+            changes = result.get("changes", [])
+            metrics = result.get("metrics", {})
+
+            message = f"""📚 <b>PLAYBOOK AKTUALISIERT</b>
+
+Version: <b>{version}</b>
+Basiert auf: <b>{metrics.get("total_trades", 0)} Trades</b>
+Erfolgsrate: <b>{metrics.get("success_rate", 0):.1f}%</b>
+
+<b>Änderungen:</b>
+"""
+            for change in changes[:5]:
+                message += f"• {change}\n"
+
+            # Fear & Greed Pattern Zusammenfassung
+            fg_patterns = metrics.get("fear_greed_patterns", [])
+            if fg_patterns:
+                best_pattern = max(fg_patterns, key=lambda x: x["success_rate"])
+                message += f"""
+<b>Beste Strategie:</b>
+{best_pattern["action"]} bei {best_pattern["range"]}: {best_pattern["success_rate"]:.0f}% Erfolg
+"""
+
+            # Anti-Patterns
+            anti_patterns = metrics.get("anti_patterns", [])
+            if anti_patterns:
+                worst = anti_patterns[0]
+                message += f"""
+<b>Zu vermeiden:</b>
+{worst["action"]} {worst["symbol"]} bei F&G={worst["fear_greed"]}: {worst["avg_return"]:+.1f}%
+"""
+
+            telegram.send(message)
+            logger.info(f"Playbook v{version} erfolgreich aktualisiert")
+
+    except Exception as e:
+        logger.exception(f"Playbook Update Error: {e}")
+        telegram.send_error(str(e), context="Playbook Update")
+
+    finally:
+        if conn:
+            conn.close()
+
+
+def task_learn_patterns():
+    """
+    Analysiert Trades und aktualisiert gelernte Patterns in der Datenbank.
+    Läuft täglich um 21:00 (nach Daily Summary).
+    """
+    logger.info("Learning patterns from trade history...")
+
+    conn = get_db_connection()
+    if not conn:
+        return
+
+    try:
+        from src.data.memory import TradingMemory
+
+        memory = TradingMemory()
+        if memory.conn:
+            memory.learn_and_update_patterns()
+            logger.info("Pattern learning completed")
+
+    except Exception as e:
+        logger.error(f"Pattern Learning Error: {e}")
+
+    finally:
+        if conn:
+            conn.close()
+
+
 # ═══════════════════════════════════════════════════════════════
 # MAIN
 # ═══════════════════════════════════════════════════════════════
@@ -420,6 +522,12 @@ def main():
 
     # Whale Check stündlich
     schedule.every().hour.at(":30").do(task_whale_check)
+
+    # Pattern Learning täglich um 21:00 (nach Daily Summary)
+    schedule.every().day.at("21:00").do(task_learn_patterns)
+
+    # Playbook Update wöchentlich Sonntag 19:00 (nach Rebalancing)
+    schedule.every().sunday.at("19:00").do(task_update_playbook)
 
     logger.info("Scheduled jobs:")
     for job in schedule.get_jobs():

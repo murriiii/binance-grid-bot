@@ -52,15 +52,20 @@ class AITradingEnhancer:
 
     API_URL = "https://api.deepseek.com/v1/chat/completions"
 
-    ANALYSIS_PROMPT = """Du bist ein quantitativer Trading-Analyst.
+    ANALYSIS_PROMPT_BASE = """Du bist ein quantitativer Trading-Analyst mit EIGENEM ERFAHRUNGSGEDÄCHTNIS.
+
+Du hast Zugang zu einem "Trading Playbook" - das sind DEINE gelernten Regeln aus vergangenen Trades.
+NUTZE dieses Wissen aktiv bei deinen Entscheidungen!
 
 Deine Aufgabe: Analysiere die gegebenen Informationen und gib ein strukturiertes Signal.
 
 WICHTIG:
+- BEACHTE die Regeln aus deinem Playbook (unten angefügt)
+- Wenn das Playbook sagt "vermeide X" - dann vermeide es!
+- Wenn das Playbook zeigt dass etwas gut funktioniert hat - bevorzuge es!
 - Sei konservativ mit Vorhersagen
 - Wenn unsicher, sage "NEUTRAL"
-- Begründe IMMER mit konkreten Fakten
-- Keine Spekulation ohne Datengrundlage
+- Begründe IMMER mit konkreten Fakten UND Playbook-Referenzen
 
 Antworte IMMER in diesem JSON-Format:
 {
@@ -69,7 +74,8 @@ Antworte IMMER in diesem JSON-Format:
     "action": "BUY/SELL/HOLD/REDUCE",
     "affected_assets": ["BTC", "SOL", ...],
     "risk_level": "LOW/MEDIUM/HIGH",
-    "reasoning": "Deine Begründung hier"
+    "reasoning": "Deine Begründung hier",
+    "playbook_alignment": "Wie passt diese Entscheidung zu meinem Playbook?"
 }"""
 
     # Retry-Konfiguration
@@ -81,6 +87,29 @@ Antworte IMMER in diesem JSON-Format:
         self.api_key = os.getenv("DEEPSEEK_API_KEY")
         self.last_error_time: datetime | None = None
         self.consecutive_errors = 0
+        self.playbook = None
+        self._init_playbook()
+
+    def _init_playbook(self):
+        """Initialisiert das Playbook für Kontext-Anreicherung"""
+        try:
+            from src.data.playbook import get_playbook
+
+            self.playbook = get_playbook()
+            logger.info("Playbook für AI-Enhancement geladen")
+        except Exception as e:
+            logger.warning(f"Playbook konnte nicht geladen werden: {e}")
+            self.playbook = None
+
+    def _get_system_prompt(self) -> str:
+        """Generiert den System-Prompt inklusive Playbook"""
+        prompt = self.ANALYSIS_PROMPT_BASE
+
+        if self.playbook:
+            playbook_context = self.playbook.get_playbook_for_prompt()
+            prompt += f"\n\n{playbook_context}"
+
+        return prompt
 
     def _get_fallback_response(self, reason: str) -> str:
         """Sichere Fallback-Response wenn API nicht verfügbar"""
@@ -112,10 +141,10 @@ Antworte IMMER in diesem JSON-Format:
                     json={
                         "model": "deepseek-chat",
                         "messages": [
-                            {"role": "system", "content": self.ANALYSIS_PROMPT},
+                            {"role": "system", "content": self._get_system_prompt()},
                             {"role": "user", "content": user_prompt},
                         ],
-                        "max_tokens": 500,
+                        "max_tokens": 800,  # Erhöht für Playbook-Referenzen
                         "temperature": 0.3,  # Niedrig für konsistentere Outputs
                     },
                     timeout=self.TIMEOUT_SECONDS,

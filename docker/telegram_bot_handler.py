@@ -97,6 +97,11 @@ class TradingTelegramBot:
 /sell <symbol> - Verkaufsvorschlag
 /rebalance - Rebalancing starten
 
+*Playbook (Erfahrungsgedächtnis):*
+/playbook - Zeige aktuelle Regeln
+/playbook_update - Manuelles Update auslösen
+/playbook_stats - Playbook Statistiken
+
 *Einstellungen:*
 /alerts on|off - Benachrichtigungen
 /risk low|medium|high - Risiko-Level
@@ -295,6 +300,134 @@ _RSI neutral, MACD bullish crossover, Preis über SMAs_
         await update.message.reply_text(ta, parse_mode="Markdown", reply_markup=reply_markup)
 
     # ═══════════════════════════════════════════════════════════════
+    # PLAYBOOK COMMANDS (Erfahrungsgedächtnis)
+    # ═══════════════════════════════════════════════════════════════
+
+    async def cmd_playbook(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Zeigt das aktuelle Trading Playbook"""
+        try:
+            from src.data.playbook import get_playbook
+
+            playbook = get_playbook()
+
+            # Kürze auf wichtigste Teile für Telegram
+            content = playbook.playbook_content
+
+            # Extrahiere Header und wichtigste Regeln
+            lines = content.split("\n")
+            summary_lines = []
+            in_section = False
+            sections_found = 0
+
+            for line in lines:
+                if line.startswith("# "):
+                    summary_lines.append(f"*{line[2:]}*")
+                elif (
+                    line.startswith("Version:")
+                    or line.startswith("Basiert auf:")
+                    or line.startswith("Gesamterfolgsrate:")
+                ):
+                    summary_lines.append(f"`{line}`")
+                elif "WAS NICHT FUNKTIONIERT" in line:
+                    summary_lines.append("\n*❌ Anti-Patterns:*")
+                    in_section = True
+                    sections_found += 1
+                elif "WAS GUT FUNKTIONIERT" in line:
+                    summary_lines.append("\n*✅ Erfolgs-Patterns:*")
+                    in_section = True
+                    sections_found += 1
+                elif line.startswith("## ") and in_section:
+                    in_section = False
+                elif (
+                    in_section
+                    and line.strip()
+                    and not line.startswith("---")
+                    and len(summary_lines) < 40
+                ):
+                    summary_lines.append(line)
+
+                if sections_found >= 2 and not in_section:
+                    break
+
+            message = "\n".join(summary_lines[:40])
+            message += "\n\n_Nutze /playbook\\_stats für Details_"
+
+            await update.message.reply_text(message, parse_mode="Markdown")
+
+        except Exception as e:
+            await update.message.reply_text(f"❌ Fehler: {e}")
+
+    async def cmd_playbook_stats(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Zeigt Playbook-Statistiken"""
+        try:
+            from src.data.playbook import get_playbook
+
+            playbook = get_playbook()
+
+            stats = f"""📚 *PLAYBOOK STATISTIKEN*
+
+*Version:* {playbook.current_version}
+*Pfad:* `{playbook.PLAYBOOK_PATH}`
+
+*Inhalt:*
+• Zeilen: {len(playbook.playbook_content.split(chr(10)))}
+• Zeichen: {len(playbook.playbook_content)}
+
+*Nächstes Update:* Sonntag 19:00
+
+_Das Playbook wird bei jedem AI-Call als Kontext verwendet._
+"""
+
+            keyboard = [[InlineKeyboardButton("🔄 Update jetzt", callback_data="playbook_update")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
+            await update.message.reply_text(stats, parse_mode="Markdown", reply_markup=reply_markup)
+
+        except Exception as e:
+            await update.message.reply_text(f"❌ Fehler: {e}")
+
+    async def cmd_playbook_update(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Löst manuelles Playbook-Update aus"""
+        await update.message.reply_text("🔄 Starte Playbook-Analyse...")
+
+        try:
+            import psycopg2
+
+            conn = psycopg2.connect(
+                host=os.getenv("POSTGRES_HOST", "localhost"),
+                port=os.getenv("POSTGRES_PORT", 5432),
+                database=os.getenv("POSTGRES_DB", "trading_bot"),
+                user=os.getenv("POSTGRES_USER", "trading"),
+                password=os.getenv("POSTGRES_PASSWORD", ""),
+            )
+
+            from src.data.playbook import TradingPlaybook
+
+            playbook = TradingPlaybook(db_connection=conn)
+            result = playbook.analyze_and_update()
+            conn.close()
+
+            if "error" in result:
+                await update.message.reply_text(f"❌ Fehler: {result['error']}")
+            else:
+                metrics = result.get("metrics", {})
+                message = f"""✅ *PLAYBOOK AKTUALISIERT*
+
+*Version:* {result.get("version", 0)}
+*Trades analysiert:* {metrics.get("total_trades", 0)}
+*Erfolgsrate:* {metrics.get("success_rate", 0):.1f}%
+
+*Änderungen:*
+"""
+                for change in result.get("changes", [])[:5]:
+                    message += f"• {change}\n"
+
+                await update.message.reply_text(message, parse_mode="Markdown")
+
+        except Exception as e:
+            await update.message.reply_text(f"❌ Fehler: {e}")
+
+    # ═══════════════════════════════════════════════════════════════
     # CALLBACK HANDLERS (Button Clicks)
     # ═══════════════════════════════════════════════════════════════
 
@@ -325,6 +458,11 @@ _RSI neutral, MACD bullish crossover, Preis über SMAs_
 
         elif data.startswith("cancel_"):
             await query.edit_message_text("❌ Abgebrochen")
+
+        elif data == "playbook_update":
+            await query.edit_message_text("🔄 Playbook wird aktualisiert...")
+            # Rufe cmd_playbook_update auf
+            await self.cmd_playbook_update(update, context)
 
         elif data == "details":
             await query.edit_message_text("📊 Details werden geladen...")
@@ -429,6 +567,11 @@ def main():
     app.add_handler(CommandHandler("ask", bot.cmd_ask))
     app.add_handler(CommandHandler("stops", bot.cmd_stops))
     app.add_handler(CommandHandler("ta", bot.cmd_ta))
+
+    # Playbook Commands
+    app.add_handler(CommandHandler("playbook", bot.cmd_playbook))
+    app.add_handler(CommandHandler("playbook_stats", bot.cmd_playbook_stats))
+    app.add_handler(CommandHandler("playbook_update", bot.cmd_playbook_update))
 
     # Callback Handler (Buttons)
     app.add_handler(CallbackQueryHandler(bot.button_callback))
