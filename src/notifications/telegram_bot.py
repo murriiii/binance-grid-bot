@@ -11,6 +11,7 @@ Setup:
 """
 
 import io
+import logging
 import os
 from datetime import datetime
 
@@ -18,6 +19,8 @@ import requests
 from dotenv import load_dotenv
 
 load_dotenv()
+
+logger = logging.getLogger("trading_bot")
 
 
 class TelegramBot:
@@ -53,7 +56,7 @@ class TelegramBot:
             disable_notification: Stumm senden
         """
         if not self.token or not self.chat_id:
-            print(f"[TELEGRAM MOCK] {text}")
+            logger.debug(f"Telegram nicht konfiguriert, Nachricht übersprungen: {text[:100]}...")
             return False
 
         try:
@@ -84,7 +87,7 @@ class TelegramBot:
             caption: Bildunterschrift
         """
         if not self.token or not self.chat_id:
-            print(f"[TELEGRAM MOCK] Photo: {caption}")
+            logger.debug(f"Telegram nicht konfiguriert, Photo übersprungen: {caption}")
             return False
 
         try:
@@ -112,7 +115,7 @@ class TelegramBot:
     def send_document(self, file_path: str, caption: str = None) -> bool:
         """Sendet eine Datei (CSV, PDF, etc.)"""
         if not self.token or not self.chat_id:
-            print(f"[TELEGRAM MOCK] Document: {file_path}")
+            logger.debug(f"Telegram nicht konfiguriert, Dokument übersprungen: {file_path}")
             return False
 
         try:

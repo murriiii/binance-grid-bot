@@ -53,6 +53,60 @@ def get_db_connection():
         return None
 
 
+def check_data_sources_status() -> dict[str, bool]:
+    """
+    Prüft welche Datenquellen verfügbar sind.
+    Wird im Daily Summary Report verwendet.
+    """
+    import os
+
+    status = {}
+
+    # LunarCrush (kostenpflichtig, $90/Monat)
+    status["lunarcrush"] = bool(os.getenv("LUNARCRUSH_API_KEY"))
+
+    # Reddit API
+    status["reddit"] = bool(os.getenv("REDDIT_CLIENT_ID") and os.getenv("REDDIT_CLIENT_SECRET"))
+
+    # Token Unlocks API
+    status["token_unlocks"] = bool(os.getenv("TOKEN_UNLOCKS_API_KEY"))
+
+    # DeepSeek AI
+    status["deepseek"] = bool(os.getenv("DEEPSEEK_API_KEY"))
+
+    # Telegram
+    status["telegram"] = bool(os.getenv("TELEGRAM_BOT_TOKEN") and os.getenv("TELEGRAM_CHAT_ID"))
+
+    return status
+
+
+def format_data_sources_report() -> str:
+    """Formatiert Datenquellen-Status für Telegram Report"""
+    status = check_data_sources_status()
+
+    unavailable = [name for name, available in status.items() if not available]
+
+    if not unavailable:
+        return ""
+
+    report = "\n\n⚠️ *Inaktive Datenquellen:*\n"
+    for name in unavailable:
+        if name == "lunarcrush":
+            report += "• LunarCrush (kein API Key, $90/Mon)\n"
+        elif name == "reddit":
+            report += "• Reddit (REDDIT_CLIENT_ID/SECRET fehlt)\n"
+        elif name == "token_unlocks":
+            report += "• Token Unlocks (kein API Key)\n"
+        elif name == "deepseek":
+            report += "• DeepSeek AI (kein API Key)\n"
+        elif name == "telegram":
+            report += "• Telegram (Token/ChatID fehlt)\n"
+        else:
+            report += f"• {name}\n"
+
+    return report
+
+
 # ═══════════════════════════════════════════════════════════════
 # SCHEDULED TASKS
 # ═══════════════════════════════════════════════════════════════
@@ -107,6 +161,11 @@ def task_daily_summary():
             fear_greed=fear_greed.value,
         )
 
+        # Datenquellen-Status melden (falls welche fehlen)
+        data_sources_report = format_data_sources_report()
+        if data_sources_report:
+            telegram.send(data_sources_report, disable_notification=True)
+
         # Chart generieren
         generate_performance_chart()
 
@@ -124,7 +183,6 @@ def generate_performance_chart():
         import io
 
         import matplotlib.pyplot as plt
-        import numpy as np
 
         conn = get_db_connection()
         if not conn:
@@ -142,10 +200,9 @@ def generate_performance_chart():
         conn.close()
 
         if len(data) < 2:
-            # Dummy-Daten wenn keine echten vorhanden
-            days = 30
-            dates = range(days)
-            values = 10 * np.cumprod(1 + np.random.normal(0.001, 0.02, days))
+            logger.debug("Performance Chart: Nicht genug Daten (min. 2 Tage benötigt)")
+            return
+
         else:
             dates = [d["date"] for d in data]
             values = [d["total_value_usd"] for d in data]

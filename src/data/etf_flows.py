@@ -137,7 +137,8 @@ class ETFFlowTracker:
         Versucht mehrere Quellen:
         1. SoSoValue API
         2. Farside Scraping
-        3. Fallback: Mock-Daten
+
+        Returns None wenn keine Daten verfügbar.
         """
         if date is None:
             date = datetime.now()

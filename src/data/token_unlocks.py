@@ -155,7 +155,7 @@ class TokenUnlockTracker:
         unlocks = self._fetch_from_api(days)
 
         if not unlocks:
-            # Fallback: Manuelle Liste + Mock
+            # Fallback: Manuell kuratierte Liste bekannter Unlocks
             unlocks = self._get_manual_unlocks(days)
 
         # Filtere nach Mindest-Wert
@@ -212,7 +212,7 @@ class TokenUnlockTracker:
         return []
 
     def _get_manual_unlocks(self, days: int) -> list[TokenUnlock]:
-        """Manuelle Unlock-Liste + Mock-Daten"""
+        """Manuell kuratierte Unlock-Liste aus MAJOR_UNLOCKS Konstante"""
         unlocks = []
         now = datetime.now()
         cutoff = now + timedelta(days=days)
