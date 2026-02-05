@@ -1,3 +1,9 @@
+## v1.1.1 (2026-02-05)
+
+### Fix
+
+- add RUF059 to ignore list and enable GitHub releases
+
 ## v1.1.0 (2026-02-05)
 
 ### Feat
