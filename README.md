@@ -1,6 +1,6 @@
 # Binance Grid Trading Bot
 
-Ein intelligenter Krypto-Trading-Bot mit Grid-Strategie, AI-Enhancement, Memory-System und selbstlernendem Trading Playbook.
+Ein intelligenter Krypto-Trading-Bot mit Grid-Strategie, Multi-Coin Trading, AI-Enhancement, Memory-System und selbstlernendem Trading Playbook.
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -10,10 +10,17 @@ Ein intelligenter Krypto-Trading-Bot mit Grid-Strategie, AI-Enhancement, Memory-
 
 ### Core Trading
 - **Grid Trading Strategy** - Automatisches Kaufen/Verkaufen in definierten Preisbändern
+- **Multi-Coin Trading** - Handel über 20-30 Coins mit intelligenter Kapitalverteilung
 - **Dynamic Grid Strategy** - ATR-basierte Grid-Abstände, asymmetrische Grids basierend auf Trend
 - **AI-Enhanced Decisions** - DeepSeek-Integration für intelligentere Entscheidungen
 - **Trading Playbook** - Selbstlernendes "Erfahrungsgedächtnis" das aus Trades lernt
 - **Memory System** - PostgreSQL-basiertes RAG-System für historische Muster
+
+### Multi-Coin System
+- **Watchlist Management** - 25+ Coins in 6 Kategorien (LARGE_CAP, MID_CAP, L2, DEFI, AI, GAMING)
+- **Coin Scanner** - Opportunity Detection mit technischen, Volume und Sentiment-Signalen
+- **Portfolio Allocator** - Kelly-basierte Kapitalverteilung mit Risk Constraints
+- **Per-Coin Learning** - Optimale Settings pro Coin automatisch erlernen
 
 ### Learning & Optimization
 - **Cohort System** - Parallele Strategie-Varianten (Konservativ, Balanced, Aggressiv, Baseline)
@@ -79,6 +86,14 @@ Ein intelligenter Krypto-Trading-Bot mit Grid-Strategie, AI-Enhancement, Memory-
 │  │   Regime     │    │  Divergence  │    │   Dynamic    │                   │
 │  │   Detector   │    │  Detector    │    │   Grid       │                   │
 │  └──────────────┘    └──────────────┘    └──────────────┘                   │
+│                                                                              │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │                         MULTI-COIN SYSTEM                              │ │
+│  │  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐   │ │
+│  │  │  Watchlist   │ │    Coin      │ │  Portfolio   │ │  Per-Coin    │   │ │
+│  │  │  Manager     │ │   Scanner    │ │  Allocator   │ │  Learning    │   │ │
+│  │  └──────────────┘ └──────────────┘ └──────────────┘ └──────────────┘   │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
 │                                                                              │
 │  ┌────────────────────────────────────────────────────────────────────────┐ │
 │  │                         DATA PROVIDERS                                  │ │
@@ -148,6 +163,81 @@ Jede Cohort durchläuft wöchentliche Zyklen:
 - **Sonntag 00:00**: Neuer Zyklus startet mit frischem Kapital
 - **Samstag 23:59**: Zyklus endet, Metriken werden berechnet
 - **Automatisch**: Sharpe, Sortino, Kelly, VaR, CVaR pro Zyklus
+
+## Multi-Coin Trading System
+
+Das **Multi-Coin System** ermöglicht diversifiziertes Trading über viele Coins:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    COIN UNIVERSE (25+ Coins)                    │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  LARGE CAPS (Tier 1)           MID CAPS (Tier 1)                │
+│  ├─ BTC, ETH                   ├─ SOL, AVAX, LINK, DOT          │
+│  └─ Stabil, hohe Liquidität    └─ Gute Moves, moderate Risiko   │
+│                                                                  │
+│  L2 ECOSYSTEM                  DEFI                              │
+│  ├─ ARB, OP, MATIC             ├─ UNI, AAVE, MKR, CRV, LDO      │
+│  └─ Layer 2 Growth             └─ DeFi Blue Chips               │
+│                                                                  │
+│  AI TOKENS                     GAMING                            │
+│  ├─ FET, RNDR, TAO, NEAR       ├─ IMX, GALA, AXS, SAND          │
+│  └─ AI/Compute Narrative       └─ Gaming/Metaverse              │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Komponenten
+
+| Modul | Funktion |
+|-------|----------|
+| **WatchlistManager** | Verwaltet Coin-Universe, aktualisiert Marktdaten, prüft Liquidität |
+| **CoinScanner** | Scannt nach Opportunities mit 5 Score-Dimensionen |
+| **PortfolioAllocator** | Verteilt Kapital mit Kelly-Criterion und Risk Constraints |
+
+### Opportunity Scoring
+
+Der CoinScanner analysiert jeden Coin auf 5 Dimensionen:
+
+```
+Total Score = Σ (Score × Weight)
+
+┌────────────────────────────────────────────────────────────────┐
+│  Technical (30%)  │ RSI, MACD, Bollinger Bands, Divergenzen   │
+│  Volume (20%)     │ Volume Spikes, Anomalien                   │
+│  Sentiment (15%)  │ Fear & Greed, Social Media                 │
+│  Whale (15%)      │ Exchange In/Outflows, Accumulation         │
+│  Momentum (20%)   │ 24h Price Change, Trend Stärke             │
+└────────────────────────────────────────────────────────────────┘
+```
+
+### Allocation Constraints
+
+```python
+# Diversifikation
+max_per_coin_pct = 10.0      # Max 10% pro Coin
+max_per_category_pct = 30.0  # Max 30% pro Kategorie
+min_cash_reserve_pct = 20.0  # Mindestens 20% Cash
+
+# Limits
+max_open_positions = 10      # Max gleichzeitige Positionen
+min_position_usd = 10.0      # Mindestposition
+
+# Risk-Adjusted Sizing
+kelly_fraction = 0.5         # Half-Kelly für konservatives Sizing
+```
+
+### Erwartete Datensammlung (3-4 Monate)
+
+Mit 4 Cohorts × 20+ Coins × 24/7 Trading:
+
+| Metrik | Erwartetes Volumen |
+|--------|-------------------|
+| Trades | ~30.000 |
+| Signal-Datenpunkte | ~450.000 |
+| Markt-Snapshots | ~45.000 |
+| Per-Coin Optimierungen | 20+ Sets |
 
 ## Trading Playbook - Das Herzstück
 
@@ -245,15 +335,24 @@ binance-grid-bot/
 │   │   └── portfolio_rebalance.py
 │   ├── data/
 │   │   ├── market_data.py      # Zentraler Marktdaten-Provider
+│   │   ├── watchlist.py        # Multi-Coin Watchlist Manager (NEU)
 │   │   ├── sentiment.py        # Fear & Greed, CoinGecko
-│   │   ├── social_sentiment.py # LunarCrush, Reddit, Twitter (NEU)
-│   │   ├── etf_flows.py        # Bitcoin/ETH ETF Tracking (NEU)
-│   │   ├── token_unlocks.py    # Supply Events (NEU)
+│   │   ├── social_sentiment.py # LunarCrush, Reddit, Twitter
+│   │   ├── etf_flows.py        # Bitcoin/ETH ETF Tracking
+│   │   ├── token_unlocks.py    # Supply Events
 │   │   ├── whale_alert.py      # Whale-Tracking
 │   │   ├── economic_events.py  # FOMC, CPI, NFP Events
 │   │   ├── memory.py           # Trading Memory System (RAG)
 │   │   ├── playbook.py         # Trading Playbook Generator
 │   │   └── fetcher.py          # Historische Daten
+│   ├── scanner/                # Multi-Coin Opportunity Scanner (NEU)
+│   │   ├── __init__.py
+│   │   ├── coin_scanner.py     # Opportunity Detection
+│   │   └── opportunity.py      # Opportunity Dataclass
+│   ├── portfolio/              # Portfolio Management (NEU)
+│   │   ├── __init__.py
+│   │   ├── allocator.py        # Kelly-basierte Kapitalverteilung
+│   │   └── constraints.py      # Allocation Rules & Limits
 │   ├── risk/
 │   │   ├── stop_loss.py        # Stop-Loss Management
 │   │   └── cvar_sizing.py      # CVaR Position Sizing (NEU)
@@ -310,6 +409,12 @@ binance-grid-bot/
 | `calculation_snapshots` | Kelly, VaR, CVaR Berechnungen | Risk Tracking |
 | `trade_pairs` | BUY/SELL Paare | Echtes P&L Tracking |
 | `regime_history` | Markt-Regime Änderungen | Regime-basierte Anpassungen |
+| **Multi-Coin Tabellen** | | |
+| `watchlist` | Coin-Universe mit Kategorien | Multi-Coin Trading |
+| `coin_performance` | Per-Coin Performance Metriken | Coin-spezifische Optimierung |
+| `cohort_allocations` | Positionen pro Cohort | Portfolio Management |
+| `opportunities` | Scanner-Ergebnisse | Opportunity Tracking |
+| **Data Provider Tabellen** | | |
 | `social_sentiment` | Social Media Tracking | Sentiment Signale |
 | `etf_flows` | BTC/ETH ETF Zuflüsse | Institutional Flows |
 | `token_unlocks` | Token Supply Events | Supply-basierte Signale |
@@ -321,6 +426,14 @@ binance-grid-bot/
 | `stop_loss_orders` | Stop-Loss Tracking | Risk Management |
 | `technical_indicators` | Berechnete Indikatoren | Technical Analysis |
 | `ai_conversations` | Telegram AI Chat | Context für AI Antworten |
+
+### Multi-Coin Views
+
+| View | Beschreibung |
+|------|--------------|
+| `v_coin_rankings` | Coins sortiert nach Performance (Win Rate × Trades) |
+| `v_active_positions` | Alle aktiven Positionen mit P&L |
+| `v_category_performance` | Performance aggregiert nach Kategorie |
 
 ### `trades` - Trade-Historie mit Kontext
 
@@ -462,6 +575,11 @@ DATABASE_URL=postgresql://trading:password@localhost:5433/trading_bot
 
 | Task | Zeitplan | Beschreibung |
 |------|----------|--------------|
+| **Multi-Coin Tasks** | | |
+| Watchlist Update | 30 Min | Marktdaten für alle Coins aktualisieren |
+| Opportunity Scan | 2h | Alle Coins nach Opportunities scannen |
+| Portfolio Rebalance | 06:00 | Allocation prüfen und anpassen |
+| Coin Performance | 21:30 | Per-Coin Metriken aktualisieren |
 | **Data Collection** | | |
 | Market Snapshot | Stündlich | Marktdaten speichern |
 | Whale Check | Stündlich | Große Transaktionen |
