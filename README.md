@@ -8,18 +8,43 @@ Ein intelligenter Krypto-Trading-Bot mit Grid-Strategie, AI-Enhancement, Memory-
 
 ## Features
 
+### Core Trading
 - **Grid Trading Strategy** - Automatisches Kaufen/Verkaufen in definierten Preisbändern
+- **Dynamic Grid Strategy** - ATR-basierte Grid-Abstände, asymmetrische Grids basierend auf Trend
 - **AI-Enhanced Decisions** - DeepSeek-Integration für intelligentere Entscheidungen
 - **Trading Playbook** - Selbstlernendes "Erfahrungsgedächtnis" das aus Trades lernt
 - **Memory System** - PostgreSQL-basiertes RAG-System für historische Muster
-- **Comprehensive Logging** - JSON-strukturierte Logs für langfristige Analyse
-- **Weekly Analysis Export** - Automatische Reports für Claude Code Optimierung
+
+### Learning & Optimization
+- **Cohort System** - Parallele Strategie-Varianten (Konservativ, Balanced, Aggressiv, Baseline)
+- **Cycle Management** - Wöchentliche Trading-Zyklen mit vollständiger Performance-Analyse
+- **Bayesian Weight Learning** - Adaptive Signal-Gewichtung via Dirichlet-Distribution
+- **A/B Testing Framework** - Statistische Signifikanz-Tests (Welch t-Test, Mann-Whitney U)
+- **Regime Detection** - Hidden Markov Model für Markt-Regime (BULL/BEAR/SIDEWAYS)
+
+### Risk Management
+- **CVaR Position Sizing** - Conditional Value at Risk basierte Positionsgrößen
+- **Stop-Loss Management** - Fixed, Trailing und ATR-basierte Stops
+- **Kelly Criterion** - Optimale Positionsgrößen-Berechnung
+- **Sharpe/Sortino Ratio** - Risiko-adjustierte Performance-Metriken
+
+### Data Sources
 - **Fear & Greed Integration** - Sentiment-basierte Trading-Signale
+- **Social Sentiment** - LunarCrush, Reddit, Twitter Tracking
+- **ETF Flow Tracking** - Bitcoin/Ethereum ETF Zuflüsse/Abflüsse
+- **Token Unlocks** - Supply Events vorausschauend berücksichtigt
 - **Whale Alert Tracking** - Überwachung großer Transaktionen
 - **Economic Events** - FOMC, CPI, NFP automatisch berücksichtigt
-- **Stop-Loss Management** - Fixed, Trailing und ATR-basierte Stops
+
+### Technical Analysis
+- **Divergence Detection** - RSI, MACD, Stochastic, MFI, OBV Divergenzen
+- **Technical Indicators** - RSI, MACD, Bollinger Bands, SMA/EMA
+- **Support/Resistance** - Automatische Level-Erkennung
+
+### Infrastructure
+- **Comprehensive Logging** - JSON-strukturierte Logs für langfristige Analyse
+- **Weekly Analysis Export** - Automatische Reports für Claude Code Optimierung
 - **Telegram Notifications** - Echtzeit-Alerts und tägliche Reports
-- **Technical Analysis** - RSI, MACD, Bollinger Bands, SMA/EMA
 
 ## Architektur
 
@@ -33,31 +58,43 @@ Ein intelligenter Krypto-Trading-Bot mit Grid-Strategie, AI-Enhancement, Memory-
 │  │   Service    │    │   (Core)     │    │   Client     │                   │
 │  └──────────────┘    └──────┬───────┘    └──────────────┘                   │
 │                             │                                                │
-│         ┌───────────────────┼───────────────────┐                           │
-│         │                   │                   │                           │
-│         ▼                   ▼                   ▼                           │
+│      ┌──────────────────────┼──────────────────────┐                        │
+│      │                      │                      │                        │
+│      ▼                      ▼                      ▼                        │
 │  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐                   │
-│  │   Market     │    │   Memory     │    │  Stop-Loss   │                   │
-│  │   Data       │    │   System     │    │  Manager     │                   │
+│  │   Cohort     │    │   Cycle      │    │   Signal     │                   │
+│  │   Manager    │    │   Manager    │    │   Analyzer   │                   │
 │  └──────────────┘    └──────────────┘    └──────────────┘                   │
 │         │                   │                   │                           │
 │         ▼                   ▼                   ▼                           │
 │  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐                   │
-│  │  Sentiment   │    │  PostgreSQL  │    │   Risk       │                   │
-│  │  Aggregator  │    │   Database   │    │   Control    │                   │
+│  │  A/B Testing │    │   Metrics    │    │  Bayesian    │                   │
+│  │  Framework   │    │  Calculator  │    │   Weights    │                   │
 │  └──────────────┘    └──────────────┘    └──────────────┘                   │
-│         │                   │                                               │
-│         │                   ▼                                               │
-│         │            ┌──────────────┐                                       │
-│         │            │   Trading    │◄──── Wöchentliches Update             │
-│         │            │   Playbook   │      aus Trade-Analyse                │
-│         │            └──────┬───────┘                                       │
-│         │                   │                                               │
-│         │                   ▼                                               │
-│         │            ┌──────────────┐                                       │
-│         └───────────►│  DeepSeek    │◄──── Playbook als Kontext             │
-│                      │  AI Engine   │                                       │
-│                      └──────────────┘                                       │
+│                             │                                               │
+│      ┌──────────────────────┼──────────────────────┐                        │
+│      │                      │                      │                        │
+│      ▼                      ▼                      ▼                        │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐                   │
+│  │   Regime     │    │  Divergence  │    │   Dynamic    │                   │
+│  │   Detector   │    │  Detector    │    │   Grid       │                   │
+│  └──────────────┘    └──────────────┘    └──────────────┘                   │
+│                                                                              │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │                         DATA PROVIDERS                                  │ │
+│  │  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐   │ │
+│  │  │   Social     │ │   ETF Flow   │ │   Token      │ │   Economic   │   │ │
+│  │  │  Sentiment   │ │   Tracker    │ │   Unlocks    │ │   Events     │   │ │
+│  │  └──────────────┘ └──────────────┘ └──────────────┘ └──────────────┘   │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                              │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │                         RISK MANAGEMENT                                 │ │
+│  │  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐   │ │
+│  │  │   CVaR       │ │   Stop-Loss  │ │   Kelly      │ │   Sharpe/    │   │ │
+│  │  │   Sizing     │ │   Manager    │ │   Criterion  │ │   Sortino    │   │ │
+│  │  └──────────────┘ └──────────────┘ └──────────────┘ └──────────────┘   │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
 │                                                                              │
 │  ┌────────────────────────────────────────────────────────────────────────┐ │
 │  │                        LEARNING & ANALYSIS                              │ │
@@ -66,8 +103,51 @@ Ein intelligenter Krypto-Trading-Bot mit Grid-Strategie, AI-Enhancement, Memory-
 │  │  │   System     │ │   Export     │ │   History    │ │   Learning   │   │ │
 │  │  └──────────────┘ └──────────────┘ └──────────────┘ └──────────────┘   │ │
 │  └────────────────────────────────────────────────────────────────────────┘ │
+│                             │                                               │
+│                             ▼                                               │
+│                      ┌──────────────┐                                       │
+│                      │  PostgreSQL  │                                       │
+│                      │   Database   │                                       │
+│                      └──────────────┘                                       │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
+
+## Cohort System - Paralleles Lernen
+
+Das **Cohort System** ermöglicht paralleles Testen verschiedener Strategien:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    PARALLEL COHORTS                              │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  Cohort A: KONSERVATIV        Cohort B: BALANCED                │
+│  ├─ $1000 Kapital             ├─ $1000 Kapital                  │
+│  ├─ Enge Grids (2%)           ├─ Standard Grids (5%)            │
+│  ├─ Hohe Confidence (>0.7)    ├─ Medium Confidence (>0.5)       │
+│  └─ Nur bei F&G < 40          └─ Playbook-gesteuert             │
+│                                                                  │
+│  Cohort C: AGGRESSIV          Cohort D: BASELINE                │
+│  ├─ $1000 Kapital             ├─ $1000 Kapital                  │
+│  ├─ Weite Grids (8%)          ├─ Keine Änderungen               │
+│  ├─ Niedrige Confidence ok    ├─ Woche 1 Strategie              │
+│  └─ Auch bei F&G > 60         └─ Kontrolle zum Vergleich        │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Vorteile
+- 4x mehr Daten pro Woche
+- Direkter A/B/C/D Vergleich
+- Baseline zeigt ob Änderungen wirklich helfen
+- Schnellere statistische Signifikanz
+
+### Cycle Management
+
+Jede Cohort durchläuft wöchentliche Zyklen:
+- **Sonntag 00:00**: Neuer Zyklus startet mit frischem Kapital
+- **Samstag 23:59**: Zyklus endet, Metriken werden berechnet
+- **Automatisch**: Sharpe, Sortino, Kelly, VaR, CVaR pro Zyklus
 
 ## Trading Playbook - Das Herzstück
 
@@ -152,27 +232,41 @@ binance-grid-bot/
 │   ├── core/
 │   │   ├── bot.py              # Haupt-Bot-Logik
 │   │   ├── config.py           # Zentrale Konfiguration
-│   │   └── logging_system.py   # Strukturiertes Logging
+│   │   ├── logging_system.py   # Strukturiertes Logging
+│   │   ├── cohort_manager.py   # Parallele Strategie-Varianten (NEU)
+│   │   └── cycle_manager.py    # Wöchentliche Zyklen (NEU)
 │   ├── api/
 │   │   ├── binance_client.py   # Binance API Wrapper
 │   │   └── http_client.py      # HTTP Client mit Retry/Caching
 │   ├── strategies/
 │   │   ├── grid_strategy.py    # Grid-Trading-Logik
+│   │   ├── dynamic_grid.py     # ATR-basierte Grids (NEU)
 │   │   ├── ai_enhanced.py      # DeepSeek AI + Playbook Integration
 │   │   └── portfolio_rebalance.py
 │   ├── data/
 │   │   ├── market_data.py      # Zentraler Marktdaten-Provider
 │   │   ├── sentiment.py        # Fear & Greed, CoinGecko
+│   │   ├── social_sentiment.py # LunarCrush, Reddit, Twitter (NEU)
+│   │   ├── etf_flows.py        # Bitcoin/ETH ETF Tracking (NEU)
+│   │   ├── token_unlocks.py    # Supply Events (NEU)
 │   │   ├── whale_alert.py      # Whale-Tracking
 │   │   ├── economic_events.py  # FOMC, CPI, NFP Events
 │   │   ├── memory.py           # Trading Memory System (RAG)
 │   │   ├── playbook.py         # Trading Playbook Generator
 │   │   └── fetcher.py          # Historische Daten
 │   ├── risk/
-│   │   └── stop_loss.py        # Stop-Loss Management
+│   │   ├── stop_loss.py        # Stop-Loss Management
+│   │   └── cvar_sizing.py      # CVaR Position Sizing (NEU)
 │   ├── analysis/
 │   │   ├── technical_indicators.py
-│   │   └── weekly_export.py    # Wöchentlicher Analyse-Export
+│   │   ├── weekly_export.py    # Wöchentlicher Analyse-Export
+│   │   ├── signal_analyzer.py  # Signal-Breakdown Storage (NEU)
+│   │   ├── metrics_calculator.py # Sharpe, Sortino, Kelly (NEU)
+│   │   ├── regime_detection.py # HMM Markt-Regime (NEU)
+│   │   ├── bayesian_weights.py # Adaptive Signal-Gewichte (NEU)
+│   │   └── divergence_detector.py # RSI/MACD Divergenzen (NEU)
+│   ├── optimization/
+│   │   └── ab_testing.py       # A/B Testing Framework (NEU)
 │   ├── models/
 │   │   └── portfolio.py        # Markowitz, Kelly Criterion
 │   ├── notifications/
@@ -184,9 +278,9 @@ binance-grid-bot/
 │       └── engine.py           # Backtesting Engine
 ├── docker/
 │   ├── docker-compose.yml      # PostgreSQL, Redis, Bot
-│   ├── scheduler.py            # Scheduled Tasks
+│   ├── scheduler.py            # Scheduled Tasks (erweitert)
 │   ├── telegram_bot_handler.py # Telegram Command Handler
-│   └── init.sql                # Database Schema
+│   └── init.sql                # Database Schema (erweitert)
 ├── config/
 │   ├── bot_state.json          # Persistenter Bot-State
 │   ├── TRADING_PLAYBOOK.md     # Aktuelles Playbook
@@ -210,11 +304,20 @@ binance-grid-bot/
 | Tabelle | Beschreibung | Hauptverwendung |
 |---------|--------------|-----------------|
 | `trades` | Alle ausgeführten Trades | Trade-History, Performance-Analyse |
-| `market_snapshots` | Stündliche Marktdaten | Historische Analyse, Pattern-Erkennung |
-| `whale_alerts` | Große Transaktionen | Sentiment-Analyse, Frühwarnung |
+| `cohorts` | Parallele Strategie-Varianten | A/B/C/D Testing |
+| `trading_cycles` | Wöchentliche Trading-Zyklen | Performance pro Zyklus |
+| `signal_components` | Signal-Breakdown pro Trade | Signal-Performance Analyse |
+| `calculation_snapshots` | Kelly, VaR, CVaR Berechnungen | Risk Tracking |
+| `trade_pairs` | BUY/SELL Paare | Echtes P&L Tracking |
+| `regime_history` | Markt-Regime Änderungen | Regime-basierte Anpassungen |
+| `social_sentiment` | Social Media Tracking | Sentiment Signale |
+| `etf_flows` | BTC/ETH ETF Zuflüsse | Institutional Flows |
+| `token_unlocks` | Token Supply Events | Supply-basierte Signale |
+| `market_snapshots` | Stündliche Marktdaten | Historische Analyse |
+| `whale_alerts` | Große Transaktionen | Sentiment-Analyse |
 | `economic_events` | Makro-Events (FOMC, CPI) | Event-basiertes Trading |
-| `learned_patterns` | Erfolgreiche Muster | AI Context, Strategy Optimization |
-| `portfolio_snapshots` | Portfolio-Zustand | Performance-Tracking, Drawdown |
+| `learned_patterns` | Erfolgreiche Muster | AI Context |
+| `portfolio_snapshots` | Portfolio-Zustand | Performance-Tracking |
 | `stop_loss_orders` | Stop-Loss Tracking | Risk Management |
 | `technical_indicators` | Berechnete Indikatoren | Technical Analysis |
 | `ai_conversations` | Telegram AI Chat | Context für AI Antworten |
@@ -359,18 +462,31 @@ DATABASE_URL=postgresql://trading:password@localhost:5433/trading_bot
 
 | Task | Zeitplan | Beschreibung |
 |------|----------|--------------|
-| Daily Summary | 20:00 | Portfolio-Report |
-| Pattern Learning | 21:00 | Tägliche Trade-Analyse |
+| **Data Collection** | | |
 | Market Snapshot | Stündlich | Marktdaten speichern |
+| Whale Check | Stündlich | Große Transaktionen |
+| Sentiment Check | 4h | F&G Extreme Alert |
+| Social Sentiment | 4h | LunarCrush, Reddit, Twitter |
+| ETF Flows | 10:00 | Bitcoin/ETH ETF Tracking |
+| Token Unlocks | 08:00 | Supply Events |
+| Macro Check | 08:00 | FOMC/CPI Events prüfen |
+| **Analysis** | | |
+| Regime Detection | 4h | HMM Markt-Regime Update |
+| Divergence Scan | 2h | RSI/MACD Divergenzen |
+| Signal Weights | 22:00 | Bayesian Weight Update |
+| Pattern Learning | 21:00 | Tägliche Trade-Analyse |
+| **Risk & Performance** | | |
 | Stop-Loss Check | 5 Min | Aktive Stops prüfen |
 | Outcome Update | 6h | Trade-Ergebnisse aktualisieren |
 | System Health | 6h | DB, API, Memory prüfen |
-| Macro Check | 08:00 | FOMC/CPI Events prüfen |
-| Sentiment Check | 4h | F&G Extreme Alert |
-| Whale Check | Stündlich | Große Transaktionen |
+| A/B Test Check | 23:00 | Statistische Signifikanz prüfen |
+| **Reports** | | |
+| Daily Summary | 20:00 | Portfolio-Report |
+| Weekly Export | Sa 23:00 | Analyse-Export erstellen |
+| **Weekly Tasks** | | |
+| Cycle Management | So 00:00 | Zyklus beenden/starten |
 | Weekly Rebalance | So 18:00 | Portfolio-Rebalancing |
 | Playbook Update | So 19:00 | Playbook neu generieren |
-| Weekly Export | Sa 23:00 | Analyse-Export erstellen |
 
 ## Wöchentlicher Optimierungs-Workflow
 
@@ -498,6 +614,11 @@ chore: Update dependencies
 | Binance | Trading, Preise | API Key |
 | Alternative.me | Fear & Greed Index | Keine |
 | CoinGecko | Social Stats, Trending | Keine |
+| LunarCrush | Social Sentiment, Galaxy Score | API Key |
+| Reddit (PRAW) | Reddit Mentions, Sentiment | OAuth |
+| Farside Investors | Bitcoin ETF Flows | Keine |
+| SoSoValue | ETH ETF Flows | Keine |
+| TokenUnlocks.app | Token Unlock Events | Keine |
 | Blockchain.com | Whale Tracking (BTC) | Keine |
 | TradingView | Economic Calendar | Keine |
 | DeepSeek | AI Analysis | API Key |
