@@ -1,3 +1,9 @@
+## v1.3.1 (2026-02-05)
+
+### Fix
+
+- remove mock data from production code
+
 ## v1.3.0 (2026-02-05)
 
 ### Feat
