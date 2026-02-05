@@ -1,0 +1,3 @@
+# This directory contains trading logs
+# Log files are gitignored but the directory is preserved
+# See src/core/logging_system.py for logging implementation

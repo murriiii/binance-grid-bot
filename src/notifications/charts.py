@@ -50,7 +50,7 @@ def create_portfolio_chart(
     Returns:
         PNG als Bytes
     """
-    fig, ax = plt.subplots(figsize=(10, 6), facecolor=COLORS["bg"])
+    _fig, ax = plt.subplots(figsize=(10, 6), facecolor=COLORS["bg"])
     ax.set_facecolor(COLORS["bg"])
 
     # Portfolio-Linie
@@ -132,7 +132,7 @@ def create_allocation_pie(
     Returns:
         PNG als Bytes
     """
-    fig, ax = plt.subplots(figsize=(8, 8), facecolor=COLORS["bg"])
+    _fig, ax = plt.subplots(figsize=(8, 8), facecolor=COLORS["bg"])
 
     # Farben für Coins
     coin_colors = {
@@ -158,7 +158,7 @@ def create_allocation_pie(
     max_idx = sizes.index(max(sizes))
     explode = [0.05 if i == max_idx else 0 for i in range(len(sizes))]
 
-    wedges, texts, autotexts = ax.pie(
+    _wedges, _texts, autotexts = ax.pie(
         sizes,
         labels=labels,
         colors=colors,
@@ -199,7 +199,7 @@ def create_trade_chart(price_data: pd.Series, trades: list[dict], symbol: str) -
     Returns:
         PNG als Bytes
     """
-    fig, ax = plt.subplots(figsize=(10, 6), facecolor=COLORS["bg"])
+    _fig, ax = plt.subplots(figsize=(10, 6), facecolor=COLORS["bg"])
     ax.set_facecolor(COLORS["bg"])
 
     # Preis-Linie
@@ -244,7 +244,7 @@ def create_fear_greed_gauge(value: int) -> bytes:
     Returns:
         PNG als Bytes
     """
-    fig, ax = plt.subplots(figsize=(6, 4), facecolor=COLORS["bg"])
+    _fig, ax = plt.subplots(figsize=(6, 4), facecolor=COLORS["bg"])
     ax.set_facecolor(COLORS["bg"])
 
     # Gauge-Hintergrund (Halbkreis)

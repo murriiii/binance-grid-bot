@@ -162,7 +162,7 @@ class TechnicalAnalyzer:
         # Berechne Indikatoren
         rsi = self.calculate_rsi(close)
         macd_line, macd_signal, macd_hist = self.calculate_macd(close)
-        bb_upper, bb_middle, bb_lower = self.calculate_bollinger_bands(close)
+        bb_upper, _, bb_lower = self.calculate_bollinger_bands(close)
         atr = self.calculate_atr(high, low, close)
         sma_20 = self.calculate_sma(close, 20)
         sma_50 = self.calculate_sma(close, 50)

@@ -24,6 +24,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from src.core.config import get_config
+from src.core.logging_system import get_logger
 from src.data.market_data import get_market_data
 from src.notifications.telegram_service import get_telegram
 
@@ -37,6 +38,7 @@ logger = logging.getLogger(__name__)
 telegram = get_telegram()
 market_data = get_market_data()
 config = get_config()
+trading_logger = get_logger()
 
 
 def get_db_connection():
@@ -149,7 +151,7 @@ def generate_performance_chart():
             values = [d["total_value_usd"] for d in data]
 
         plt.style.use("dark_background")
-        fig, ax = plt.subplots(figsize=(10, 6), facecolor="#1a1a2e")
+        _fig, ax = plt.subplots(figsize=(10, 6), facecolor="#1a1a2e")
         ax.set_facecolor("#1a1a2e")
         ax.plot(range(len(values)), values, color="#00ff88", linewidth=2)
         ax.fill_between(range(len(values)), values, alpha=0.3, color="#00ff88")
@@ -477,10 +479,121 @@ def task_learn_patterns():
 
     except Exception as e:
         logger.error(f"Pattern Learning Error: {e}")
+        trading_logger.error("Pattern learning failed", e, {"task": "learn_patterns"})
 
     finally:
         if conn:
             conn.close()
+
+
+def task_weekly_export():
+    """
+    Erstellt wöchentlichen Export für Claude Code Analyse.
+    Läuft Samstag 23:00 - so ist alles bereit für Sonntags-Analyse.
+
+    Der Export enthält:
+    - Performance-Metriken der Woche
+    - Trade-Statistiken
+    - Error-Zusammenfassung
+    - Playbook-Status
+    - Empfehlungen für Optimierung
+    """
+    logger.info("Running weekly export for Claude Code analysis...")
+
+    try:
+        from src.analysis.weekly_export import WeeklyExporter
+
+        exporter = WeeklyExporter()
+        result = exporter.export_weekly_analysis()
+
+        # Log the export
+        trading_logger.playbook_updated(
+            version=0,  # Will be updated with actual version
+            changes=["Weekly export generated"],
+            patterns_found=result["summary"]["total_trades"],
+            anti_patterns_found=result["summary"]["error_count"],
+        )
+
+        # Telegram Benachrichtigung
+        summary = result["summary"]
+        message = f"""📊 <b>WEEKLY EXPORT READY</b>
+
+Export für Claude Code Analyse erstellt:
+
+<b>Performance:</b>
+• Trades: {summary["total_trades"]}
+• Win Rate: {summary["win_rate"]:.1%}
+• Total P&L: ${summary["total_pnl"]:.2f}
+
+<b>System:</b>
+• Errors: {summary["error_count"]}
+
+<b>Export-Pfad:</b>
+<code>{result["export_path"]}</code>
+
+<i>Bereit für wöchentliche Claude Code Analyse.</i>
+"""
+        telegram.send(message)
+        logger.info(f"Weekly export completed: {result['export_path']}")
+
+    except Exception as e:
+        logger.exception(f"Weekly Export Error: {e}")
+        trading_logger.error("Weekly export failed", e, {"task": "weekly_export"})
+        telegram.send_error(str(e), context="Weekly Export")
+
+
+def task_system_health_check():
+    """
+    Prüft Systemgesundheit und loggt Metriken.
+    Läuft alle 6 Stunden.
+    """
+    logger.info("Running system health check...")
+
+    try:
+        import psutil
+
+        # Memory usage
+        memory = psutil.virtual_memory()
+        memory_usage_mb = memory.used / (1024 * 1024)
+
+        # DB status
+        conn = get_db_connection()
+        db_status = "healthy" if conn else "unavailable"
+        if conn:
+            conn.close()
+
+        # API status (quick check)
+        try:
+            btc_price = market_data.get_price("BTCUSDT")
+            api_status = "healthy" if btc_price > 0 else "degraded"
+        except Exception:
+            api_status = "unavailable"
+
+        overall_status = "healthy"
+        if db_status != "healthy" or api_status != "healthy":
+            overall_status = "degraded"
+
+        # Log health
+        trading_logger.system_health(
+            status=overall_status,
+            api_status=api_status,
+            db_status=db_status,
+            memory_usage_mb=memory_usage_mb,
+        )
+
+        if overall_status != "healthy":
+            telegram.send(f"⚠️ <b>System Health Warning</b>\n\nDB: {db_status}\nAPI: {api_status}")
+
+    except ImportError:
+        # psutil not available, skip detailed metrics
+        trading_logger.system_health(
+            status="unknown",
+            api_status="unknown",
+            db_status="unknown",
+        )
+    except Exception as e:
+        logger.error(f"Health Check Error: {e}")
+        trading_logger.error("Health check failed", e, {"task": "health_check"})
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -528,6 +641,12 @@ def main():
 
     # Playbook Update wöchentlich Sonntag 19:00 (nach Rebalancing)
     schedule.every().sunday.at("19:00").do(task_update_playbook)
+
+    # Weekly Export Samstag 23:00 (vor Sonntags-Analyse)
+    schedule.every().saturday.at("23:00").do(task_weekly_export)
+
+    # System Health Check alle 6 Stunden
+    schedule.every(6).hours.do(task_system_health_check)
 
     logger.info("Scheduled jobs:")
     for job in schedule.get_jobs():

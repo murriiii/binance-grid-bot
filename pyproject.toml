@@ -120,6 +120,8 @@ ignore = [
     "RUF010",  # Use explicit conversion flag
     "ARG001",  # Unused function argument (often needed for callbacks)
     "ARG002",  # Unused method argument
+    "PLE1205", # False positive for custom logger methods (TradingLogger.error)
+    "SIM105",  # contextlib.suppress - prefer explicit try/except for clarity
 ]
 
 # Allow autofix for all enabled rules

@@ -1,0 +1,3 @@
+# Weekly analysis exports for Claude Code
+# These exports contain trading data summaries for optimization
+# See src/analysis/weekly_export.py for export implementation
