@@ -135,7 +135,7 @@ class TestHybridConfigFromCohort:
         assert hc.allowed_categories == ("LARGE_CAP",)
         assert hc.total_investment == 100
         assert hc.max_symbols == 3
-        assert hc.portfolio_constraints_preset == "conservative"
+        assert hc.portfolio_constraints_preset == "small"
 
     def test_from_cohort_aggressive(self):
         from src.core.cohort_manager import Cohort, CohortConfig
@@ -164,7 +164,7 @@ class TestHybridConfigFromCohort:
             "MEME",
         )
         assert hc.total_investment == 95
-        assert hc.portfolio_constraints_preset == "aggressive"
+        assert hc.portfolio_constraints_preset == "small"
 
     def test_from_cohort_validates(self):
         from src.core.cohort_manager import Cohort, CohortConfig
@@ -350,7 +350,7 @@ class TestAllowedCategories:
         hc = HybridConfig.from_cohort(cohort)
         # Override should take priority over risk_tolerance mapping
         assert hc.allowed_categories == ("DEFI", "AI")
-        assert hc.portfolio_constraints_preset == "aggressive"
+        assert hc.portfolio_constraints_preset == "small"
 
     def test_from_cohort_meme_override(self):
         from src.core.cohort_manager import Cohort, CohortConfig

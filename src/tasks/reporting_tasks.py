@@ -189,6 +189,19 @@ def _build_cohort_status() -> str:
         finally:
             conn.close()
 
+    # Pre-fetch all balances once (much faster than per-symbol queries)
+    balances = {}
+    if client:
+        try:
+            account = client.client.get_account()
+            for b in account.get("balances", []):
+                free = float(b["free"])
+                locked = float(b["locked"])
+                if free > 0 or locked > 0:
+                    balances[b["asset"]] = free + locked
+        except Exception as e:
+            logger.debug(f"Failed to fetch balances: {e}")
+
     lines = ["<b>📊 PORTFOLIO DASHBOARD</b>", "━━━━━━━━━━━━━━━━━━━━━"]
 
     # Totals for footer
@@ -212,6 +225,7 @@ def _build_cohort_status() -> str:
 
             total_investment = state.get("config", {}).get("total_investment", starting)
             total_allocated = 0.0
+            cohort_market_value = 0.0
             coin_rows = []
 
             for sym, sdata in state.get("symbols", {}).items():
@@ -221,6 +235,7 @@ def _build_cohort_status() -> str:
 
                 price_str = "—"
                 order_str = "—"
+                mkt_val = 0.0
                 if client:
                     try:
                         price = client.get_current_price(sym)
@@ -229,18 +244,29 @@ def _build_cohort_status() -> str:
                         n_sell = sum(1 for o in orders if o["side"] == "SELL")
                         price_str = _format_price(price) if price else "—"
                         order_str = f"{n_buy}B/{n_sell}S"
+
+                        # Calculate market value from held balance + locked in orders
+                        held = balances.get(base, 0)
+                        if price and held > 0:
+                            mkt_val = held * price
                     except Exception:
                         pass
 
-                alloc_str = f"${alloc:.0f}" if alloc >= 1 else "—"
-                coin_rows.append(f"  {base:<6s} {price_str:>8s}  {alloc_str:>5s}  {order_str}")
+                # Show market value instead of static allocation
+                val_str = f"${mkt_val:.0f}" if mkt_val >= 1 else f"${alloc:.0f}"
+                cohort_market_value += mkt_val if mkt_val >= 1 else alloc
+                coin_rows.append(f"  {base:<6s} {price_str:>8s}  {val_str:>5s}  {order_str}")
 
             cash_reserve = total_investment - total_allocated
-            alloc_pct = total_allocated / total_investment * 100 if total_investment else 0
+            # Total current value = cash reserve + market value of positions
+            current_value = cash_reserve + cohort_market_value
 
             realized_pnl = db_info.get("realized_pnl", 0.0) if db_info else 0.0
             trade_count = db_info.get("trade_count", 0) if db_info else 0
-            current_value = total_investment + realized_pnl
+
+            # Unrealized P&L = market value vs allocation cost
+            unrealized_pnl = cohort_market_value - total_allocated
+            total_pnl = realized_pnl + unrealized_pnl
 
             # Accumulate totals
             total_starting += starting
@@ -248,26 +274,30 @@ def _build_cohort_status() -> str:
             total_trades += trade_count
             total_coins += len(coin_rows)
 
-            # P&L percentage
-            if starting > 0 and realized_pnl != 0:
-                pnl_pct = realized_pnl / starting * 100
-                value_str = f"${starting:,.0f} → ${current_value:,.2f} ({pnl_pct:+.1f}%)"
+            # P&L percentage based on total (realized + unrealized)
+            if starting > 0 and total_pnl != 0:
+                pnl_pct = total_pnl / starting * 100
+                value_str = f"${starting:,.0f} → ${current_value:,.0f} ({pnl_pct:+.1f}%)"
             else:
-                value_str = f"${starting:,.0f} → ${current_value:,.2f} (±0.0%)"
+                value_str = f"${starting:,.0f} → ${current_value:,.0f} (±0.0%)"
 
             emoji = COHORT_EMOJIS.get(cohort_name, "🤖")
-            status = _status_emoji(realized_pnl, trade_count)
+            status = _status_emoji(total_pnl, 1 if total_allocated > 0 else 0)
             mode = state.get("current_mode", "?")
 
             lines.append(f"\n{emoji} <b>{cohort_name.upper()}</b>  {status}")
             lines.append(f"<code>{value_str}</code>")
             lines.append(f"⚙️ Grid {grid_pct}% | Mode: {mode}")
+
+            alloc_pct = total_allocated / total_investment * 100 if total_investment else 0
             lines.append(
                 f"💰 ${total_allocated:,.0f} inv. ({alloc_pct:.0f}%) · 💵 ${cash_reserve:,.0f} cash"
             )
 
+            if unrealized_pnl != 0:
+                lines.append(f"📊 uP&L: <b>{unrealized_pnl:+.2f}$</b>")
             if trade_count > 0:
-                lines.append(f"📈 <b>{realized_pnl:+.2f}$</b> · {trade_count} Trades")
+                lines.append(f"📈 rP&L: <b>{realized_pnl:+.2f}$</b> · {trade_count} Trades")
 
             if coin_rows:
                 lines.append("<code>" + "\n".join(coin_rows) + "</code>")
@@ -284,7 +314,7 @@ def _build_cohort_status() -> str:
         lines.append("\n━━━━━━━━━━━━━━━━━━━━━")
         lines.append(
             f"📈 <b>Total:</b> ${total_starting:,.0f} → "
-            f"${total_current:,.2f} ({total_pnl_pct:+.1f}%)"
+            f"${total_current:,.0f} ({total_pnl_pct:+.1f}%)"
         )
         n_bots = len(state_files)
         lines.append(f"🤖 {n_bots} Bots · {total_coins} Coins · {total_trades} Trades")

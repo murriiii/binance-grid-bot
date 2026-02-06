@@ -109,17 +109,16 @@ class HybridConfig:
         Maps CohortConfig fields to HybridConfig equivalents,
         falling back to env vars for fields not in CohortConfig.
         """
-        # Map risk tolerance → constraint preset and categories
+        # Map risk tolerance → categories (preset is always "small" during learning phase
+        # since $1000 per cohort with max 3 coins needs generous per-coin limits)
         risk = cohort.config.risk_tolerance
         if risk == "low":
-            preset = "conservative"
             categories = ("LARGE_CAP",)
         elif risk == "high":
-            preset = "aggressive"
             categories = ("LARGE_CAP", "MID_CAP", "L2", "DEFI", "AI", "GAMING", "MEME")
         else:
-            preset = "balanced"
             categories = ("LARGE_CAP", "MID_CAP", "L2")
+        preset = "small"
 
         # Explicit override from CohortConfig takes priority
         if cohort.config.allowed_categories:

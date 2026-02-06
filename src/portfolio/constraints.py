@@ -239,10 +239,10 @@ AGGRESSIVE_CONSTRAINTS = AllocationConstraints(
 SMALL_PORTFOLIO_CONSTRAINTS = AllocationConstraints(
     max_per_coin_pct=40.0,
     min_position_usd=10.0,
-    max_position_usd=80.0,
+    max_position_usd=500.0,
     max_per_category_pct=50.0,
-    # Override defaults — with only $100 per cohort the default GAMING=10%
-    # ($10 max) falls below min_position after Kelly adjustment.
+    # Override defaults — learning phase with $1000 per cohort and max 3 coins
+    # needs generous per-category limits so Kelly-adjusted positions stay above min.
     category_limits={
         "LARGE_CAP": 50.0,
         "MID_CAP": 40.0,
