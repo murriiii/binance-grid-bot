@@ -1,3 +1,9 @@
+## v1.10.2 (2026-02-06)
+
+### Fix
+
+- resolve Decimal type error and per-cohort balance in /report
+
 ## v1.10.1 (2026-02-06)
 
 ### Fix
