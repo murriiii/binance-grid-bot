@@ -1,3 +1,9 @@
+## v1.14.1 (2026-02-06)
+
+### Fix
+
+- increase allocation limits and add live unrealized P&L to dashboard
+
 ## v1.14.0 (2026-02-06)
 
 ### Feat
