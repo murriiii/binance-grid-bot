@@ -6,10 +6,10 @@ Konsolidiert alle Marktdaten-Abfragen mit Caching.
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Optional
 
 from src.api.http_client import HTTPClientError, cached, get_http_client
 from src.core.config import get_config
+from src.utils.singleton import SingletonMixin
 
 logger = logging.getLogger("trading_bot")
 
@@ -34,7 +34,7 @@ class PriceData:
     timestamp: datetime
 
 
-class MarketDataProvider:
+class MarketDataProvider(SingletonMixin):
     """
     Zentraler Provider für alle Marktdaten.
 
@@ -50,8 +50,6 @@ class MarketDataProvider:
         price = market.get_price("BTCUSDT")
     """
 
-    _instance: Optional["MarketDataProvider"] = None
-
     def __init__(self):
         self.http = get_http_client()
         self.config = get_config()
@@ -59,13 +57,6 @@ class MarketDataProvider:
         # Cache für Preise (in-memory, kurze TTL)
         self._price_cache: dict[str, tuple] = {}
         self._cache_ttl = 60  # 1 Minute für Preise
-
-    @classmethod
-    def get_instance(cls) -> "MarketDataProvider":
-        """Singleton-Instanz"""
-        if cls._instance is None:
-            cls._instance = cls()
-        return cls._instance
 
     @cached(ttl_seconds=300)  # 5 Minuten Cache
     def get_fear_greed(self) -> FearGreedData:

@@ -23,6 +23,7 @@ from src.portfolio.constraints import (
     SMALL_PORTFOLIO_CONSTRAINTS,
     AllocationConstraints,
 )
+from src.utils.singleton import SingletonMixin
 
 logger = logging.getLogger("trading_bot")
 
@@ -47,10 +48,8 @@ EMERGENCY_BEAR_PROBABILITY = 0.85
 MAX_TRANSITIONS_48H = 2
 
 
-class ModeManager:
+class ModeManager(SingletonMixin):
     """Manages trading mode with hysteresis-based transitions."""
-
-    _instance: ModeManager | None = None
 
     def __init__(self, config: HybridConfig | None = None):
         self.config = config or HybridConfig()
@@ -59,16 +58,6 @@ class ModeManager:
         )
         self._transition_history: list[ModeTransitionEvent] = []
         self._locked_mode: TradingMode | None = None
-
-    @classmethod
-    def get_instance(cls, config: HybridConfig | None = None) -> ModeManager:
-        if cls._instance is None:
-            cls._instance = cls(config)
-        return cls._instance
-
-    @classmethod
-    def reset_instance(cls) -> None:
-        cls._instance = None
 
     def get_current_mode(self) -> ModeState:
         return self._state

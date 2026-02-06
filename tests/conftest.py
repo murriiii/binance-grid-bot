@@ -5,7 +5,7 @@ Pytest Fixtures und Konfiguration
 import sys
 from datetime import datetime
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -232,8 +232,78 @@ def mock_db_connection():
 
 
 # ═══════════════════════════════════════════════════════════════
+# GRIDBOT FIXTURES
+# ═══════════════════════════════════════════════════════════════
+
+
+@pytest.fixture
+def bot_config():
+    return {
+        "symbol": "BTCUSDT",
+        "investment": 100,
+        "num_grids": 3,
+        "grid_range_percent": 5,
+        "testnet": True,
+    }
+
+
+@pytest.fixture
+def mock_binance():
+    with patch("src.core.bot.BinanceClient") as mock_cls:
+        client = MagicMock()
+        client.get_account_balance.return_value = 1000.0
+        client.get_current_price.return_value = 50000.0
+        client.get_symbol_info.return_value = {
+            "min_qty": 0.00001,
+            "max_qty": 9000.0,
+            "step_size": 0.00001,
+            "tick_size": 0.01,
+            "min_notional": 5.0,
+        }
+        client.get_open_orders.return_value = []
+        client.place_limit_buy.return_value = {
+            "success": True,
+            "order": {"orderId": 100},
+        }
+        client.place_limit_sell.return_value = {
+            "success": True,
+            "order": {"orderId": 200},
+        }
+        mock_cls.return_value = client
+        yield client
+
+
+@pytest.fixture
+def bot(bot_config, mock_binance):
+    """Create a GridBot with mocked dependencies."""
+    from src.core.bot import GridBot
+
+    with (
+        patch("src.core.bot.TelegramNotifier"),
+        patch.object(GridBot, "_init_memory"),
+        patch.object(GridBot, "_init_stop_loss"),
+        patch.object(GridBot, "_init_risk_modules"),
+    ):
+        b = GridBot(bot_config)
+        b.client = mock_binance
+        b.stop_loss_manager = None
+        b.cvar_sizer = None
+        b.allocation_constraints = None
+        return b
+
+
+# ═══════════════════════════════════════════════════════════════
 # NEW MODULE FIXTURES (Phase 1-5)
 # ═══════════════════════════════════════════════════════════════
+
+
+def _all_singleton_subclasses(cls):
+    """Recursively collect all subclasses of SingletonMixin."""
+    result = []
+    for sub in cls.__subclasses__():
+        result.append(sub)
+        result.extend(_all_singleton_subclasses(sub))
+    return result
 
 
 @pytest.fixture
@@ -241,104 +311,10 @@ def reset_new_singletons():
     """Resettet alle neuen Singletons zwischen Tests"""
     yield
 
-    # Reset all new singletons
-    try:
-        from src.core.cohort_manager import CohortManager
+    from src.utils.singleton import SingletonMixin
 
-        CohortManager.reset_instance()
-    except ImportError:
-        pass
-
-    try:
-        from src.core.cycle_manager import CycleManager
-
-        CycleManager.reset_instance()
-    except ImportError:
-        pass
-
-    try:
-        from src.analysis.signal_analyzer import SignalAnalyzer
-
-        SignalAnalyzer.reset_instance()
-    except ImportError:
-        pass
-
-    try:
-        from src.analysis.metrics_calculator import MetricsCalculator
-
-        MetricsCalculator.reset_instance()
-    except ImportError:
-        pass
-
-    try:
-        from src.analysis.regime_detection import RegimeDetector
-
-        RegimeDetector.reset_instance()
-    except ImportError:
-        pass
-
-    try:
-        from src.analysis.bayesian_weights import BayesianWeightLearner
-
-        BayesianWeightLearner.reset_instance()
-    except ImportError:
-        pass
-
-    try:
-        from src.analysis.divergence_detector import DivergenceDetector
-
-        DivergenceDetector.reset_instance()
-    except ImportError:
-        pass
-
-    try:
-        from src.data.social_sentiment import SocialSentimentProvider
-
-        SocialSentimentProvider.reset_instance()
-    except ImportError:
-        pass
-
-    try:
-        from src.data.etf_flows import ETFFlowTracker
-
-        ETFFlowTracker.reset_instance()
-    except ImportError:
-        pass
-
-    try:
-        from src.data.token_unlocks import TokenUnlockTracker
-
-        TokenUnlockTracker.reset_instance()
-    except ImportError:
-        pass
-
-    try:
-        from src.optimization.ab_testing import ABTestingFramework
-
-        ABTestingFramework.reset_instance()
-    except ImportError:
-        pass
-
-    try:
-        from src.risk.cvar_sizing import CVaRPositionSizer
-
-        CVaRPositionSizer.reset_instance()
-    except ImportError:
-        pass
-
-    try:
-        from src.strategies.dynamic_grid import DynamicGridStrategy
-
-        DynamicGridStrategy.reset_instance()
-    except ImportError:
-        pass
-
-    try:
-        from src.core.mode_manager import ModeManager
-
-        ModeManager.reset_instance()
-    except ImportError:
-        pass
+    for cls in _all_singleton_subclasses(SingletonMixin):
+        cls.reset_instance()
 
 
 @pytest.fixture

@@ -24,6 +24,8 @@ from typing import Any
 import numpy as np
 from dotenv import load_dotenv
 
+from src.utils.singleton import SingletonMixin
+
 load_dotenv()
 
 logger = logging.getLogger("trading_bot")
@@ -81,7 +83,7 @@ CONFIDENCE_LEVEL = 0.95  # 95% CVaR
 LOOKBACK_DAYS = 30  # Tage für historische Berechnung
 
 
-class CVaRPositionSizer:
+class CVaRPositionSizer(SingletonMixin):
     """
     Position Sizing basierend auf Conditional Value at Risk.
 
@@ -93,26 +95,12 @@ class CVaRPositionSizer:
     5. Regime-aware Adjustments
     """
 
-    _instance = None
-
     def __init__(self):
         self.conn = None
         self._connect_db()
 
         # Cache für historische Daten
         self._returns_cache: dict[str, tuple[datetime, np.ndarray]] = {}
-
-    @classmethod
-    def get_instance(cls) -> "CVaRPositionSizer":
-        """Singleton Pattern"""
-        if cls._instance is None:
-            cls._instance = cls()
-        return cls._instance
-
-    @classmethod
-    def reset_instance(cls):
-        """Reset für Tests"""
-        cls._instance = None
 
     def _connect_db(self):
         """Verbinde mit PostgreSQL"""

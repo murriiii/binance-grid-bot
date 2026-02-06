@@ -22,6 +22,8 @@ from typing import Any
 
 from dotenv import load_dotenv
 
+from src.utils.singleton import SingletonMixin
+
 load_dotenv()
 
 logger = logging.getLogger("trading_bot")
@@ -101,7 +103,7 @@ class Cohort:
         return not fear_greed > self.config.max_fear_greed
 
 
-class CohortManager:
+class CohortManager(SingletonMixin):
     """
     Verwaltet parallele Strategie-Varianten für A/B/C/D Testing.
 
@@ -112,25 +114,11 @@ class CohortManager:
     4. Ermöglicht Vergleich zwischen Strategien
     """
 
-    _instance = None
-
     def __init__(self):
         self.conn = None
         self.cohorts: dict[str, Cohort] = {}
         self._connect()
         self._load_cohorts()
-
-    @classmethod
-    def get_instance(cls) -> "CohortManager":
-        """Singleton Pattern"""
-        if cls._instance is None:
-            cls._instance = cls()
-        return cls._instance
-
-    @classmethod
-    def reset_instance(cls):
-        """Reset für Tests"""
-        cls._instance = None
 
     def _connect(self):
         """Verbinde mit PostgreSQL"""

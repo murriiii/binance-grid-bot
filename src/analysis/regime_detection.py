@@ -23,6 +23,8 @@ from typing import Any
 import numpy as np
 from dotenv import load_dotenv
 
+from src.utils.singleton import SingletonMixin
+
 load_dotenv()
 
 logger = logging.getLogger("trading_bot")
@@ -73,7 +75,7 @@ class RegimeState:
     model_confidence: float
 
 
-class RegimeDetector:
+class RegimeDetector(SingletonMixin):
     """
     Hidden Markov Model für Markt-Regime Erkennung.
 
@@ -92,8 +94,6 @@ class RegimeDetector:
     NUM_STATES = 3
     REGIME_MAPPING = {0: MarketRegime.BULL, 1: MarketRegime.BEAR, 2: MarketRegime.SIDEWAYS}
 
-    _instance = None
-
     def __init__(self):
         self.conn = None
         self.model = None
@@ -103,23 +103,6 @@ class RegimeDetector:
 
         self._connect_db()
         self._initialize_model()
-
-    @classmethod
-    def get_instance(cls) -> "RegimeDetector":
-        """Singleton Pattern"""
-        if cls._instance is None:
-            cls._instance = cls()
-        return cls._instance
-
-    @classmethod
-    def reset_instance(cls):
-        """Reset für Tests"""
-        if cls._instance is not None:
-            try:
-                cls._instance.close()
-            except Exception:
-                pass
-        cls._instance = None
 
     def _connect_db(self):
         """Verbinde mit PostgreSQL"""

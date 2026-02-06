@@ -21,6 +21,8 @@ from typing import Any
 
 from dotenv import load_dotenv
 
+from src.utils.singleton import SingletonMixin
+
 load_dotenv()
 
 logger = logging.getLogger("trading_bot")
@@ -83,7 +85,7 @@ DEFAULT_WEIGHTS = {
 }
 
 
-class SignalAnalyzer:
+class SignalAnalyzer(SingletonMixin):
     """
     Analysiert und speichert Signal-Komponenten für jeden Trade.
 
@@ -94,25 +96,11 @@ class SignalAnalyzer:
     4. Speichert alles für spätere Analyse
     """
 
-    _instance = None
-
     def __init__(self):
         self.conn = None
         self.current_weights = DEFAULT_WEIGHTS.copy()
         self._connect()
         self._load_latest_weights()
-
-    @classmethod
-    def get_instance(cls) -> "SignalAnalyzer":
-        """Singleton Pattern"""
-        if cls._instance is None:
-            cls._instance = cls()
-        return cls._instance
-
-    @classmethod
-    def reset_instance(cls):
-        """Reset für Tests"""
-        cls._instance = None
 
     def _connect(self):
         """Verbinde mit PostgreSQL"""

@@ -24,6 +24,7 @@ from src.portfolio.constraints import (
     AllocationConstraints,
 )
 from src.scanner.opportunity import Opportunity, OpportunityRisk
+from src.utils.singleton import SingletonMixin
 
 load_dotenv()
 
@@ -59,7 +60,7 @@ class AllocationResult:
         }
 
 
-class PortfolioAllocator:
+class PortfolioAllocator(SingletonMixin):
     """
     Verteilt Kapital intelligent auf Coins.
 
@@ -77,8 +78,6 @@ class PortfolioAllocator:
         )
     """
 
-    _instance: PortfolioAllocator | None = None
-
     def __init__(
         self,
         constraints: AllocationConstraints | None = None,
@@ -89,20 +88,11 @@ class PortfolioAllocator:
         self._correlations: dict[tuple[str, str], float] = {}
         self.connect()
 
-    @classmethod
-    def get_instance(cls) -> PortfolioAllocator:
-        """Singleton-Instanz."""
-        if cls._instance is None:
-            cls._instance = cls()
-        return cls._instance
-
-    @classmethod
-    def reset_instance(cls) -> None:
-        """Reset für Tests."""
-        if cls._instance is not None:
-            if cls._instance.conn:
-                cls._instance.conn.close()
-            cls._instance = None
+    def close(self) -> None:
+        """Schließe DB-Verbindung."""
+        if self.conn:
+            self.conn.close()
+            self.conn = None
 
     def connect(self) -> bool:
         """Verbindet zur PostgreSQL Datenbank."""
@@ -514,4 +504,4 @@ class PortfolioAllocator:
 # Convenience-Funktion
 def get_portfolio_allocator() -> PortfolioAllocator:
     """Gibt die globale PortfolioAllocator-Instanz zurück."""
-    return PortfolioAllocator.get_instance()
+    return PortfolioAllocator.get_instance()  # type: ignore[no-any-return]

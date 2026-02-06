@@ -27,6 +27,8 @@ from typing import Any
 import numpy as np
 from dotenv import load_dotenv
 
+from src.utils.singleton import SingletonMixin
+
 load_dotenv()
 
 logger = logging.getLogger("trading_bot")
@@ -121,7 +123,7 @@ MIN_LOOKBACK = 10
 DEFAULT_LOOKBACK = 30
 
 
-class DivergenceDetector:
+class DivergenceDetector(SingletonMixin):
     """
     Erkennt Divergenzen zwischen Preis und technischen Indikatoren.
 
@@ -132,24 +134,10 @@ class DivergenceDetector:
     4. Konsens-Signal aus mehreren Divergenzen
     """
 
-    _instance = None
-
     def __init__(self):
         self.conn = None
         self.http = get_http_client() if get_http_client else None
         self._connect_db()
-
-    @classmethod
-    def get_instance(cls) -> "DivergenceDetector":
-        """Singleton Pattern"""
-        if cls._instance is None:
-            cls._instance = cls()
-        return cls._instance
-
-    @classmethod
-    def reset_instance(cls):
-        """Reset für Tests"""
-        cls._instance = None
 
     def _connect_db(self):
         """Verbinde mit PostgreSQL"""

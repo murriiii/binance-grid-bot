@@ -31,6 +31,8 @@ from typing import Any
 import numpy as np
 from dotenv import load_dotenv
 
+from src.utils.singleton import SingletonMixin
+
 load_dotenv()
 
 logger = logging.getLogger("trading_bot")
@@ -151,7 +153,7 @@ DEFAULT_MAX_DURATION = 14  # Tage
 DEFAULT_ALPHA = 0.05  # Signifikanz-Level
 
 
-class ABTestingFramework:
+class ABTestingFramework(SingletonMixin):
     """
     Framework für A/B Testing von Trading-Strategien.
 
@@ -162,25 +164,11 @@ class ABTestingFramework:
     4. Promotion der besten Variante
     """
 
-    _instance = None
-
     def __init__(self):
         self.conn = None
         self.experiments: dict[str, Experiment] = {}
         self._connect_db()
         self._load_experiments()
-
-    @classmethod
-    def get_instance(cls) -> "ABTestingFramework":
-        """Singleton Pattern"""
-        if cls._instance is None:
-            cls._instance = cls()
-        return cls._instance
-
-    @classmethod
-    def reset_instance(cls):
-        """Reset für Tests"""
-        cls._instance = None
 
     def _connect_db(self):
         """Verbinde mit PostgreSQL"""

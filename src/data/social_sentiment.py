@@ -17,6 +17,8 @@ from typing import Any
 
 from dotenv import load_dotenv
 
+from src.utils.singleton import SingletonMixin
+
 load_dotenv()
 
 logger = logging.getLogger("trading_bot")
@@ -74,7 +76,7 @@ class SocialMetrics:
     sentiment_trend: str | None  # RISING, FALLING, STABLE
 
 
-class SocialSentimentProvider:
+class SocialSentimentProvider(SingletonMixin):
     """
     Aggregiert Social Sentiment aus mehreren Quellen.
 
@@ -88,8 +90,6 @@ class SocialSentimentProvider:
     LUNARCRUSH_BASE_URL = "https://lunarcrush.com/api4/public"
     REDDIT_SUBREDDITS = ["cryptocurrency", "bitcoin", "ethtrader", "CryptoMarkets"]
 
-    _instance = None
-
     def __init__(self):
         self.conn = None
         self.http = get_http_client() if get_http_client else None
@@ -98,23 +98,6 @@ class SocialSentimentProvider:
 
         self._connect_db()
         self._init_reddit()
-
-    @classmethod
-    def get_instance(cls) -> "SocialSentimentProvider":
-        """Singleton Pattern"""
-        if cls._instance is None:
-            cls._instance = cls()
-        return cls._instance
-
-    @classmethod
-    def reset_instance(cls):
-        """Reset für Tests"""
-        if cls._instance is not None:
-            try:
-                cls._instance.close()
-            except Exception:
-                pass
-        cls._instance = None
 
     def _connect_db(self):
         """Verbinde mit PostgreSQL"""

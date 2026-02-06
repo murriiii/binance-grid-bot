@@ -26,6 +26,8 @@ from typing import Any
 import numpy as np
 from dotenv import load_dotenv
 
+from src.utils.singleton import SingletonMixin
+
 load_dotenv()
 
 logger = logging.getLogger("trading_bot")
@@ -93,7 +95,7 @@ MIN_WEIGHT = 0.02
 MAX_WEIGHT = 0.30
 
 
-class BayesianWeightLearner:
+class BayesianWeightLearner(SingletonMixin):
     """
     Lernt optimale Signal-Gewichte aus historischen Trade-Daten.
 
@@ -103,8 +105,6 @@ class BayesianWeightLearner:
     3. Decay für ältere Daten (neuere Daten zählen mehr)
     4. Confidence-basierte Weight-Updates
     """
-
-    _instance = None
 
     def __init__(self):
         self.conn = None
@@ -116,23 +116,6 @@ class BayesianWeightLearner:
 
         # Lade gespeicherte Weights
         self._load_weights_from_db()
-
-    @classmethod
-    def get_instance(cls) -> "BayesianWeightLearner":
-        """Singleton Pattern"""
-        if cls._instance is None:
-            cls._instance = cls()
-        return cls._instance
-
-    @classmethod
-    def reset_instance(cls):
-        """Reset für Tests"""
-        if cls._instance is not None:
-            try:
-                cls._instance.close()
-            except Exception:
-                pass
-        cls._instance = None
 
     def _connect_db(self):
         """Verbinde mit PostgreSQL"""

@@ -25,6 +25,8 @@ from typing import Any
 import numpy as np
 from dotenv import load_dotenv
 
+from src.utils.singleton import SingletonMixin
+
 load_dotenv()
 
 logger = logging.getLogger("trading_bot")
@@ -128,7 +130,7 @@ MIN_SPACING_PCT = 0.005  # 0.5%
 MAX_SPACING_PCT = 0.10  # 10%
 
 
-class DynamicGridStrategy:
+class DynamicGridStrategy(SingletonMixin):
     """
     Erstellt dynamische, volatilitäts-adaptive Grids.
 
@@ -139,8 +141,6 @@ class DynamicGridStrategy:
     4. Regime-aware Anpassungen
     """
 
-    _instance = None
-
     def __init__(self):
         self.conn = None
         self.http = get_http_client() if get_http_client else None
@@ -149,23 +149,6 @@ class DynamicGridStrategy:
         # Cache with max size to prevent memory leak (B6)
         self._price_cache: dict[str, tuple[datetime, dict]] = {}
         self._max_cache_size: int = 50
-
-    @classmethod
-    def get_instance(cls) -> "DynamicGridStrategy":
-        """Singleton Pattern"""
-        if cls._instance is None:
-            cls._instance = cls()
-        return cls._instance
-
-    @classmethod
-    def reset_instance(cls):
-        """Reset für Tests"""
-        if cls._instance is not None:
-            try:
-                cls._instance.close()
-            except Exception:
-                pass
-        cls._instance = None
 
     def _connect_db(self):
         """Verbinde mit PostgreSQL"""

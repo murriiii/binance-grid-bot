@@ -22,6 +22,8 @@ from typing import Any
 
 from dotenv import load_dotenv
 
+from src.utils.singleton import SingletonMixin
+
 load_dotenv()
 
 logger = logging.getLogger("trading_bot")
@@ -80,7 +82,7 @@ class ETFFlowData:
     estimated_price_impact_pct: float | None
 
 
-class ETFFlowTracker:
+class ETFFlowTracker(SingletonMixin):
     """
     Trackt ETF Flows für institutionelles Sentiment.
 
@@ -94,29 +96,10 @@ class ETFFlowTracker:
     FARSIDE_URL = "https://farside.co.uk/bitcoin-etf-flow-all-data/"
     SOSOVALUE_API = "https://api.sosovalue.xyz/v1"
 
-    _instance = None
-
     def __init__(self):
         self.conn = None
         self.http = get_http_client() if get_http_client else None
         self._connect_db()
-
-    @classmethod
-    def get_instance(cls) -> "ETFFlowTracker":
-        """Singleton Pattern"""
-        if cls._instance is None:
-            cls._instance = cls()
-        return cls._instance
-
-    @classmethod
-    def reset_instance(cls):
-        """Reset für Tests"""
-        if cls._instance is not None:
-            try:
-                cls._instance.close()
-            except Exception:
-                pass
-        cls._instance = None
 
     def _connect_db(self):
         """Verbinde mit PostgreSQL"""

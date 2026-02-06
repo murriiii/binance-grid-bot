@@ -25,6 +25,8 @@ from typing import Any
 import numpy as np
 from dotenv import load_dotenv
 
+from src.utils.singleton import SingletonMixin
+
 load_dotenv()
 
 logger = logging.getLogger("trading_bot")
@@ -90,7 +92,7 @@ class PositionSizeResult:
     constraints_hit: list[str]
 
 
-class MetricsCalculator:
+class MetricsCalculator(SingletonMixin):
     """
     Berechnet alle mathematischen Metriken und persistiert sie.
 
@@ -106,23 +108,9 @@ class MetricsCalculator:
     TRADING_DAYS_PER_YEAR = 365  # Crypto 24/7
     MAX_RISK_BUDGET_PCT = 2.0  # Max 2% Portfolio pro Trade
 
-    _instance = None
-
     def __init__(self):
         self.conn = None
         self._connect()
-
-    @classmethod
-    def get_instance(cls) -> "MetricsCalculator":
-        """Singleton Pattern"""
-        if cls._instance is None:
-            cls._instance = cls()
-        return cls._instance
-
-    @classmethod
-    def reset_instance(cls):
-        """Reset für Tests"""
-        cls._instance = None
 
     def _connect(self):
         """Verbinde mit PostgreSQL"""

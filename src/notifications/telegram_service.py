@@ -7,9 +7,9 @@ import io
 import logging
 import os
 from datetime import datetime
-from typing import Optional
 
 from src.api.http_client import HTTPClientError, get_http_client
+from src.utils.singleton import SingletonMixin
 
 logger = logging.getLogger("trading_bot")
 
@@ -17,7 +17,7 @@ logger = logging.getLogger("trading_bot")
 TELEGRAM_MAX_MESSAGE_LENGTH = 4096
 
 
-class TelegramService:
+class TelegramService(SingletonMixin):
     """
     Zentraler Service für alle Telegram-Benachrichtigungen.
 
@@ -34,8 +34,6 @@ class TelegramService:
         telegram.send_urgent("Alert!")
     """
 
-    _instance: Optional["TelegramService"] = None
-
     def __init__(self):
         self.token = os.getenv("TELEGRAM_BOT_TOKEN")
         self.chat_id = os.getenv("TELEGRAM_CHAT_ID")
@@ -47,13 +45,6 @@ class TelegramService:
             logger.warning("Telegram Service nicht konfiguriert (Token oder Chat-ID fehlt)")
         if self.learning_mode:
             logger.info("Telegram Learning Mode aktiv: nur Daily Summary wird gesendet")
-
-    @classmethod
-    def get_instance(cls) -> "TelegramService":
-        """Singleton-Instanz"""
-        if cls._instance is None:
-            cls._instance = cls()
-        return cls._instance
 
     def send(
         self, message: str, parse_mode: str = "HTML", disable_notification: bool = False

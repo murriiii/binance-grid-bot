@@ -21,6 +21,8 @@ from typing import Any
 
 from dotenv import load_dotenv
 
+from src.utils.singleton import SingletonMixin
+
 load_dotenv()
 
 logger = logging.getLogger("trading_bot")
@@ -88,7 +90,7 @@ MAJOR_UNLOCKS = [
 ]
 
 
-class TokenUnlockTracker:
+class TokenUnlockTracker(SingletonMixin):
     """
     Trackt Token Unlocks für Supply-basierte Signale.
 
@@ -102,30 +104,11 @@ class TokenUnlockTracker:
     TOKEN_UNLOCKS_API = "https://api.tokenunlocks.app/v1"
     CRYPTORANK_API = "https://api.cryptorank.io/v1"
 
-    _instance = None
-
     def __init__(self):
         self.conn = None
         self.http = get_http_client() if get_http_client else None
         self.api_key = os.getenv("TOKEN_UNLOCKS_API_KEY")
         self._connect_db()
-
-    @classmethod
-    def get_instance(cls) -> "TokenUnlockTracker":
-        """Singleton Pattern"""
-        if cls._instance is None:
-            cls._instance = cls()
-        return cls._instance
-
-    @classmethod
-    def reset_instance(cls):
-        """Reset für Tests"""
-        if cls._instance is not None:
-            try:
-                cls._instance.close()
-            except Exception:
-                pass
-        cls._instance = None
 
     def _connect_db(self):
         """Verbinde mit PostgreSQL"""

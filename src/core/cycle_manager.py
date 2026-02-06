@@ -22,6 +22,8 @@ from typing import Any
 
 from dotenv import load_dotenv
 
+from src.utils.singleton import SingletonMixin
+
 load_dotenv()
 
 logger = logging.getLogger("trading_bot")
@@ -77,7 +79,7 @@ class TradingCycle:
     playbook_version_at_end: int | None = None
 
 
-class CycleManager:
+class CycleManager(SingletonMixin):
     """
     Verwaltet wöchentliche Trading-Zyklen pro Cohort.
 
@@ -90,25 +92,11 @@ class CycleManager:
 
     CYCLE_DURATION_DAYS = 7
 
-    _instance = None
-
     def __init__(self):
         self.conn = None
         self.active_cycles: dict[str, TradingCycle] = {}  # cohort_id -> cycle
         self._connect()
         self._load_active_cycles()
-
-    @classmethod
-    def get_instance(cls) -> "CycleManager":
-        """Singleton Pattern"""
-        if cls._instance is None:
-            cls._instance = cls()
-        return cls._instance
-
-    @classmethod
-    def reset_instance(cls):
-        """Reset für Tests"""
-        cls._instance = None
 
     def _connect(self):
         """Verbinde mit PostgreSQL"""
