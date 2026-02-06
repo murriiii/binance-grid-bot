@@ -702,6 +702,73 @@ class DynamicGridStrategy(SingletonMixin):
                 del self._price_cache[k]
 
     # ═══════════════════════════════════════════════════════════════
+    # DYNAMIC RANGE (lightweight bridge for GridBot integration)
+    # ═══════════════════════════════════════════════════════════════
+
+    def calculate_dynamic_range(
+        self,
+        symbol: str,
+        current_price: float | None = None,
+        base_range_pct: float = 5.0,
+        regime: str | None = None,
+    ) -> tuple[float, dict]:
+        """Calculate ATR-based grid_range_percent for a symbol.
+
+        Uses real market OHLCV data to determine optimal grid range based on
+        actual volatility instead of a static per-cohort percentage.
+
+        Args:
+            symbol: Trading pair (e.g. "BTCUSDT").
+            current_price: Current price (fetched from OHLCV if None).
+            base_range_pct: Cohort-level default range (e.g. 5.0 for 5%).
+            regime: Market regime for adjustment ("BULL", "BEAR", "SIDEWAYS").
+
+        Returns:
+            (recommended_range_pct, metadata_dict).
+            Falls back to base_range_pct on any error.
+        """
+        try:
+            ohlcv = self._fetch_ohlcv(symbol, "1h", 200)
+            if not ohlcv:
+                return base_range_pct, {"fallback": True, "reason": "no_ohlcv"}
+
+            close = ohlcv["close"]
+            high = ohlcv["high"]
+            low = ohlcv["low"]
+
+            if current_price is None:
+                current_price = float(close[-1])
+
+            atr_pct = self.calculate_atr_pct(high, low, close)
+            vol_regime = self.calculate_volatility_regime(atr_pct)
+            trend = self.detect_trend(close)
+
+            # Use existing _calculate_adjusted_spacing (expects decimal, not percent)
+            adjusted_spacing = self._calculate_adjusted_spacing(
+                base_range_pct / 100,
+                atr_pct,
+                regime,
+            )
+
+            # Convert back to percent and clamp
+            recommended_range_pct = round(max(1.0, min(15.0, adjusted_spacing * 100)), 2)
+
+            metadata = {
+                "atr_pct": round(atr_pct * 100, 3),
+                "volatility_regime": vol_regime,
+                "trend": trend.value,
+                "base_range_pct": base_range_pct,
+                "recommended_range_pct": recommended_range_pct,
+                "fallback": False,
+            }
+
+            return recommended_range_pct, metadata
+
+        except Exception as e:
+            logger.warning(f"Dynamic range calculation failed for {symbol}: {e}")
+            return base_range_pct, {"fallback": True, "reason": str(e)}
+
+    # ═══════════════════════════════════════════════════════════════
     # GRID ADJUSTMENT
     # ═══════════════════════════════════════════════════════════════
 

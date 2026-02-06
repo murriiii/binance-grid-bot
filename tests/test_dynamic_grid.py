@@ -2,6 +2,8 @@
 Tests für DynamicGridStrategy
 """
 
+from unittest.mock import MagicMock, patch
+
 import numpy as np
 
 
@@ -233,3 +235,182 @@ class TestGridLevel:
         assert level.price == 100.0
         assert level.level_type == "BUY"
         assert level.is_support is True
+
+
+class TestCalculateDynamicRange:
+    """Tests for calculate_dynamic_range() — ATR-based range bridge."""
+
+    def _make_ohlcv(self, n=200, base_price=100.0, volatility=0.02):
+        """Generate synthetic OHLCV data."""
+        np.random.seed(42)
+        close = base_price * np.exp(np.cumsum(np.random.normal(0, volatility, n)))
+        high = close * (1 + np.abs(np.random.normal(0, volatility / 2, n)))
+        low = close * (1 - np.abs(np.random.normal(0, volatility / 2, n)))
+        return {"close": close, "high": high, "low": low, "volume": np.ones(n) * 1e6}
+
+    def test_returns_sensible_range(self, reset_new_singletons):
+        """Dynamic range should be a reasonable percentage."""
+        from src.strategies.dynamic_grid import DynamicGridStrategy
+
+        strategy = DynamicGridStrategy()
+        ohlcv = self._make_ohlcv()
+
+        with patch.object(strategy, "_fetch_ohlcv", return_value=ohlcv):
+            range_pct, meta = strategy.calculate_dynamic_range(
+                "BTCUSDT", current_price=100.0, base_range_pct=5.0
+            )
+
+        assert 1.0 <= range_pct <= 15.0
+        assert not meta["fallback"]
+        assert "atr_pct" in meta
+        assert "volatility_regime" in meta
+        assert "trend" in meta
+
+    def test_fallback_on_no_ohlcv(self, reset_new_singletons):
+        """Should return base_range_pct when OHLCV unavailable."""
+        from src.strategies.dynamic_grid import DynamicGridStrategy
+
+        strategy = DynamicGridStrategy()
+
+        with patch.object(strategy, "_fetch_ohlcv", return_value=None):
+            range_pct, meta = strategy.calculate_dynamic_range("BTCUSDT", base_range_pct=7.0)
+
+        assert range_pct == 7.0
+        assert meta["fallback"] is True
+
+    def test_fallback_on_exception(self, reset_new_singletons):
+        """Should return base_range_pct when an exception occurs."""
+        from src.strategies.dynamic_grid import DynamicGridStrategy
+
+        strategy = DynamicGridStrategy()
+
+        with patch.object(strategy, "_fetch_ohlcv", side_effect=RuntimeError("API down")):
+            range_pct, meta = strategy.calculate_dynamic_range("BTCUSDT", base_range_pct=5.0)
+
+        assert range_pct == 5.0
+        assert meta["fallback"] is True
+
+    def test_range_clamped_low(self, reset_new_singletons):
+        """Range should never go below 1.0%."""
+        from src.strategies.dynamic_grid import DynamicGridStrategy
+
+        strategy = DynamicGridStrategy()
+        # Very low volatility data
+        ohlcv = self._make_ohlcv(volatility=0.001)
+
+        with patch.object(strategy, "_fetch_ohlcv", return_value=ohlcv):
+            range_pct, _ = strategy.calculate_dynamic_range(
+                "BTCUSDT", current_price=100.0, base_range_pct=1.0
+            )
+
+        assert range_pct >= 1.0
+
+    def test_range_clamped_high(self, reset_new_singletons):
+        """Range should never exceed 15.0%."""
+        from src.strategies.dynamic_grid import DynamicGridStrategy
+
+        strategy = DynamicGridStrategy()
+        # Very high volatility data
+        ohlcv = self._make_ohlcv(volatility=0.15)
+
+        with patch.object(strategy, "_fetch_ohlcv", return_value=ohlcv):
+            range_pct, _ = strategy.calculate_dynamic_range(
+                "BTCUSDT", current_price=100.0, base_range_pct=15.0
+            )
+
+        assert range_pct <= 15.0
+
+    def test_sideways_regime_tighter(self, reset_new_singletons):
+        """SIDEWAYS regime should produce tighter range than BEAR."""
+        from src.strategies.dynamic_grid import DynamicGridStrategy
+
+        strategy = DynamicGridStrategy()
+        ohlcv = self._make_ohlcv()
+
+        with patch.object(strategy, "_fetch_ohlcv", return_value=ohlcv):
+            sideways_pct, _ = strategy.calculate_dynamic_range(
+                "BTCUSDT", current_price=100.0, base_range_pct=5.0, regime="SIDEWAYS"
+            )
+            bear_pct, _ = strategy.calculate_dynamic_range(
+                "BTCUSDT", current_price=100.0, base_range_pct=5.0, regime="BEAR"
+            )
+
+        assert sideways_pct <= bear_pct
+
+
+class TestHybridOrchestratorGridRebuild:
+    """Tests for grid rebuild logic in HybridOrchestrator."""
+
+    def _make_orchestrator(self):
+        """Create a minimal HybridOrchestrator for testing."""
+        from src.core.hybrid_config import HybridConfig
+        from src.core.hybrid_orchestrator import HybridOrchestrator, SymbolState
+
+        config = HybridConfig(
+            total_investment=1000,
+            max_symbols=3,
+            num_grids=5,
+            grid_range_percent=5.0,
+        )
+        mock_client = MagicMock()
+        mock_client.testnet = True
+        orch = HybridOrchestrator(config, client=mock_client)
+        return orch, mock_client, SymbolState
+
+    @patch("src.core.hybrid_orchestrator.TelegramNotifier")
+    def test_should_rebuild_grid_no_bot(self, _tg, reset_new_singletons):
+        """No rebuild needed when no grid bot exists."""
+        orch, _, SymbolState = self._make_orchestrator()
+        state = SymbolState("BTCUSDT")
+        assert orch._should_rebuild_grid(state) is False
+
+    @patch("src.core.hybrid_orchestrator.TelegramNotifier")
+    def test_should_rebuild_grid_price_outside(self, _tg, reset_new_singletons):
+        """Rebuild when price is outside grid range."""
+        from decimal import Decimal
+
+        orch, mock_client, SymbolState = self._make_orchestrator()
+        state = SymbolState("BTCUSDT")
+
+        # Fake grid bot with strategy
+        mock_bot = MagicMock()
+        mock_bot.strategy.lower_price = Decimal("95.0")
+        mock_bot.strategy.upper_price = Decimal("105.0")
+        state.grid_bot = mock_bot
+
+        # Price far below range
+        mock_client.get_current_price.return_value = 90.0
+        assert orch._should_rebuild_grid(state) is True
+
+    @patch("src.core.hybrid_orchestrator.TelegramNotifier")
+    def test_should_rebuild_grid_price_near_edge(self, _tg, reset_new_singletons):
+        """Rebuild when price approaches grid edge (within 10% margin)."""
+        from decimal import Decimal
+
+        orch, mock_client, SymbolState = self._make_orchestrator()
+        state = SymbolState("BTCUSDT")
+
+        mock_bot = MagicMock()
+        mock_bot.strategy.lower_price = Decimal("95.0")
+        mock_bot.strategy.upper_price = Decimal("105.0")
+        state.grid_bot = mock_bot
+
+        # Price near lower edge (within 10% of range)
+        mock_client.get_current_price.return_value = 95.5  # 0.5 from lower, margin=1.0
+        assert orch._should_rebuild_grid(state) is True
+
+    @patch("src.core.hybrid_orchestrator.TelegramNotifier")
+    def test_should_not_rebuild_grid_price_center(self, _tg, reset_new_singletons):
+        """No rebuild when price is in the center of the grid."""
+        from decimal import Decimal
+
+        orch, mock_client, SymbolState = self._make_orchestrator()
+        state = SymbolState("BTCUSDT")
+
+        mock_bot = MagicMock()
+        mock_bot.strategy.lower_price = Decimal("95.0")
+        mock_bot.strategy.upper_price = Decimal("105.0")
+        state.grid_bot = mock_bot
+
+        mock_client.get_current_price.return_value = 100.0
+        assert orch._should_rebuild_grid(state) is False

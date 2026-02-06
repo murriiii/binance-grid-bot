@@ -427,6 +427,35 @@ def task_daily_summary():
 
         generate_performance_chart()
 
+        # Store metrics snapshot for portfolio_snapshots tracking
+        try:
+            from src.analysis.metrics_calculator import MetricsCalculator
+
+            mc = MetricsCalculator.get_instance()
+            metrics_conn = get_db_connection()
+            if metrics_conn:
+                try:
+                    with metrics_conn.cursor() as mcur:
+                        mcur.execute(
+                            "SELECT outcome_24h FROM trades "
+                            "WHERE timestamp > NOW() - INTERVAL '30 days' "
+                            "AND outcome_24h IS NOT NULL ORDER BY timestamp"
+                        )
+                        returns = [float(r[0]) for r in mcur.fetchall()]
+                finally:
+                    metrics_conn.close()
+
+                if len(returns) >= 2:
+                    metrics = mc.calculate_all_metrics(returns)
+                    mc.store_snapshot(
+                        metrics,
+                        portfolio_value=portfolio.get("total_value_usd"),
+                        fear_greed=fear_greed.value if fear_greed else None,
+                    )
+                    logger.info("Metrics snapshot stored")
+        except Exception as me:
+            logger.debug(f"Metrics snapshot failed (non-critical): {me}")
+
     except Exception as e:
         logger.error(f"Daily Summary Error: {e}")
         telegram = get_telegram()

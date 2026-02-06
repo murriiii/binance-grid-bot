@@ -76,6 +76,11 @@ def main():
     """Hauptfunktion - Scheduler Setup"""
     logger.info("Starting Trading Bot Scheduler...")
 
+    # Load scheduler config (reads from env vars with sensible defaults)
+    from src.core.config import get_config
+
+    sc = get_config().scheduler
+
     telegram = get_telegram()
     telegram.send("🚀 <b>Trading Bot Scheduler gestartet</b>\n\n<i>Alle Jobs aktiv.</i>")
 
@@ -83,23 +88,23 @@ def main():
     # CORE JOBS
     # ═══════════════════════════════════════════════════════════════
 
-    # Tägliche Summary um 20:00
-    schedule.every().day.at("20:00").do(task_daily_summary)
+    # Tägliche Summary (default 20:00)
+    schedule.every().day.at(sc.daily_summary_time).do(task_daily_summary)
 
-    # Stündliche Market Snapshots
-    schedule.every().hour.at(":00").do(task_market_snapshot)
+    # Market Snapshots (default every 60 min)
+    schedule.every(sc.market_snapshot_interval).minutes.do(task_market_snapshot)
 
-    # Stop-Loss Check alle 5 Minuten
-    schedule.every(5).minutes.do(task_check_stops)
+    # Stop-Loss Check (default every 5 min)
+    schedule.every(sc.stop_loss_check_interval).minutes.do(task_check_stops)
 
     # Outcome Updates alle 6 Stunden
     schedule.every(6).hours.do(task_update_outcomes)
 
-    # Wöchentliches Rebalancing (Sonntag 18:00)
-    schedule.every().sunday.at("18:00").do(task_weekly_rebalance)
+    # Wöchentliches Rebalancing (default Sonntag 18:00)
+    schedule.every().sunday.at(sc.weekly_rebalance_time).do(task_weekly_rebalance)
 
-    # Macro Check täglich um 8:00
-    schedule.every().day.at("08:00").do(task_macro_check)
+    # Macro Check (default 08:00)
+    schedule.every().day.at(sc.macro_check_time).do(task_macro_check)
 
     # Sentiment Check alle 4 Stunden
     schedule.every(4).hours.do(task_sentiment_check)

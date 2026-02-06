@@ -184,6 +184,24 @@ with db.get_cursor() as cur:
 
 Initialized in `GridBot.__init__()` via `config["cohort_id"]`. Also used by `HybridOrchestrator` for stop-loss and cash exit P&L tracking.
 
+### Dynamic Grid Range (ATR-based)
+
+`DynamicGridStrategy` (`src/strategies/dynamic_grid.py`) provides ATR-based adaptive grid ranges. Instead of static cohort-level `grid_range_percent`, each symbol gets a volatility-adjusted range.
+
+**Integration flow** (Range-Bridge pattern — DynamicGridStrategy calculates range, GridStrategy handles Decimal precision):
+```
+DynamicGridStrategy.calculate_dynamic_range(symbol, price, base_range, regime)
+    → ATR → adjusted_spacing (0.5-2.0x ATR factor + regime multiplier)
+        → HybridOrchestrator._create_grid_bot(grid_range_percent=dynamic_pct)
+            → GridBot.initialize() → GridStrategy(lower, upper, ...) [unchanged]
+```
+
+**Grid rebuild**: `_execute_grid()` checks every 30 min if price has drifted near or outside grid range (10% margin). If so, cancels orders and recreates the grid with a fresh ATR-based range.
+
+**OHLCV source**: Uses mainnet Binance API (`api.binance.com/api/v3/klines`) for real market volatility, even when trading on testnet. 5-minute cache per symbol.
+
+**Fallback**: If OHLCV fetch fails, falls back to the static `HybridConfig.grid_range_percent`.
+
 ### Grid Strategy Logic
 
 1. Calculate grid levels: `spacing = (upper - lower) / num_grids`

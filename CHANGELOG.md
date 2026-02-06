@@ -1,3 +1,17 @@
+## v1.14.9 (2026-02-06)
+
+### Feat
+
+- integrate DynamicGridStrategy: ATR-based grid ranges per symbol replace static cohort percentages
+- auto grid rebuild when price drifts near or outside grid range (30 min check interval)
+- activate MetricsCalculator: Sharpe/CVaR/Kelly snapshots stored in daily summary
+- activate SignalAnalyzer: 9-signal composite breakdown stored per trade fill
+- scheduler reads from SchedulerConfig instead of hardcoded times/intervals
+
+### Docs
+
+- TODO.md: add F1-F4 unused DB tables (portfolio_snapshots, technical_indicators, economic_events, ai_conversations)
+
 ## v1.14.8 (2026-02-06)
 
 ### Feat

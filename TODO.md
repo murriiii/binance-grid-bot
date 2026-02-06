@@ -129,6 +129,28 @@
 - [ ] D5: Funding Rate Signal
 - [ ] D6: Echte Korrelations-Matrix
 
+### Priorität C: Ungenutzte DB-Tabellen aktivieren
+
+- [ ] **F1: portfolio_snapshots Writer** — Equity-Kurve + Performance-Tracking (HOCH)
+  - Tabelle existiert in init.sql, MetricsCalculator.store_snapshot() existiert
+  - Braucht: Scheduler-Task der regelmäßig Portfolio-Wert berechnet und speichert
+  - Mehrwert: Langzeit-Performance-Messung, Drawdown-Erkennung
+
+- [ ] **F2: technical_indicators Writer** — Historische Indikator-Daten (MITTEL)
+  - Tabelle existiert (RSI, MACD, BB, SMA, ATR pro Symbol)
+  - Braucht: Neuer Scheduler-Task + Writer-Code (TechnicalIndicators Klasse erweitern)
+  - Mehrwert: Playbook-Lernen, Signal-Validierung, AI-Training, Dashboard-Kontext
+
+- [ ] **F3: economic_events Writer** — Makro-Event-Awareness (NIEDRIG)
+  - Tabelle existiert, task_macro_check scheduled aber schreibt nicht in DB
+  - Braucht: Writer in task_macro_check, API-Quelle für Events (z.B. investing.com)
+  - Mehrwert: Automatische Positionsreduktion vor wichtigen Events (Fed, CPI)
+
+- [ ] **F4: ai_conversations Writer** — Telegram Chat-Log (MINIMAL)
+  - Tabelle existiert für AI-Chat-History
+  - Braucht: Integration in Telegram AI-Handler
+  - Mehrwert: Minimal — nur Konversations-Logging, kein Trading-Mehrwert
+
 ---
 
 ## Fortschritt

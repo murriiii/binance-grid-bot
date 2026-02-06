@@ -413,6 +413,24 @@ class OrderManagerMixin:
 
             trade_id = self.memory.save_trade(trade_record)
             logger.info(f"Trade in Memory gespeichert: ID {trade_id} (fee: ${fee_usd:.4f})")
+
+            # Store signal breakdown for this trade
+            if trade_id and trade_id > 0:
+                try:
+                    from src.analysis.signal_analyzer import SignalAnalyzer
+
+                    analyzer = SignalAnalyzer.get_instance()
+                    signals = analyzer.compute_all_signals(
+                        {"fear_greed": fear_greed, "price": price}
+                    )
+                    analyzer.store_signals(
+                        trade_id=str(trade_id),
+                        cohort_id=self.config.get("cohort_id"),
+                        signals=signals,
+                    )
+                except Exception:
+                    pass  # Non-critical, graceful degradation
+
             return trade_id if trade_id and trade_id > 0 else None
 
         except Exception as e:

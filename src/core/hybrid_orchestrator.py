@@ -123,6 +123,7 @@ class HybridOrchestrator:
         self.consecutive_errors = 0
 
         self._last_rebalance: datetime | None = None
+        self._last_grid_recalc: dict[str, datetime] = {}
 
         # State persistence
         config_dir = Path("config")
@@ -339,6 +340,21 @@ class HybridOrchestrator:
                 )
                 return
             state.grid_init_failures = 0
+            self._last_grid_recalc[state.symbol] = datetime.now()
+
+        # Check if grid needs rebuild (every 30 min, only when price drifts)
+        last_recalc = self._last_grid_recalc.get(state.symbol)
+        if (
+            last_recalc
+            and (datetime.now() - last_recalc).total_seconds() > 1800
+            and self._should_rebuild_grid(state)
+        ):
+            logger.info(f"GRID: rebuilding grid for {state.symbol} (price near edge)")
+            self._cancel_grid_orders(state)
+            state.grid_bot = None
+            state.grid_init_failures = 0
+            self._last_grid_recalc[state.symbol] = datetime.now()
+            return  # Will be recreated next tick
 
         state.grid_bot.tick()
 
@@ -465,8 +481,48 @@ class HybridOrchestrator:
     # Helpers
     # ------------------------------------------------------------------
 
+    def _should_rebuild_grid(self, state: SymbolState) -> bool:
+        """Check if the current price has drifted near or outside the grid range."""
+        if state.grid_bot is None or state.grid_bot.strategy is None:
+            return False
+
+        price = self.client.get_current_price(state.symbol)
+        if not price or price <= 0:
+            return False
+
+        lower = float(state.grid_bot.strategy.lower_price)
+        upper = float(state.grid_bot.strategy.upper_price)
+
+        # Rebuild if price is outside or within 10% of the edge
+        total_range = upper - lower
+        if total_range <= 0:
+            return True
+        margin = total_range * 0.1
+        return price < lower + margin or price > upper - margin
+
     def _create_grid_bot(self, state: SymbolState) -> GridBot | None:
         """Create and initialize a GridBot for a symbol."""
+        # Calculate dynamic range based on ATR
+        dynamic_range_pct = self.config.grid_range_percent
+        try:
+            from src.strategies.dynamic_grid import DynamicGridStrategy
+
+            dgs = DynamicGridStrategy.get_instance()
+            price = self.client.get_current_price(state.symbol)
+            regime = self.mode_manager.get_current_mode().current_mode.value
+            dynamic_range_pct, meta = dgs.calculate_dynamic_range(
+                symbol=state.symbol,
+                current_price=price,
+                base_range_pct=self.config.grid_range_percent,
+                regime=regime,
+            )
+            logger.info(
+                f"GRID: {state.symbol} dynamic range {dynamic_range_pct:.2f}% "
+                f"(ATR={meta.get('atr_pct')}%, vol={meta.get('volatility_regime')})"
+            )
+        except Exception as e:
+            logger.warning(f"GRID: dynamic range fallback for {state.symbol}: {e}")
+
         if self.cohort_name:
             state_file = f"grid_state_{state.symbol}_{self.cohort_name}.json"
         else:
@@ -475,7 +531,7 @@ class HybridOrchestrator:
             "symbol": state.symbol,
             "investment": state.allocation_usd,
             "num_grids": self.config.num_grids,
-            "grid_range_percent": self.config.grid_range_percent,
+            "grid_range_percent": dynamic_range_pct,
             "testnet": self.client.testnet,
             "state_file": state_file,
             "skip_portfolio_drawdown": True,
