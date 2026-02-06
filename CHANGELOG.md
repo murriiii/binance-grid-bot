@@ -1,3 +1,9 @@
+## v1.12.0 (2026-02-06)
+
+### Feat
+
+- add category-based coin differentiation per cohort risk level
+
 ## v1.11.0 (2026-02-06)
 
 ### Feat
