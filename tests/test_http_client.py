@@ -11,7 +11,7 @@ import requests
 class TestCachedDecorator:
     """Tests für den @cached Decorator"""
 
-    def test_caches_result(self, reset_singletons):
+    def test_caches_result(self, reset_new_singletons):
         """Testet dass Ergebnisse gecached werden"""
         from src.api.http_client import cached
 
@@ -33,7 +33,7 @@ class TestCachedDecorator:
         assert result2 == 10
         assert call_count == 1  # Kein neuer Aufruf
 
-    def test_different_args_not_cached(self, reset_singletons):
+    def test_different_args_not_cached(self, reset_new_singletons):
         """Testet dass verschiedene Argumente unterschiedlich gecached werden"""
         from src.api.http_client import cached
 
@@ -51,7 +51,7 @@ class TestCachedDecorator:
 
         assert call_count == 2
 
-    def test_clear_cache(self, reset_singletons):
+    def test_clear_cache(self, reset_new_singletons):
         """Testet clear_cache Funktion"""
         from src.api.http_client import cached
 
@@ -75,7 +75,7 @@ class TestCachedDecorator:
 class TestHTTPClient:
     """Tests für HTTPClient"""
 
-    def test_singleton_pattern(self, reset_singletons):
+    def test_singleton_pattern(self, reset_new_singletons):
         """Testet Singleton-Pattern"""
         from src.api.http_client import get_http_client
 
@@ -84,7 +84,7 @@ class TestHTTPClient:
 
         assert client1 is client2
 
-    def test_default_timeouts(self, reset_singletons):
+    def test_default_timeouts(self, reset_new_singletons):
         """Testet Standard-Timeouts"""
         from src.api.http_client import HTTPClient
 
@@ -95,7 +95,7 @@ class TestHTTPClient:
         assert client.DEFAULT_TIMEOUTS["binance"] == 10
         assert client.DEFAULT_TIMEOUTS["telegram"] == 10
 
-    def test_initial_stats(self, reset_singletons):
+    def test_initial_stats(self, reset_new_singletons):
         """Testet initiale Statistiken"""
         from src.api.http_client import HTTPClient
 
@@ -107,7 +107,7 @@ class TestHTTPClient:
         assert client.stats["failures"] == 0
 
     @patch("requests.Session.get")
-    def test_successful_get_request(self, mock_get, reset_singletons):
+    def test_successful_get_request(self, mock_get, reset_new_singletons):
         """Testet erfolgreichen GET Request"""
         from src.api.http_client import HTTPClient
 
@@ -123,7 +123,7 @@ class TestHTTPClient:
         assert client.stats["successes"] == 1
 
     @patch("requests.Session.post")
-    def test_successful_post_request(self, mock_post, reset_singletons):
+    def test_successful_post_request(self, mock_post, reset_new_singletons):
         """Testet erfolgreichen POST Request"""
         from src.api.http_client import HTTPClient
 
@@ -139,7 +139,7 @@ class TestHTTPClient:
         assert client.stats["successes"] == 1
 
     @patch("requests.Session.get")
-    def test_retry_on_timeout(self, mock_get, reset_singletons):
+    def test_retry_on_timeout(self, mock_get, reset_new_singletons):
         """Testet Retry bei Timeout"""
         from src.api.http_client import HTTPClient, HTTPClientError
 
@@ -154,7 +154,7 @@ class TestHTTPClient:
         assert client.stats["retries"] >= 1
 
     @patch("requests.Session.get")
-    def test_retry_on_server_error(self, mock_get, reset_singletons):
+    def test_retry_on_server_error(self, mock_get, reset_new_singletons):
         """Testet Retry bei Server Error"""
         from src.api.http_client import HTTPClient, HTTPClientError
 
@@ -171,7 +171,7 @@ class TestHTTPClient:
         assert client.stats["retries"] >= 1
 
     @patch("requests.Session.get")
-    def test_no_retry_on_client_error(self, mock_get, reset_singletons):
+    def test_no_retry_on_client_error(self, mock_get, reset_new_singletons):
         """Testet kein Retry bei Client Error (4xx außer 429)"""
         from src.api.http_client import HTTPClient, HTTPClientError
 
@@ -190,7 +190,7 @@ class TestHTTPClient:
         assert client.stats["retries"] == 0
 
     @patch("requests.Session.get")
-    def test_rate_limit_handling(self, mock_get, reset_singletons):
+    def test_rate_limit_handling(self, mock_get, reset_new_singletons):
         """Testet Rate Limit (429) Handling"""
         from src.api.http_client import HTTPClient, HTTPClientError
 
@@ -208,7 +208,7 @@ class TestHTTPClient:
         assert client.stats["retries"] >= 1
 
     @patch("requests.Session.get")
-    def test_api_type_timeout(self, mock_get, reset_singletons):
+    def test_api_type_timeout(self, mock_get, reset_new_singletons):
         """Testet API-spezifische Timeouts"""
         from src.api.http_client import HTTPClient
 
@@ -224,7 +224,7 @@ class TestHTTPClient:
         call_kwargs = mock_get.call_args[1]
         assert call_kwargs["timeout"] == 30  # deepseek timeout
 
-    def test_calculate_delay(self, reset_singletons):
+    def test_calculate_delay(self, reset_new_singletons):
         """Testet Exponential Backoff Berechnung"""
         from src.api.http_client import HTTPClient
 
@@ -235,7 +235,7 @@ class TestHTTPClient:
         assert client._calculate_delay(2) == 4.0  # 1 * 2^2 = 4
         assert client._calculate_delay(5) == 30.0  # Max capped at 30
 
-    def test_get_stats(self, reset_singletons):
+    def test_get_stats(self, reset_new_singletons):
         """Testet Statistik-Abruf"""
         from src.api.http_client import HTTPClient
 
@@ -254,21 +254,21 @@ class TestHTTPClient:
 class TestHTTPClientExceptions:
     """Tests für HTTP Client Exceptions"""
 
-    def test_http_client_error(self, reset_singletons):
+    def test_http_client_error(self, reset_new_singletons):
         """Testet HTTPClientError"""
         from src.api.http_client import HTTPClientError
 
         error = HTTPClientError("Test error")
         assert str(error) == "Test error"
 
-    def test_rate_limit_error(self, reset_singletons):
+    def test_rate_limit_error(self, reset_new_singletons):
         """Testet RateLimitError"""
         from src.api.http_client import RateLimitError
 
         error = RateLimitError("Rate limited")
         assert str(error) == "Rate limited"
 
-    def test_timeout_error(self, reset_singletons):
+    def test_timeout_error(self, reset_new_singletons):
         """Testet TimeoutError"""
         from src.api.http_client import TimeoutError
 

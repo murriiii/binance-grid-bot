@@ -8,7 +8,7 @@ from unittest.mock import patch
 class TestTelegramService:
     """Tests für TelegramService"""
 
-    def test_singleton_pattern(self, reset_singletons):
+    def test_singleton_pattern(self, reset_new_singletons):
         """Testet Singleton-Pattern"""
         from src.notifications.telegram_service import TelegramService, get_telegram
 
@@ -19,7 +19,7 @@ class TestTelegramService:
         assert service1 is service2
         assert service2 is service3
 
-    def test_disabled_without_credentials(self, reset_singletons, monkeypatch):
+    def test_disabled_without_credentials(self, reset_new_singletons, monkeypatch):
         """Testet dass Service deaktiviert ist ohne Credentials"""
         from src.notifications.telegram_service import TelegramService
 
@@ -31,7 +31,7 @@ class TestTelegramService:
 
         assert service.enabled is False
 
-    def test_enabled_with_credentials(self, reset_singletons):
+    def test_enabled_with_credentials(self, reset_new_singletons):
         """Testet dass Service aktiviert ist mit Credentials"""
         from src.notifications.telegram_service import TelegramService
 
@@ -43,7 +43,7 @@ class TestTelegramService:
         assert service.chat_id == "123456789"
 
     @patch("src.api.http_client.HTTPClient.post")
-    def test_send_message(self, mock_post, reset_singletons):
+    def test_send_message(self, mock_post, reset_new_singletons):
         """Testet Nachrichtenversand"""
         from src.notifications.telegram_service import get_telegram
 
@@ -56,7 +56,7 @@ class TestTelegramService:
         mock_post.assert_called_once()
 
     @patch("src.api.http_client.HTTPClient.post")
-    def test_send_returns_false_on_error(self, mock_post, reset_singletons):
+    def test_send_returns_false_on_error(self, mock_post, reset_new_singletons):
         """Testet False bei Fehler"""
         from src.api.http_client import HTTPClientError
         from src.notifications.telegram_service import get_telegram
@@ -68,7 +68,7 @@ class TestTelegramService:
 
         assert result is False
 
-    def test_send_returns_false_when_disabled(self, reset_singletons, monkeypatch):
+    def test_send_returns_false_when_disabled(self, reset_new_singletons, monkeypatch):
         """Testet False wenn deaktiviert"""
         from src.notifications.telegram_service import TelegramService
 
@@ -81,7 +81,7 @@ class TestTelegramService:
         assert result is False
 
     @patch("src.api.http_client.HTTPClient.post")
-    def test_send_urgent(self, mock_post, reset_singletons):
+    def test_send_urgent(self, mock_post, reset_new_singletons):
         """Testet dringende Nachricht"""
         from src.notifications.telegram_service import get_telegram
 
@@ -96,7 +96,7 @@ class TestTelegramService:
         assert "URGENT" in str(call_args)
 
     @patch("src.api.http_client.HTTPClient.post")
-    def test_send_trade_alert(self, mock_post, reset_singletons):
+    def test_send_trade_alert(self, mock_post, reset_new_singletons):
         """Testet Trade-Alert"""
         from src.notifications.telegram_service import get_telegram
 
@@ -110,7 +110,7 @@ class TestTelegramService:
         assert result is True
 
     @patch("src.api.http_client.HTTPClient.post")
-    def test_send_daily_summary(self, mock_post, reset_singletons):
+    def test_send_daily_summary(self, mock_post, reset_new_singletons):
         """Testet Daily Summary"""
         from src.notifications.telegram_service import get_telegram
 
@@ -124,7 +124,7 @@ class TestTelegramService:
         assert result is True
 
     @patch("src.api.http_client.HTTPClient.post")
-    def test_send_stop_loss_alert(self, mock_post, reset_singletons):
+    def test_send_stop_loss_alert(self, mock_post, reset_new_singletons):
         """Testet Stop-Loss Alert"""
         from src.notifications.telegram_service import get_telegram
 
@@ -138,7 +138,7 @@ class TestTelegramService:
         assert result is True
 
     @patch("src.api.http_client.HTTPClient.post")
-    def test_send_whale_alert(self, mock_post, reset_singletons):
+    def test_send_whale_alert(self, mock_post, reset_new_singletons):
         """Testet Whale Alert"""
         from src.notifications.telegram_service import get_telegram
 
@@ -157,7 +157,7 @@ class TestTelegramService:
         assert result is True
 
     @patch("src.api.http_client.HTTPClient.post")
-    def test_send_sentiment_alert_extreme_fear(self, mock_post, reset_singletons):
+    def test_send_sentiment_alert_extreme_fear(self, mock_post, reset_new_singletons):
         """Testet Sentiment Alert bei Extreme Fear"""
         from src.notifications.telegram_service import get_telegram
 
@@ -169,7 +169,7 @@ class TestTelegramService:
         assert result is True
 
     @patch("src.api.http_client.HTTPClient.post")
-    def test_send_sentiment_alert_extreme_greed(self, mock_post, reset_singletons):
+    def test_send_sentiment_alert_extreme_greed(self, mock_post, reset_new_singletons):
         """Testet Sentiment Alert bei Extreme Greed"""
         from src.notifications.telegram_service import get_telegram
 
@@ -180,7 +180,7 @@ class TestTelegramService:
 
         assert result is True
 
-    def test_send_sentiment_alert_normal_returns_false(self, reset_singletons):
+    def test_send_sentiment_alert_normal_returns_false(self, reset_new_singletons):
         """Testet dass normales Sentiment keinen Alert sendet"""
         from src.notifications.telegram_service import get_telegram
 
@@ -190,7 +190,7 @@ class TestTelegramService:
         assert result is False
 
     @patch("src.api.http_client.HTTPClient.post")
-    def test_send_error(self, mock_post, reset_singletons):
+    def test_send_error(self, mock_post, reset_new_singletons):
         """Testet Error-Nachricht"""
         from src.notifications.telegram_service import get_telegram
 
@@ -202,7 +202,7 @@ class TestTelegramService:
         assert result is True
 
     @patch("src.api.http_client.HTTPClient.post")
-    def test_send_startup(self, mock_post, reset_singletons):
+    def test_send_startup(self, mock_post, reset_new_singletons):
         """Testet Startup-Nachricht"""
         from src.notifications.telegram_service import get_telegram
 
@@ -214,7 +214,7 @@ class TestTelegramService:
         assert result is True
 
     @patch("src.api.http_client.HTTPClient.post")
-    def test_send_shutdown(self, mock_post, reset_singletons):
+    def test_send_shutdown(self, mock_post, reset_new_singletons):
         """Testet Shutdown-Nachricht"""
         from src.notifications.telegram_service import get_telegram
 

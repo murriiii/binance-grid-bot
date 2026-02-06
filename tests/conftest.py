@@ -36,34 +36,14 @@ def mock_env_vars(monkeypatch):
 
 @pytest.fixture
 def reset_singletons():
-    """Resettet alle Singletons zwischen Tests"""
-    # Reset config singleton
+    """Resettet AppConfig singleton (einziger verbleibender Legacy-Singleton)."""
     import src.core.config as config_module
 
     config_module._config = None
 
-    # Reset HTTP client singleton
-    from src.api.http_client import reset_http_client
-
-    reset_http_client()
-
-    # Reset Telegram singleton
-    import src.notifications.telegram_service as telegram_module
-
-    telegram_module.TelegramService._instance = None
-
-    # Reset MarketData singleton
-    import src.data.market_data as market_module
-
-    market_module.MarketDataProvider._instance = None
-
     yield
 
-    # Cleanup after test
     config_module._config = None
-    reset_http_client()
-    telegram_module.TelegramService._instance = None
-    market_module.MarketDataProvider._instance = None
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -308,13 +288,18 @@ def _all_singleton_subclasses(cls):
 
 @pytest.fixture
 def reset_new_singletons():
-    """Resettet alle neuen Singletons zwischen Tests"""
+    """Resettet alle SingletonMixin-Singletons und AppConfig zwischen Tests."""
     yield
 
     from src.utils.singleton import SingletonMixin
 
     for cls in _all_singleton_subclasses(SingletonMixin):
         cls.reset_instance()
+
+    # AppConfig is the only remaining legacy singleton
+    import src.core.config as config_module
+
+    config_module._config = None
 
 
 @pytest.fixture

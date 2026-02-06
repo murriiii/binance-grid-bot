@@ -9,7 +9,7 @@ from unittest.mock import patch
 class TestMarketDataProvider:
     """Tests für MarketDataProvider"""
 
-    def test_singleton_pattern(self, reset_singletons):
+    def test_singleton_pattern(self, reset_new_singletons):
         """Testet Singleton-Pattern"""
         from src.data.market_data import MarketDataProvider, get_market_data
 
@@ -21,7 +21,7 @@ class TestMarketDataProvider:
         assert provider2 is provider3
 
     @patch("src.api.http_client.HTTPClient.get")
-    def test_get_fear_greed(self, mock_get, reset_singletons, sample_fear_greed_response):
+    def test_get_fear_greed(self, mock_get, reset_new_singletons, sample_fear_greed_response):
         """Testet Fear & Greed Abruf"""
         from src.data.market_data import get_market_data
 
@@ -35,7 +35,7 @@ class TestMarketDataProvider:
         assert isinstance(result.timestamp, datetime)
 
     @patch("src.api.http_client.HTTPClient.get")
-    def test_get_price(self, mock_get, reset_singletons, sample_btc_price_response):
+    def test_get_price(self, mock_get, reset_new_singletons, sample_btc_price_response):
         """Testet Preis-Abruf"""
         from src.data.market_data import get_market_data
 
@@ -47,7 +47,7 @@ class TestMarketDataProvider:
         assert price == 42500.50
 
     @patch("src.api.http_client.HTTPClient.get")
-    def test_get_price_caching(self, mock_get, reset_singletons, sample_btc_price_response):
+    def test_get_price_caching(self, mock_get, reset_new_singletons, sample_btc_price_response):
         """Testet Preis-Caching"""
         from src.data.market_data import get_market_data
 
@@ -62,7 +62,7 @@ class TestMarketDataProvider:
         assert price1 == price2
 
     @patch("src.api.http_client.HTTPClient.get")
-    def test_get_24h_ticker(self, mock_get, reset_singletons, sample_ticker_24h_response):
+    def test_get_24h_ticker(self, mock_get, reset_new_singletons, sample_ticker_24h_response):
         """Testet 24h Ticker Abruf"""
         from src.data.market_data import get_market_data
 
@@ -77,7 +77,7 @@ class TestMarketDataProvider:
         assert ticker.change_24h == 2.5
 
     @patch("src.api.http_client.HTTPClient.get")
-    def test_get_trending_coins(self, mock_get, reset_singletons, sample_coingecko_trending):
+    def test_get_trending_coins(self, mock_get, reset_new_singletons, sample_coingecko_trending):
         """Testet Trending Coins"""
         from src.data.market_data import get_market_data
 
@@ -89,7 +89,7 @@ class TestMarketDataProvider:
         assert len(trending) == 3
         assert trending[0]["symbol"] == "BTC"
 
-    def test_classify_fear_greed(self, reset_singletons):
+    def test_classify_fear_greed(self, reset_new_singletons):
         """Testet Fear & Greed Klassifizierung"""
         from src.data.market_data import get_market_data
 
@@ -101,7 +101,7 @@ class TestMarketDataProvider:
         assert provider._classify_fear_greed(70) == "Greed"
         assert provider._classify_fear_greed(90) == "Extreme Greed"
 
-    def test_clear_cache(self, reset_singletons):
+    def test_clear_cache(self, reset_new_singletons):
         """Testet Cache-Leerung"""
         from src.data.market_data import get_market_data
 
@@ -118,7 +118,7 @@ class TestMarketDataProvider:
 class TestFearGreedData:
     """Tests für FearGreedData Dataclass"""
 
-    def test_creation(self, reset_singletons):
+    def test_creation(self, reset_new_singletons):
         """Testet Erstellung"""
         from src.data.market_data import FearGreedData
 
@@ -131,7 +131,7 @@ class TestFearGreedData:
 class TestPriceData:
     """Tests für PriceData Dataclass"""
 
-    def test_creation(self, reset_singletons):
+    def test_creation(self, reset_new_singletons):
         """Testet Erstellung"""
         from src.data.market_data import PriceData
 
