@@ -80,15 +80,21 @@ class GridBot(RiskGuardMixin, OrderManagerMixin, StateManagerMixin):
 
 | Mixin | File | Responsibility |
 |-------|------|----------------|
-| `OrderManagerMixin` | `src/core/order_manager.py` | Order lifecycle, fill detection, follow-up orders, partial fills, downtime recovery |
-| `StateManagerMixin` | `src/core/state_manager.py` | JSON state persistence (atomic writes), state loading with Binance verification |
+| `OrderManagerMixin` | `src/core/order_manager.py` | Order lifecycle, fill detection, follow-up orders (with retry/backoff), partial fills, downtime recovery |
+| `StateManagerMixin` | `src/core/state_manager.py` | JSON state persistence (atomic writes), state loading with Binance verification, orphan order cleanup |
 | `RiskGuardMixin` | `src/core/risk_guard.py` | CVaR/drawdown/allocation validation, circuit breaker, stop-loss, market sells |
 
 Each mixin documents its expected host attributes in the class docstring. When adding methods, ensure they match the documented contract.
 
 **tick() pattern**: `GridBot.tick()` executes one iteration (check orders → save state → check circuit breaker → check stops) and returns `bool` (True = continue). `run()` calls `tick()` in a loop for standalone mode; `HybridOrchestrator` calls `tick()` per symbol in GRID mode.
 
+**Failed follow-up retry**: When a follow-up order fails (e.g., PLACE_SELL after BUY fill), it's retried with exponential backoff (2/5/15/30/60 min, max 5 attempts). Orders with `failed_followup=True` are handled separately at the start of `check_orders()` via `_retry_failed_followup()`. After max retries: CRITICAL log + Telegram alert, order removed.
+
 **Downtime recovery**: `_pending_followups: list[dict]` queues follow-up actions for fills detected during downtime. `load_state()` detects FILLED/partially-CANCELED orders and queues follow-ups, which `_process_pending_followups()` executes after strategy initialization.
+
+**State file per symbol**: In hybrid mode, each GridBot writes to `config/grid_state_{SYMBOL}.json` (passed via `config["state_file"]`). Default is `bot_state.json` for standalone mode.
+
+**Config mismatch handling**: When `load_state()` detects a symbol or investment change, it cancels all orphaned orders at Binance via `_cancel_orphaned_orders()` before returning False. Corrupt JSON state files are caught separately (`json.JSONDecodeError`) and reset `active_orders` to `{}`.
 
 **Atomic state writes**: Both `StateManagerMixin` and `HybridOrchestrator` use temp file + rename:
 ```python
@@ -111,7 +117,7 @@ The HybridOrchestrator (`src/core/hybrid_orchestrator.py`) manages multi-coin tr
 **Mode switching** is controlled by `ModeManager` (`src/core/mode_manager.py`) with hysteresis protection:
 - Requires regime probability >= 75% AND duration >= 2 days before switching
 - 24h cooldown between mode switches
-- Safety lock: >2 transitions in 48h forces GRID mode
+- Safety lock: >2 transitions in 48h forces GRID mode (auto-expires after 7 days via `_lock_activated_at`)
 - **Exception**: BEAR with probability >= 85% triggers immediate CASH (emergency capital protection)
 
 **Per-symbol state** is tracked via `SymbolState` dataclass (mode, grid bot instance, hold quantity, allocation, stop-loss IDs). State is persisted to `config/hybrid_state.json` with atomic writes.
@@ -183,9 +189,13 @@ with db.get_cursor() as cur:
 All stop-loss market sells go through `execute_stop_loss_sell()` in `src/risk/stop_loss_executor.py`:
 1. Queries actual balance to avoid selling more than held
 2. Rounds quantity to `step_size`
-3. Retries up to 3 times with backoff (2s, 5s, 10s)
+3. Retries up to 3 times with backoff (2s, 5s, 10s). On `INSUFFICIENT_BALANCE`: re-fetches actual balance and retries with reduced quantity
 4. On total failure: CRITICAL log + Telegram alert ("Manual sell needed")
 5. Returns `{"success": bool, "order": dict|None, "error": str|None}`
+
+**Fee-adjusted stop-loss quantities**: When creating stop-losses for BUY fills, the quantity is reduced by `TAKER_FEE_RATE` (0.1%) to prevent `INSUFFICIENT_BALANCE` when the stop triggers. This applies in `check_orders()`, `_process_partial_fill()`, and downtime recovery in `load_state()`.
+
+**Trailing distance**: `StopLossManager.create_stop()` accepts `trailing_distance: float | None`. For TRAILING stops, if not provided, `stop_percentage` is used as the trailing distance. This ensures HOLD mode (7%) and GRID mode (5%) get correct trailing percentages instead of the dataclass default (3%).
 
 **Two-phase stop-loss lifecycle** in `src/risk/stop_loss.py`:
 - `StopLossOrder.update(price)` → detects trigger condition, returns `True` but keeps stop active
@@ -227,6 +237,12 @@ Tasks are organized in domain-specific modules under `src/tasks/`, registered by
 
 Shared infrastructure in `src/tasks/base.py` provides `get_db_connection()`. All tasks use `@task_locked` from `src/utils/task_lock.py` to prevent concurrent execution (non-blocking skip).
 
+### Utilities (`src/utils/`)
+
+- `singleton.py` — `SingletonMixin` base class (see Singleton Pattern above)
+- `task_lock.py` — `@task_locked` decorator for scheduled tasks
+- `heartbeat.py` — `touch_heartbeat()` creates `data/heartbeat` for Docker health checks. Used by both `GridBot.tick()` and `HybridOrchestrator.tick()`
+
 ### Task Locking
 
 ```python
@@ -243,7 +259,7 @@ def my_scheduled_task():
 - Consecutive error limit: 5 errors → emergency stop
 - Graceful degradation: Bot continues if Memory/Stop-Loss unavailable
 - AI fallback: Returns NEUTRAL signal on any failure
-- Circuit breaker: >10% flash crash triggers emergency stop
+- Circuit breaker: >10% flash crash triggers emergency stop (initialized with current price in `initialize()` to prevent false trigger on first tick)
 
 ## Configuration
 
