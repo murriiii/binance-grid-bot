@@ -175,6 +175,15 @@ with db.get_cursor() as cur:
     rows = cur.fetchall()
 ```
 
+### Trade Pair Tracking
+
+`TradePairTracker` (`src/data/trade_pairs.py`) links BUY fills to SELL fills for realized P&L:
+- On BUY fill: `open_pair(symbol, trade_id, price, qty, fee)` → creates open pair in `trade_pairs` table
+- On SELL fill: `close_pair(symbol, trade_id, price, qty, fee)` → closes oldest open pair (FIFO), calculates P&L
+- On stop-loss/cash exit: `close_pairs_by_symbol(symbol, price, qty, reason)` → closes all open pairs
+
+Initialized in `GridBot.__init__()` via `config["cohort_id"]`. Also used by `HybridOrchestrator` for stop-loss and cash exit P&L tracking.
+
 ### Grid Strategy Logic
 
 1. Calculate grid levels: `spacing = (upper - lower) / num_grids`
@@ -234,7 +243,7 @@ Tasks are organized in domain-specific modules under `src/tasks/`, registered by
 | `market_tasks.py` | Market snapshots (hourly), sentiment checks (4h) |
 | `reporting_tasks.py` | Daily summary, playbook update (weekly), weekly export |
 | `system_tasks.py` | Stop-loss check (5min), health check (6h), macro events, outcome updates |
-| `monitoring_tasks.py` | Order reconciliation (30min), order timeout (1h), portfolio plausibility (2h), grid health (4h) |
+| `monitoring_tasks.py` | Order reconciliation (30min), order timeout (1h), portfolio plausibility (2h), grid health (4h), stale detection (30min) |
 
 Shared infrastructure in `src/tasks/base.py` provides `get_db_connection()`. All tasks use `@task_locked` from `src/utils/task_lock.py` to prevent concurrent execution (non-blocking skip).
 

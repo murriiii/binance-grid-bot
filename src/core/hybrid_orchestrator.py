@@ -109,6 +109,15 @@ class HybridOrchestrator:
             pass
         self.stop_loss_manager = StopLossManager(db_manager=db_manager)
 
+        # Trade pair tracker for stop-loss / cash exit P&L
+        self._trade_pair_tracker = None
+        try:
+            from src.data.trade_pairs import TradePairTracker
+
+            self._trade_pair_tracker = TradePairTracker(cohort_id=cohort_id)
+        except Exception:
+            pass
+
         self.symbols: dict[str, SymbolState] = {}
         self.running = False
         self.consecutive_errors = 0
@@ -470,6 +479,7 @@ class HybridOrchestrator:
             "testnet": self.client.testnet,
             "state_file": state_file,
             "skip_portfolio_drawdown": True,
+            "cohort_id": self.cohort_id,
         }
         try:
             bot = GridBot(bot_config, client=self.client)
@@ -524,6 +534,11 @@ class HybridOrchestrator:
         if result["success"]:
             logger.info(f"CASH: sold {state.hold_quantity} {state.symbol}")
             self.telegram.send(f"CASH Sell: {state.symbol}\nMenge: {state.hold_quantity}")
+            sell_price = self.client.get_current_price(state.symbol) or state.hold_entry_price
+            if self._trade_pair_tracker:
+                self._trade_pair_tracker.close_pairs_by_symbol(
+                    state.symbol, sell_price, state.hold_quantity, "cash_exit"
+                )
             if state.hold_stop_id:
                 self.stop_loss_manager.cancel_stop(state.hold_stop_id)
                 state.hold_stop_id = None
@@ -567,6 +582,10 @@ class HybridOrchestrator:
                 stop.confirm_trigger()
                 self.stop_loss_manager.notify_and_persist_trigger(stop)
                 logger.info(f"Stop sell executed: {stop.quantity} {stop.symbol}")
+                if self._trade_pair_tracker:
+                    self._trade_pair_tracker.close_pairs_by_symbol(
+                        stop.symbol, stop.triggered_price, stop.quantity, "stop_loss"
+                    )
                 state.hold_quantity = 0.0
                 state.hold_entry_price = 0.0
                 state.hold_stop_id = None

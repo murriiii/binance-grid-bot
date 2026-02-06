@@ -113,7 +113,7 @@ class HybridConfig:
         # since $1000 per cohort with max 3 coins needs generous per-coin limits)
         risk = cohort.config.risk_tolerance
         if risk == "low":
-            categories = ("LARGE_CAP",)
+            categories = ("LARGE_CAP", "MID_CAP")
         elif risk == "high":
             categories = ("LARGE_CAP", "MID_CAP", "L2", "DEFI", "AI", "GAMING", "MEME")
         else:

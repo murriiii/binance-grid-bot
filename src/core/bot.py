@@ -121,6 +121,10 @@ class GridBot(RiskGuardMixin, OrderManagerMixin, StateManagerMixin):
         # Daily drawdown reset tracking
         self._last_drawdown_reset_date: str = ""
 
+        # Optional: Trade pair tracking (BUY→SELL P&L)
+        self._trade_pair_tracker = None
+        self._init_trade_pair_tracker()
+
         # Optional: Memory System
         self.memory = None
         self._init_memory()
@@ -133,6 +137,17 @@ class GridBot(RiskGuardMixin, OrderManagerMixin, StateManagerMixin):
         self.cvar_sizer = None
         self.allocation_constraints = None
         self._init_risk_modules()
+
+    def _init_trade_pair_tracker(self):
+        """Initializes the trade pair tracker for BUY→SELL P&L."""
+        try:
+            from src.data.trade_pairs import TradePairTracker
+
+            cohort_id = self.config.get("cohort_id")
+            self._trade_pair_tracker = TradePairTracker(cohort_id=cohort_id)
+            logger.info(f"TradePairTracker initialisiert (cohort={cohort_id})")
+        except Exception as e:
+            logger.warning(f"TradePairTracker nicht verfügbar: {e}")
 
     def _init_memory(self):
         """Initialisiert das Memory-System wenn verfügbar"""

@@ -298,3 +298,53 @@ def task_grid_health_summary():
             "Failed follow-ups:\n" + "\n".join(f"- {f}" for f in failed_followups),
             force=True,
         )
+
+
+@task_locked
+def task_stale_detection():
+    """Alert if no order activity detected in last 30 minutes (every 30 min).
+
+    In a volatile crypto market, extended silence likely means a problem
+    (bot stuck, API issues, all orders far from price, etc.).
+    """
+    logger.info("Running stale detection...")
+
+    grid_states = _load_grid_states()
+    if not grid_states:
+        logger.info("No grid state files found, skipping stale detection")
+        return
+
+    now = datetime.now()
+    newest_order_time: datetime | None = None
+
+    for _key, state in grid_states.items():
+        for _order_id, order in state.get("active_orders", {}).items():
+            created = order.get("created_at")
+            if not created:
+                continue
+            try:
+                t = datetime.fromisoformat(created)
+                if newest_order_time is None or t > newest_order_time:
+                    newest_order_time = t
+            except (ValueError, TypeError):
+                pass
+
+    if newest_order_time is None:
+        logger.warning("Stale detection: no order timestamps found in grid states")
+        return
+
+    age = now - newest_order_time
+    if age > timedelta(minutes=30):
+        logger.warning(f"Stale detection: last order activity {age} ago")
+
+        from src.notifications.telegram_service import get_telegram
+
+        telegram = get_telegram()
+        telegram.send(
+            f"Stale Detection Warning\n\n"
+            f"No new order activity for {age.total_seconds() / 60:.0f} min\n"
+            f"Last activity: {newest_order_time:%H:%M:%S}",
+            force=True,
+        )
+    else:
+        logger.info(f"Stale detection OK: last activity {age.total_seconds() / 60:.0f}min ago")

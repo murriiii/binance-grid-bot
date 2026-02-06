@@ -46,6 +46,9 @@ class TradeRecord:
     ai_signal: str  # Was sagte DeepSeek?
     reasoning: str  # Vollständige Begründung
 
+    # Fees
+    fee_usd: float = 0.0
+
     # Ergebnis (wird später aktualisiert)
     outcome_24h: float | None = None  # PnL nach 24h
     outcome_7d: float | None = None  # PnL nach 7 Tagen
@@ -109,9 +112,9 @@ class TradingMemory:
                     INSERT INTO trades (
                         timestamp, action, symbol, price, quantity, value_usd,
                         fear_greed, btc_price, symbol_24h_change, market_trend,
-                        math_signal, ai_signal, reasoning
+                        math_signal, ai_signal, reasoning, fee_usd
                     ) VALUES (
-                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
                     ) RETURNING id
                 """,
                     (
@@ -128,6 +131,7 @@ class TradingMemory:
                         trade.math_signal,
                         trade.ai_signal,
                         trade.reasoning,
+                        trade.fee_usd,
                     ),
                 )
                 trade_id = cur.fetchone()[0]

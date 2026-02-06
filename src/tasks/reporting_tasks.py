@@ -212,6 +212,8 @@ def _build_cohort_status() -> str:
     total_current = 0.0
     total_closed_trades = 0
     total_open_orders = 0
+    total_buy_orders = 0
+    total_sell_orders = 0
     total_coins = 0
 
     for sf in state_files:
@@ -251,20 +253,45 @@ def _build_cohort_status() -> str:
                         price_str = _format_price(price) if price else "—"
                         order_str = f"{n_buy}B/{n_sell}S"
 
-                        # Calculate held qty from grid state SELL orders
-                        # (SELL orders = coins the bot bought and is holding)
+                        # Calculate market value from grid state:
+                        # - SELL orders = coins the bot bought and holds
+                        #   → valued at current market price (unrealized P&L)
+                        # - BUY orders = USDT locked, no P&L swing
+                        #   → use their cost basis (price * qty)
+                        # Remaining alloc not in any order stays at face value
                         gs_key = f"{cohort_name}:{sym}"
                         gs = grid_states.get(gs_key, {})
-                        held_qty = sum(
-                            float(o["quantity"])
-                            for o in gs.get("active_orders", {}).values()
+                        active = gs.get("active_orders", {})
+                        buy_cost = sum(
+                            float(o.get("price", 0)) * float(o.get("quantity", 0))
+                            for o in active.values()
+                            if o.get("type") == "BUY"
+                        )
+                        sell_cost = sum(
+                            float(o.get("price", 0)) * float(o.get("quantity", 0))
+                            for o in active.values()
                             if o.get("type") == "SELL"
                         )
-                        if price and held_qty > 0:
-                            mkt_val = held_qty * price
+                        held_value = (
+                            sum(
+                                float(o.get("quantity", 0)) * price
+                                for o in active.values()
+                                if o.get("type") == "SELL"
+                            )
+                            if price
+                            else sell_cost
+                        )
+                        # Total order cost = what was originally allocated to orders
+                        order_cost = buy_cost + sell_cost
+                        # Unallocated remainder stays at face value
+                        remainder = max(0, alloc - order_cost)
+                        if active:
+                            mkt_val = buy_cost + held_value + remainder
                     except Exception:
                         pass
                 total_open_orders += n_buy + n_sell
+                total_buy_orders += n_buy
+                total_sell_orders += n_sell
 
                 # Show market value if holding, otherwise allocation
                 val_str = f"${mkt_val:.0f}" if mkt_val >= 1 else f"${alloc:.0f}"
@@ -331,7 +358,7 @@ def _build_cohort_status() -> str:
             f"${total_current:,.0f} ({total_pnl_pct:+.1f}%)"
         )
         n_bots = len(state_files)
-        orders_str = f"📋 {total_open_orders} Orders"
+        orders_str = f"📋 {total_open_orders} Orders ({total_buy_orders}B/{total_sell_orders}S)"
         if total_closed_trades > 0:
             orders_str += f" · ✅ {total_closed_trades} Closed"
         lines.append(f"🤖 {n_bots} Bots · {total_coins} Coins · {orders_str}")

@@ -1,3 +1,19 @@
+## v1.14.8 (2026-02-06)
+
+### Feat
+
+- add trade pair tracking: BUY→SELL pairs with realized P&L (gross, net, hold duration)
+- dashboard footer shows BUY/SELL order split (e.g. "174 Orders (90B/84S)")
+- add stale detection monitoring: alert if no order activity for 30 min
+- write fee_usd to trades table for accurate cost tracking
+
+## v1.14.7 (2026-02-06)
+
+### Fix
+
+- fix P&L calculation: include BUY order cost basis + SELL order market value instead of always showing ±0.0%
+- allow MID_CAP coins for conservative cohort (was LARGE_CAP only, too few coins on testnet)
+
 ## v1.14.6 (2026-02-06)
 
 ### Fix

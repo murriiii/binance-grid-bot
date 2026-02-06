@@ -116,7 +116,25 @@ class StateManagerMixin:
                             f"Order {order_id} während Downtime gefüllt: "
                             f"{order_info.get('type')} @ {filled_price} x {filled_qty}"
                         )
-                        self._save_trade_to_memory(order_info, filled_price, filled_qty, fee_usd)
+                        trade_id = self._save_trade_to_memory(
+                            order_info, filled_price, filled_qty, fee_usd
+                        )
+
+                        # Track trade pair for downtime fills
+                        if self._trade_pair_tracker:
+                            if order_info.get("type") == "BUY":
+                                self._trade_pair_tracker.open_pair(
+                                    self.symbol, trade_id, filled_price, filled_qty, fee_usd
+                                )
+                            else:
+                                self._trade_pair_tracker.close_pair(
+                                    self.symbol,
+                                    trade_id,
+                                    filled_price,
+                                    filled_qty,
+                                    fee_usd,
+                                    exit_reason="grid_fill",
+                                )
 
                         if order_info.get("type") == "BUY" and self.stop_loss_manager:
                             fee_adjusted_qty = filled_qty * (1 - float(TAKER_FEE_RATE))
@@ -147,7 +165,14 @@ class StateManagerMixin:
                             f"Order {order_id} canceled mit Partial Fill während Downtime: "
                             f"{executed_qty} of {order_info.get('quantity')}"
                         )
-                        self._save_trade_to_memory(order_info, filled_price, executed_qty, fee_usd)
+                        trade_id = self._save_trade_to_memory(
+                            order_info, filled_price, executed_qty, fee_usd
+                        )
+
+                        if self._trade_pair_tracker and order_info.get("type") == "BUY":
+                            self._trade_pair_tracker.open_pair(
+                                self.symbol, trade_id, filled_price, executed_qty, fee_usd
+                            )
 
                         if order_info.get("type") == "BUY" and self.stop_loss_manager:
                             fee_adjusted_qty = executed_qty * (1 - float(TAKER_FEE_RATE))

@@ -44,6 +44,7 @@ from src.tasks.monitoring_tasks import (
     task_order_timeout_check,
     task_portfolio_plausibility,
     task_reconcile_orders,
+    task_stale_detection,
 )
 from src.tasks.portfolio_tasks import (
     task_coin_performance_update,
@@ -190,6 +191,9 @@ def main():
 
     # Grid health summary every 4 hours
     schedule.every(4).hours.do(task_grid_health_summary)
+
+    # Stale detection every 30 minutes
+    schedule.every(30).minutes.do(task_stale_detection)
 
     logger.info("Scheduled jobs:")
     for job in schedule.get_jobs():

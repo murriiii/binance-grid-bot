@@ -153,7 +153,20 @@ class OrderManagerMixin:
                     )
 
                     fee_usd = filled_price * filled_qty * float(TAKER_FEE_RATE)
-                    self._save_trade_to_memory(order_info, filled_price, filled_qty, fee_usd)
+                    trade_id = self._save_trade_to_memory(
+                        order_info, filled_price, filled_qty, fee_usd
+                    )
+
+                    # Track trade pair
+                    if self._trade_pair_tracker:
+                        if order_info["type"] == "BUY":
+                            self._trade_pair_tracker.open_pair(
+                                self.symbol, trade_id, filled_price, filled_qty, fee_usd
+                            )
+                        else:
+                            self._trade_pair_tracker.close_pair(
+                                self.symbol, trade_id, filled_price, filled_qty, fee_usd
+                            )
 
                     if order_info["type"] == "BUY" and self.stop_loss_manager:
                         fee_adjusted_qty = filled_qty * (1 - float(TAKER_FEE_RATE))
@@ -284,7 +297,13 @@ class OrderManagerMixin:
             f"Status: Canceled nach Partial Fill"
         )
 
-        self._save_trade_to_memory(order_info, filled_price, filled_qty, fee_usd)
+        trade_id = self._save_trade_to_memory(order_info, filled_price, filled_qty, fee_usd)
+
+        # Track trade pair for partial fills
+        if self._trade_pair_tracker and order_info["type"] == "BUY":
+            self._trade_pair_tracker.open_pair(
+                self.symbol, trade_id, filled_price, filled_qty, fee_usd
+            )
 
         if order_info["type"] == "BUY" and self.stop_loss_manager:
             fee_adjusted_qty = filled_qty * (1 - float(TAKER_FEE_RATE))
@@ -362,10 +381,10 @@ class OrderManagerMixin:
 
     def _save_trade_to_memory(
         self, order_info: dict, price: float, quantity: float, fee_usd: float = 0.0
-    ):
-        """Speichert einen Trade im Memory-System"""
+    ) -> int | None:
+        """Speichert einen Trade im Memory-System.  Returns trade_id or None."""
         if not self.memory:
-            return
+            return None
 
         try:
             from src.data.memory import TradeRecord
@@ -389,13 +408,16 @@ class OrderManagerMixin:
                 math_signal="GRID",
                 ai_signal="N/A",
                 reasoning=f"Grid order filled at {price} (fee: ${fee_usd:.4f})",
+                fee_usd=fee_usd,
             )
 
             trade_id = self.memory.save_trade(trade_record)
             logger.info(f"Trade in Memory gespeichert: ID {trade_id} (fee: ${fee_usd:.4f})")
+            return trade_id if trade_id and trade_id > 0 else None
 
         except Exception as e:
             logger.warning(f"Konnte Trade nicht in Memory speichern: {e}")
+            return None
 
     def _get_current_fear_greed(self) -> int:
         """Holt den aktuellen Fear & Greed Index"""
