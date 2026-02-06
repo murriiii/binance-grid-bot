@@ -13,6 +13,8 @@ from typing import Any
 
 import requests
 
+from src.utils.singleton import SingletonMixin
+
 logger = logging.getLogger("trading_bot")
 
 
@@ -76,7 +78,7 @@ def cached(ttl_seconds: int = 300):
     return decorator
 
 
-class HTTPClient:
+class HTTPClient(SingletonMixin):
     """
     Zentraler HTTP Client für alle API-Aufrufe.
 
@@ -321,21 +323,12 @@ class HTTPClient:
             self.session.close()
 
 
-# Singleton-Instanz für globale Nutzung
-_client_instance: HTTPClient | None = None
-
-
+# Convenience wrappers — delegate to SingletonMixin
 def get_http_client() -> HTTPClient:
-    """Gibt die globale HTTPClient-Instanz zurück"""
-    global _client_instance
-    if _client_instance is None:
-        _client_instance = HTTPClient()
-    return _client_instance
+    """Gibt die globale HTTPClient-Instanz zurück."""
+    return HTTPClient.get_instance()
 
 
 def reset_http_client():
     """Reset the global HTTPClient instance, closing its session."""
-    global _client_instance
-    if _client_instance is not None:
-        _client_instance.close()
-        _client_instance = None
+    HTTPClient.reset_instance()
