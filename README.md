@@ -3,10 +3,10 @@
 Ein regime-adaptiver Krypto-Trading-Bot mit Hybrid-System (HOLD/GRID/CASH), Multi-Coin Trading, AI-Enhancement, Memory-System und selbstlernendem Trading Playbook.
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![Version: 1.8.2](https://img.shields.io/badge/version-1.8.2-green.svg)](https://github.com/murriiii/binance-grid-bot/releases)
+[![Version: 1.12.0](https://img.shields.io/badge/version-1.12.0-green.svg)](https://github.com/murriiii/binance-grid-bot/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
-[![Tests: 895 passed](https://img.shields.io/badge/tests-895%20passed-brightgreen.svg)]()
+[![Tests: 907 passed](https://img.shields.io/badge/tests-907%20passed-brightgreen.svg)]()
 [![Coverage: 60%](https://img.shields.io/badge/coverage-60%25-yellowgreen.svg)]()
 
 ## Features
@@ -22,20 +22,23 @@ Ein regime-adaptiver Krypto-Trading-Bot mit Hybrid-System (HOLD/GRID/CASH), Mult
 - **Grid Trading Strategy** - Automatisches Kaufen/Verkaufen in definierten Preisbändern
 - **Decimal Precision** - Alle Preis-/Mengenberechnungen nutzen `Decimal` statt `float` (keine Binance-Rejections durch Rundungsfehler)
 - **Fee-Aware Trading** - Binance Taker-Fees (0.1%) werden bei Sell-Quantities automatisch abgezogen
-- **Multi-Coin Trading** - Handel ueber 2-8 Coins pro Cohort mit intelligenter Kapitalverteilung
+- **Multi-Coin Trading** - Handel ueber 2-3 Coins pro Cohort mit intelligenter Kapitalverteilung
 - **Dynamic Grid Strategy** - ATR-basierte Grid-Abstände, asymmetrische Grids basierend auf Trend
 - **AI-Enhanced Decisions** - DeepSeek-Integration für intelligentere Entscheidungen
 - **Trading Playbook** - Selbstlernendes "Erfahrungsgedächtnis" das aus Trades lernt
 - **Memory System** - PostgreSQL-basiertes RAG-System für historische Muster
 
 ### Multi-Coin System
-- **Watchlist Management** - 25+ Coins in 6 Kategorien (LARGE_CAP, MID_CAP, L2, DEFI, AI, GAMING)
+- **Watchlist Management** - 35+ Coins in 7 Kategorien (LARGE_CAP, MID_CAP, L2, DEFI, AI, GAMING, MEME)
 - **Coin Scanner** - Opportunity Detection mit technischen, Volume und Sentiment-Signalen
 - **Portfolio Allocator** - Kelly-basierte Kapitalverteilung mit Risk Constraints
+- **Category-Based Filtering** - Cohorts koennen auf bestimmte Coin-Kategorien beschraenkt werden (`allowed_categories`)
+- **Symbol Exclusion** - Jede Cohort handelt unique Coins (keine Ueberlappung)
+- **Pre-Feasibility Filter** - Coins werden vor Allocation geprueft ob min_position_usd erreichbar ist
 - **Per-Coin Learning** - Optimale Settings pro Coin automatisch erlernen
 
 ### Learning & Optimization
-- **Cohort System** - 4 parallele HybridOrchestrator-Instanzen (Konservativ, Balanced, Aggressiv, Baseline) mit je $100 eigenem Kapital
+- **Cohort System** - 6 parallele HybridOrchestrator-Instanzen mit je $1000 eigenem Kapital (Conservative, Balanced, Aggressive, Baseline, DeFi Explorer, Meme Hunter)
 - **Cycle Management** - Wöchentliche Trading-Zyklen mit vollständiger Performance-Analyse
 - **Bayesian Weight Learning** - Adaptive Signal-Gewichtung via Dirichlet-Distribution
 - **A/B Testing Framework** - Statistische Signifikanz-Tests (Welch t-Test, Mann-Whitney U)
@@ -80,6 +83,7 @@ Ein regime-adaptiver Krypto-Trading-Bot mit Hybrid-System (HOLD/GRID/CASH), Mult
 - **Centralized DB Connections** - Alle Module nutzen DatabaseManager Connection Pool statt eigene Connections
 - **Comprehensive Logging** - JSON-strukturierte Logs fuer langfristige Analyse
 - **Weekly Analysis Export** - Automatische Reports fuer Claude Code Optimierung
+- **Telegram Dashboard** - Emoji-basiertes Portfolio-Dashboard mit kompakter Preisformatierung, Status-Emojis und Per-Cohort P&L
 - **Telegram Notifications** - Echtzeit-Alerts und taegliche Reports (TelegramNotifier delegiert an TelegramService Singleton)
 - **SingletonMixin Pattern** - Alle Services (DatabaseManager, HTTPClient, WatchlistManager, CoinScanner, TelegramService, MarketDataProvider etc.) nutzen `SingletonMixin` mit automatischem `close()` Lifecycle und `reset_instance()`. ModeManager ist kein Singleton (jeder Cohort-Orchestrator hat eine eigene Instanz).
 - **Atomic State Writes** - Temp-File + Rename Pattern fuer korruptionsfreie State-Persistenz (DecimalEncoder, Temp-File Cleanup bei Fehlern)
@@ -100,9 +104,9 @@ Ein regime-adaptiver Krypto-Trading-Bot mit Hybrid-System (HOLD/GRID/CASH), Mult
 │              │                │                │                             │
 │              ▼                ▼                ▼                             │
 │      ┌──────────────┐ ┌──────────────┐ ┌──────────────┐  ...               │
-│      │ Hybrid Orch. │ │ Hybrid Orch. │ │ Hybrid Orch. │                    │
-│      │ conservative │ │   balanced   │ │  aggressive  │                    │
-│      │   ($100)     │ │   ($100)     │ │   ($100)     │                    │
+│      │ Hybrid Orch. │ │ Hybrid Orch. │ │ Hybrid Orch. │  (6 total)        │
+│      │ conservative │ │   balanced   │ │ meme_hunter  │                    │
+│      │  ($1,000)    │ │  ($1,000)    │ │  ($1,000)    │                    │
 │      └──────┬───────┘ └──────┬───────┘ └──────┬───────┘                    │
 │             │                │                │                             │
 │             ▼                ▼                ▼                             │
@@ -167,29 +171,37 @@ Ein regime-adaptiver Krypto-Trading-Bot mit Hybrid-System (HOLD/GRID/CASH), Mult
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-## Cohort System - 4 Parallele Bots
+## Cohort System - 6 Parallele Bots
 
-Das **Cohort System** betreibt 4 unabhaengige `HybridOrchestrator`-Instanzen parallel, jede mit eigener Strategie und eigenem Kapital. Alle teilen sich ein Binance-Testnet-Konto; das Kapital-Tracking ist virtuell pro Cohort.
+Das **Cohort System** betreibt 6 unabhaengige `HybridOrchestrator`-Instanzen parallel, jede mit eigener Strategie, eigenem Kapital und eigenen Coins. Alle teilen sich ein Binance-Testnet-Konto; das Kapital-Tracking ist virtuell pro Cohort.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                    CohortOrchestrator                            │
-│              (verwaltet 4 HybridOrchestrator)                   │
+│              (verwaltet 6 HybridOrchestrator)                   │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                  │
-│  Conservative                  Balanced                         │
-│  ├─ $100 Kapital               ├─ $100 Kapital                  │
-│  ├─ Enge Grids (2%)            ├─ Standard Grids (5%)           │
-│  ├─ Hohe Confidence (>0.7)     ├─ Medium Confidence (>0.5)      │
-│  ├─ Risk: low                  ├─ Risk: medium                  │
-│  └─ Max 2 Coins                └─ Max 2 Coins                   │
+│  🛡️ Conservative                ⚖️ Balanced                      │
+│  ├─ $1000 Kapital               ├─ $1000 Kapital                 │
+│  ├─ Enge Grids (2%)             ├─ Standard Grids (5%)           │
+│  ├─ Hohe Confidence (>0.7)      ├─ Medium Confidence (>0.5)      │
+│  ├─ Risk: low → conservative    ├─ Risk: medium → balanced       │
+│  └─ Max 3 Coins (LARGE_CAP)    └─ Max 3 Coins                   │
 │                                                                  │
-│  Aggressive                    Baseline                         │
-│  ├─ $100 Kapital               ├─ $100 Kapital                  │
-│  ├─ Weite Grids (8%)           ├─ Standard Grids (5%)           │
-│  ├─ Niedrige Confidence (>0.3) ├─ Frozen (keine Anpassungen)    │
-│  ├─ Risk: high                 ├─ Risk: medium                  │
-│  └─ Max 2 Coins                └─ Kontrollgruppe                │
+│  ⚔️ Aggressive                   🧊 Baseline                     │
+│  ├─ $1000 Kapital               ├─ $1000 Kapital                 │
+│  ├─ Weite Grids (8%)            ├─ Standard Grids (5%)           │
+│  ├─ Niedrige Confidence (>0.3)  ├─ Frozen (keine Anpassungen)    │
+│  ├─ Risk: high → aggressive     ├─ Risk: medium → balanced       │
+│  └─ Max 3 Coins (alle Kat.)    └─ Kontrollgruppe                │
+│                                                                  │
+│  🔬 DeFi Explorer               🎰 Meme Hunter                  │
+│  ├─ $1000 Kapital               ├─ $1000 Kapital                 │
+│  ├─ Breite Grids (10%)          ├─ Sehr breite Grids (15%)       │
+│  ├─ Confidence >0.3             ├─ Confidence >0.2               │
+│  ├─ Risk: high → aggressive     ├─ Risk: high → aggressive       │
+│  ├─ Nur DEFI + AI Coins         ├─ Nur MEME Coins                │
+│  └─ Max 3 Coins                 └─ Max 3 Coins                   │
 │                                                                  │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -200,12 +212,15 @@ Das **Cohort System** betreibt 4 unabhaengige `HybridOrchestrator`-Instanzen par
 - **Isolierte State-Files**: `hybrid_state_{cohort}.json` + `grid_state_{symbol}_{cohort}.json`
 - **Shared BinanceClient**: Alle Cohorts nutzen denselben Testnet-Client
 - **ModeManager**: Kein Singleton — jeder Orchestrator hat eigene Instanz
-- **SMALL_PORTFOLIO_CONSTRAINTS**: Alle $100-Cohorts nutzen das "small" Preset (tier_limits 40/30/20%, max 40% pro Coin), da andere Presets bei $100 zu kleine Positionen erzeugen
+- **Symbol Exclusion**: Jede Cohort handelt unique Coins — keine Ueberlappung zwischen Cohorts
+- **Category Override**: `allowed_categories` in CohortConfig beschraenkt Coins auf bestimmte Kategorien (z.B. nur MEME fuer meme_hunter)
+- **Risk-Mapped Presets**: `risk_tolerance` wird auf Constraint-Presets gemappt (low→conservative, medium→balanced, high→aggressive)
 
 ### Vorteile
-- 4x mehr Daten pro Woche
-- Direkter A/B/C/D Vergleich
+- 6x mehr Daten pro Woche
+- Direkter Vergleich: Konservativ vs Aggressiv vs Small-Cap
 - Baseline zeigt ob Aenderungen wirklich helfen
+- Spezialisierte Bots fuer DeFi/AI und Meme-Coins
 - Schnellere statistische Signifikanz
 
 ### Cycle Management
@@ -279,8 +294,8 @@ cd docker && docker compose up -d
 # Hybrid-System
 HYBRID_INITIAL_MODE=GRID
 HYBRID_ENABLE_MODE_SWITCHING=false     # Erstmal nur Multi-Coin GRID testen
-HYBRID_TOTAL_INVESTMENT=400         # Wird von Cohort-System ueberschrieben ($100/Cohort)
-HYBRID_MAX_SYMBOLS=8                # Wird von from_cohort() auf 2 pro Cohort gesetzt
+HYBRID_TOTAL_INVESTMENT=400         # Wird von Cohort-System ueberschrieben ($1000/Cohort)
+HYBRID_MAX_SYMBOLS=8                # Wird von from_cohort() auf 3 pro Cohort gesetzt
 HYBRID_MIN_POSITION_USD=10
 HYBRID_HOLD_TRAILING_STOP_PCT=7.0
 HYBRID_MODE_COOLDOWN_HOURS=24
@@ -294,7 +309,7 @@ Das **Multi-Coin System** ermöglicht diversifiziertes Trading ueber mehrere Coi
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    COIN UNIVERSE (25+ Coins)                    │
+│                    COIN UNIVERSE (35+ Coins)                    │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                  │
 │  LARGE CAPS (Tier 1)           MID CAPS (Tier 1)                │
@@ -303,11 +318,17 @@ Das **Multi-Coin System** ermöglicht diversifiziertes Trading ueber mehrere Coi
 │                                                                  │
 │  L2 ECOSYSTEM                  DEFI                              │
 │  ├─ ARB, OP, MATIC             ├─ UNI, AAVE, MKR, CRV, LDO      │
-│  └─ Layer 2 Growth             └─ DeFi Blue Chips               │
+│  └─ Layer 2 Growth             ├─ DYDX, INJ, ENA, PENDLE        │
+│                                  └─ DeFi Blue Chips + Explorer   │
 │                                                                  │
 │  AI TOKENS                     GAMING                            │
 │  ├─ FET, RNDR, TAO, NEAR       ├─ IMX, GALA, AXS, SAND          │
-│  └─ AI/Compute Narrative       └─ Gaming/Metaverse              │
+│  ├─ RENDER, WLD                └─ Gaming/Metaverse              │
+│  └─ AI/Compute Narrative                                        │
+│                                                                  │
+│  MEME (Tier 3)                                                  │
+│  ├─ DOGE, SHIB, PEPE, FLOKI, BONK, WIF                         │
+│  └─ Hochvolatil, breite Grids (15%)                             │
 │                                                                  │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -354,7 +375,7 @@ kelly_fraction = 0.5         # Half-Kelly für konservatives Sizing
 
 ### Erwartete Datensammlung (3-4 Monate)
 
-Mit 4 Cohorts × 20+ Coins × 24/7 Trading:
+Mit 6 Cohorts × 18 unique Coins × 24/7 Trading:
 
 | Metrik | Erwartetes Volumen |
 |--------|-------------------|
@@ -716,6 +737,7 @@ DATABASE_URL=postgresql://trading:password@localhost:5433/trading_bot
 | Command | Beschreibung |
 |---------|--------------|
 | `/status` | Aktueller Bot-Status und Portfolio |
+| `/report` | Portfolio-Dashboard mit Emoji-Status pro Cohort, P&L und Coin-Details |
 | `/market` | Marktübersicht (F&G, BTC, Trending) |
 | `/ta BTCUSDT` | Technical Analysis für Symbol |
 | `/whale` | Letzte Whale-Alerts |
@@ -860,7 +882,7 @@ mypy src/
 ### Tests
 
 ```bash
-# Alle Tests ausfuehren (895 Tests)
+# Alle Tests ausfuehren (907 Tests)
 pytest tests/ -v
 
 # Mit Coverage (Minimum: 60%)
@@ -882,7 +904,7 @@ pytest tests/test_grid_strategy.py -v
 | Risk | 49-94% | CVaR, Stop-Loss, Risk Guard |
 | API | 20-76% | Binance Client, HTTP Client |
 | Scanner/Portfolio | 43-97% | CoinScanner, Allocator |
-| **Gesamt** | **60%** | **895 Tests** |
+| **Gesamt** | **60%** | **907 Tests** |
 
 ### Pre-commit Hooks
 
@@ -901,7 +923,7 @@ Die GitHub Actions Pipeline:
 
 1. **Lint & Format**: Ruff checks (0 errors)
 2. **Type Check**: MyPy strict mode (0 errors)
-3. **Tests**: 895 Tests mit Coverage >= 60%
+3. **Tests**: 907 Tests mit Coverage >= 60%
 4. **Auto-Release**: Bei Version-Bump in pyproject.toml wird automatisch ein GitHub Release erstellt
 
 ## Conventional Commits

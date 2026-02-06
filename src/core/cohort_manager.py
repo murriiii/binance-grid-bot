@@ -49,6 +49,7 @@ class CohortConfig:
     use_playbook: bool = True
     risk_tolerance: str = "medium"  # low, medium, high
     frozen: bool = False  # True für Baseline (keine Änderungen)
+    allowed_categories: list[str] | None = None  # Override category filter
 
     @classmethod
     def from_json(cls, config_json: dict) -> "CohortConfig":
@@ -61,6 +62,7 @@ class CohortConfig:
             use_playbook=config_json.get("use_playbook", True),
             risk_tolerance=config_json.get("risk_tolerance", "medium"),
             frozen=config_json.get("frozen", False),
+            allowed_categories=config_json.get("allowed_categories"),
         )
 
     def to_json(self) -> dict:
@@ -73,6 +75,7 @@ class CohortConfig:
             "use_playbook": self.use_playbook,
             "risk_tolerance": self.risk_tolerance,
             "frozen": self.frozen,
+            "allowed_categories": self.allowed_categories,
         }
 
 
@@ -197,6 +200,26 @@ class CohortManager(SingletonMixin):
                 "baseline",
                 "Baseline: Kontrolle ohne Änderungen",
                 CohortConfig(grid_range_pct=5.0, min_confidence=0.5, frozen=True),
+            ),
+            (
+                "defi_explorer",
+                "DeFi & AI Explorer: Breite Grids für DeFi/AI Coins",
+                CohortConfig(
+                    grid_range_pct=10.0,
+                    min_confidence=0.3,
+                    risk_tolerance="high",
+                    allowed_categories=["DEFI", "AI"],
+                ),
+            ),
+            (
+                "meme_hunter",
+                "Meme Hunter: Sehr breite Grids für hochvolatile Meme Coins",
+                CohortConfig(
+                    grid_range_pct=15.0,
+                    min_confidence=0.2,
+                    risk_tolerance="high",
+                    allowed_categories=["MEME"],
+                ),
             ),
         ]
 

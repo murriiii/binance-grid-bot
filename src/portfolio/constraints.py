@@ -35,6 +35,7 @@ class AllocationConstraints:
             "DEFI": 20.0,
             "AI": 15.0,
             "GAMING": 10.0,
+            "MEME": 10.0,
         }
     )
 
@@ -249,6 +250,7 @@ SMALL_PORTFOLIO_CONSTRAINTS = AllocationConstraints(
         "DEFI": 40.0,
         "AI": 40.0,
         "GAMING": 30.0,
+        "MEME": 30.0,
     },
     min_cash_reserve_pct=15.0,
     max_open_positions=8,

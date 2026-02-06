@@ -116,10 +116,14 @@ class HybridConfig:
             categories = ("LARGE_CAP",)
         elif risk == "high":
             preset = "aggressive"
-            categories = ("LARGE_CAP", "MID_CAP", "L2", "DEFI", "AI", "GAMING")
+            categories = ("LARGE_CAP", "MID_CAP", "L2", "DEFI", "AI", "GAMING", "MEME")
         else:
             preset = "balanced"
             categories = ("LARGE_CAP", "MID_CAP", "L2")
+
+        # Explicit override from CohortConfig takes priority
+        if cohort.config.allowed_categories:
+            categories = tuple(cohort.config.allowed_categories)
 
         return cls(
             initial_mode=os.getenv("HYBRID_INITIAL_MODE", "GRID"),

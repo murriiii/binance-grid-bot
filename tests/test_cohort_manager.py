@@ -161,6 +161,7 @@ class TestHybridConfigFromCohort:
             "DEFI",
             "AI",
             "GAMING",
+            "MEME",
         )
         assert hc.total_investment == 95
         assert hc.portfolio_constraints_preset == "aggressive"
@@ -290,6 +291,123 @@ class TestCohortOrchestrator:
         assert "conservative" in status
         assert status["conservative"]["mode"] == "GRID"
         assert status["conservative"]["cohort_config"]["id"] == "1"
+
+
+class TestAllowedCategories:
+    """Tests for allowed_categories in CohortConfig and HybridConfig."""
+
+    def test_allowed_categories_default_none(self):
+        from src.core.cohort_manager import CohortConfig
+
+        config = CohortConfig()
+        assert config.allowed_categories is None
+
+    def test_allowed_categories_from_json(self):
+        from src.core.cohort_manager import CohortConfig
+
+        config = CohortConfig.from_json({"allowed_categories": ["DEFI", "AI"]})
+        assert config.allowed_categories == ["DEFI", "AI"]
+
+    def test_allowed_categories_from_json_missing(self):
+        from src.core.cohort_manager import CohortConfig
+
+        config = CohortConfig.from_json({})
+        assert config.allowed_categories is None
+
+    def test_allowed_categories_to_json(self):
+        from src.core.cohort_manager import CohortConfig
+
+        config = CohortConfig(allowed_categories=["MEME"])
+        data = config.to_json()
+        assert data["allowed_categories"] == ["MEME"]
+
+    def test_allowed_categories_to_json_none(self):
+        from src.core.cohort_manager import CohortConfig
+
+        config = CohortConfig()
+        data = config.to_json()
+        assert data["allowed_categories"] is None
+
+    def test_from_cohort_allowed_categories_override(self):
+        from src.core.cohort_manager import Cohort, CohortConfig
+        from src.core.hybrid_config import HybridConfig
+
+        config = CohortConfig(
+            grid_range_pct=10.0,
+            min_confidence=0.3,
+            risk_tolerance="high",
+            allowed_categories=["DEFI", "AI"],
+        )
+        cohort = Cohort(
+            id="5",
+            name="defi_explorer",
+            description="test",
+            config=config,
+            starting_capital=1000,
+            current_capital=1000,
+        )
+
+        hc = HybridConfig.from_cohort(cohort)
+        # Override should take priority over risk_tolerance mapping
+        assert hc.allowed_categories == ("DEFI", "AI")
+        assert hc.portfolio_constraints_preset == "aggressive"
+
+    def test_from_cohort_meme_override(self):
+        from src.core.cohort_manager import Cohort, CohortConfig
+        from src.core.hybrid_config import HybridConfig
+
+        config = CohortConfig(
+            grid_range_pct=15.0,
+            min_confidence=0.2,
+            risk_tolerance="high",
+            allowed_categories=["MEME"],
+        )
+        cohort = Cohort(
+            id="6",
+            name="meme_hunter",
+            description="test",
+            config=config,
+            starting_capital=1000,
+            current_capital=1000,
+        )
+
+        hc = HybridConfig.from_cohort(cohort)
+        assert hc.allowed_categories == ("MEME",)
+
+    def test_from_cohort_no_override_uses_risk_mapping(self):
+        from src.core.cohort_manager import Cohort, CohortConfig
+        from src.core.hybrid_config import HybridConfig
+
+        config = CohortConfig(risk_tolerance="high")
+        cohort = Cohort(
+            id="7",
+            name="aggressive",
+            description="test",
+            config=config,
+            starting_capital=1000,
+            current_capital=1000,
+        )
+
+        hc = HybridConfig.from_cohort(cohort)
+        # Without override, high risk should include all categories
+        assert "MEME" in hc.allowed_categories
+        assert "LARGE_CAP" in hc.allowed_categories
+
+    def test_default_cohorts_include_defi_and_meme(self, reset_new_singletons):
+        from src.core.cohort_manager import CohortManager
+
+        cm = CohortManager.get_instance()
+        assert "defi_explorer" in cm.cohorts
+        assert "meme_hunter" in cm.cohorts
+
+        defi = cm.cohorts["defi_explorer"]
+        assert defi.config.allowed_categories == ["DEFI", "AI"]
+        assert defi.config.risk_tolerance == "high"
+
+        meme = cm.cohorts["meme_hunter"]
+        assert meme.config.allowed_categories == ["MEME"]
+        assert meme.config.grid_range_pct == 15.0
+        assert meme.config.min_confidence == 0.2
 
 
 class TestCohortManager:

@@ -1,9 +1,9 @@
-# Trading Bot - Hybrid System Umbau
+# Trading Bot - Hybrid Multi-Coin System
 
-## Status: In Progress
-## Ziel: Regime-adaptives Hybrid-Trading-System
+## Status: Testnet Learning Phase
+## Ziel: Regime-adaptives Hybrid-Trading-System mit Multi-Strategie Cohorts
 
-### Aktueller Fokus: Phase 7 abgeschlossen - Deploy vorbereiten
+### Aktueller Fokus: 6 Cohorts auf Testnet (898 Tests)
 
 ---
 
@@ -73,13 +73,50 @@
 
 - [x] **7.1**: B6 - DynamicGrid Cache Memory-Leak fixen (`dynamic_grid.py`)
 - [x] **7.2**: Integration Tests (Full-Lifecycle, Multi-Coin, Transitions) (`test_integration.py`)
-- [x] **7.3**: `pytest tests/ -v` alle grün (508 tests passed)
+- [x] **7.3**: `pytest tests/ -v` alle grün (898 tests passed)
 - [x] **7.4**: `ruff check src/ tests/ docker/` keine Fehler
 - [x] **7.5**: `mypy src/` keine Fehler (63 source files)
 - [ ] **7.6**: 2 Wochen Testnet mit `enable_mode_switching=false` (Multi-Coin GRID)
 - [ ] **7.7**: Dann `enable_mode_switching=true` aktivieren
 
+## Phase 8: Cohort-System (A/B Testing)
+
+- [x] **8.1**: CohortManager + CohortOrchestrator (`cohort_manager.py`, `cohort_orchestrator.py`)
+- [x] **8.2**: HybridConfig.from_cohort() mit Risk-Mapping
+- [x] **8.3**: Kategorie-basierte Coin-Differenzierung (LARGE_CAP, MID_CAP, DEFI, etc.)
+- [x] **8.4**: Symbol-Exclusion zwischen Cohorts (unique Coins pro Bot)
+- [x] **8.5**: Pre-Feasibility-Filter im Allocator
+- [x] **8.6**: Telegram /report mit DB-basiertem P&L
+- [x] **8.7**: Decimal-Type-Fix in Report und RiskGuard
+- [x] **8.8**: SingletonMixin Migration (HTTPClient, alle Services)
+
+## Phase 9: Small-Cap Expansion + Dashboard (aktuell)
+
+- [x] **9.1**: Report-Dashboard Redesign mit Emojis
+- [x] **9.2**: `allowed_categories` Override in CohortConfig
+- [x] **9.3**: 2 neue Cohorts: defi_explorer + meme_hunter
+- [x] **9.4**: 12 neue Watchlist-Coins (MEME, DEFI, AI)
+- [x] **9.5**: MEME-Kategorie in Constraints
+- [ ] **9.6**: Deploy + Verifikation (6 Cohorts mit unique Coins)
+
+---
+
 ## Spätere Verbesserungen (während Testmonate)
+
+### Priorität A: Nächste Features
+
+- [ ] **E1: Auto-Discovery** — Automatische Watchlist-Erweiterung
+  - `BinanceClient.get_all_tickers()` Methode
+  - Scheduled Task (1x täglich): Alle USDT-Paare scannen
+  - Filter: Min. 24h-Volume, Marktkapitalisierung, Testnet-Verfügbarkeit
+  - Kategorisierung: Marketcap → LARGE/MID/SMALL, Sektor → DEFI/AI/MEME/etc.
+  - `WatchlistManager.add_coin()` für dynamisches Hinzufügen
+  - Inaktive/illiquide Coins automatisch deaktivieren
+
+- [ ] **E2**: Unrealized P&L im Report (Live-Bewertung der offenen Positionen)
+- [ ] **E3**: Performance-Vergleich zwischen Cohorts (welche Strategie gewinnt?)
+
+### Priorität B: Optimierungen
 
 - [ ] C1: RAG-Similarity verbessern (`memory.py`)
 - [ ] C2: DB Retention + Indexes + Constraints (`init.sql`)
@@ -107,6 +144,8 @@
 | 5     | 3     | 3        | done   |
 | 6     | 4     | 4        | done   |
 | 7     | 7     | 5        | deploy |
+| 8     | 8     | 8        | done   |
+| 9     | 6     | 5        | active |
 
 ## Deployment-Strategie
 
@@ -114,3 +153,5 @@
 2. Phase 4-5: main_hybrid.py als separater Entry Point (altes main.py bleibt)
 3. Phase 6: Docker-Compose umstellen auf hybrid
 4. Phase 7: Testnet mit mode_switching=false, dann true
+5. Phase 8: Cohort-System mit 4 Strategien ($1000 je)
+6. Phase 9: 6 Cohorts + Small-Cap/Meme Expansion

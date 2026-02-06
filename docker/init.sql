@@ -757,6 +757,12 @@ INSERT INTO cohorts (name, description, config, starting_capital) VALUES
      1000.00),
     ('baseline', 'Baseline: Keine Änderungen, Woche 1 Strategie als Kontrolle',
      '{"grid_range_pct": 5.0, "min_confidence": 0.5, "frozen": true, "risk_tolerance": "medium"}',
+     1000.00),
+    ('defi_explorer', 'DeFi & AI Explorer: Breite Grids für DeFi/AI Coins',
+     '{"grid_range_pct": 10.0, "min_confidence": 0.3, "risk_tolerance": "high", "allowed_categories": ["DEFI", "AI"]}',
+     1000.00),
+    ('meme_hunter', 'Meme Hunter: Sehr breite Grids für hochvolatile Meme Coins',
+     '{"grid_range_pct": 15.0, "min_confidence": 0.2, "risk_tolerance": "high", "allowed_categories": ["MEME"]}',
      1000.00)
 ON CONFLICT (name) DO NOTHING;
 
@@ -1205,7 +1211,25 @@ INSERT INTO watchlist (symbol, base_asset, category, tier, min_volume_24h_usd) V
     -- GAMING (Tier 3)
     ('AXSUSDT', 'AXS', 'GAMING', 3, 10000000),
     ('SANDUSDT', 'SAND', 'GAMING', 3, 10000000),
-    ('MANAUSDT', 'MANA', 'GAMING', 3, 10000000)
+    ('MANAUSDT', 'MANA', 'GAMING', 3, 10000000),
+
+    -- MEME (Tier 3)
+    ('DOGEUSDT', 'DOGE', 'MEME', 3, 50000000),
+    ('SHIBUSDT', 'SHIB', 'MEME', 3, 30000000),
+    ('PEPEUSDT', 'PEPE', 'MEME', 3, 30000000),
+    ('FLOKIUSDT', 'FLOKI', 'MEME', 3, 10000000),
+    ('BONKUSDT', 'BONK', 'MEME', 3, 10000000),
+    ('WIFUSDT', 'WIF', 'MEME', 3, 10000000),
+
+    -- Additional DEFI (Tier 2-3)
+    ('DYDXUSDT', 'DYDX', 'DEFI', 2, 10000000),
+    ('INJUSDT', 'INJ', 'DEFI', 2, 15000000),
+    ('ENAUSDT', 'ENA', 'DEFI', 3, 10000000),
+    ('PENDLEUSDT', 'PENDLE', 'DEFI', 3, 10000000),
+
+    -- Additional AI (Tier 2-3)
+    ('RENDERUSDT', 'RENDER', 'AI', 2, 15000000),
+    ('WLDUSDT', 'WLD', 'AI', 2, 15000000)
 
 ON CONFLICT (symbol) DO NOTHING;
 

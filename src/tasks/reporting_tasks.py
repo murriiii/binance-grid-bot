@@ -6,6 +6,33 @@ from psycopg2.extras import RealDictCursor
 
 from src.tasks.base import get_db_connection, logger
 
+COHORT_EMOJIS = {
+    "conservative": "🛡️",
+    "balanced": "⚖️",
+    "aggressive": "⚔️",
+    "baseline": "🧊",
+    "defi_explorer": "🔬",
+    "meme_hunter": "🎰",
+}
+
+
+def _format_price(price: float) -> str:
+    """Format price compactly: $97.3K, $2.7K, $0.145."""
+    if price >= 100_000:
+        return f"${price / 1000:,.0f}K"
+    if price >= 1_000:
+        return f"${price / 1000:,.1f}K"
+    if price >= 1:
+        return f"${price:,.2f}"
+    return f"${price:.4f}"
+
+
+def _status_emoji(realized_pnl: float, trade_count: int) -> str:
+    """Return status circle based on P&L."""
+    if trade_count == 0:
+        return "⚪"
+    return "🟢" if realized_pnl >= 0 else "🔴"
+
 
 def check_data_sources_status() -> dict[str, bool]:
     """Prüft welche Datenquellen verfügbar sind."""
@@ -99,10 +126,10 @@ def generate_performance_chart():
 
 
 def _build_cohort_status() -> str:
-    """Build per-cohort status section for the daily summary.
+    """Build per-cohort dashboard for Telegram.
 
-    Reads all hybrid_state_{cohort}.json files and shows per-cohort
-    performance with coins, orders, and P&L.
+    Reads hybrid_state_{cohort}.json files and shows per-cohort
+    performance with coins, orders, and P&L in a visual dashboard format.
     """
     import json
     from pathlib import Path
@@ -111,10 +138,8 @@ def _build_cohort_status() -> str:
     if not config_dir.exists():
         return ""
 
-    # Find all cohort state files
     state_files = sorted(config_dir.glob("hybrid_state_*.json"))
     if not state_files:
-        # Fallback: check for single hybrid_state.json
         single = config_dir / "hybrid_state.json"
         if single.exists():
             state_files = [single]
@@ -144,7 +169,6 @@ def _build_cohort_status() -> str:
                 for row in cur.fetchall():
                     cohort_info[row["name"]] = row
 
-                # Realized P&L per cohort from trade_pairs
                 for name, info in cohort_info.items():
                     try:
                         cur.execute(
@@ -165,82 +189,107 @@ def _build_cohort_status() -> str:
         finally:
             conn.close()
 
-    lines = ["\n<b>Cohort Status:</b>"]
+    lines = ["<b>📊 PORTFOLIO DASHBOARD</b>", "━━━━━━━━━━━━━━━━━━━━━"]
+
+    # Totals for footer
+    total_starting = 0.0
+    total_current = 0.0
+    total_trades = 0
+    total_coins = 0
 
     for sf in state_files:
         try:
             with open(sf) as f:
                 state = json.load(f)
 
-            # Extract cohort name from filename
-            fname = sf.stem  # e.g. "hybrid_state_conservative"
+            fname = sf.stem
             cohort_name = fname.replace("hybrid_state_", "") if "_" in fname else "default"
 
             db_info = cohort_info.get(cohort_name, {})
-            starting = float(db_info.get("starting_capital", 100)) if db_info else 100.0
+            starting = float(db_info.get("starting_capital", 1000)) if db_info else 1000.0
             config_data = db_info.get("config", {}) if db_info else {}
             grid_pct = config_data.get("grid_range_pct", "?") if config_data else "?"
-            risk = config_data.get("risk_tolerance", "?") if config_data else "?"
 
-            # Calculate current value from symbols
-            # All cohorts share one Binance account — use allocation_usd from
-            # state (virtual per-cohort tracking). Cash = total - allocated.
             total_investment = state.get("config", {}).get("total_investment", starting)
             total_allocated = 0.0
-            symbol_lines = []
+            coin_rows = []
+
             for sym, sdata in state.get("symbols", {}).items():
                 alloc = sdata.get("allocation_usd", 0)
                 total_allocated += alloc
+                base = sym.replace("USDT", "")
 
+                price_str = "—"
+                order_str = "—"
                 if client:
                     try:
                         price = client.get_current_price(sym)
                         orders = client.client.get_open_orders(symbol=sym)
                         n_buy = sum(1 for o in orders if o["side"] == "BUY")
                         n_sell = sum(1 for o in orders if o["side"] == "SELL")
-                        order_info = f"{n_buy}B/{n_sell}S"
-                        price_str = f"${price:,.2f}" if price else "N/A"
+                        price_str = _format_price(price) if price else "—"
+                        order_str = f"{n_buy}B/{n_sell}S"
                     except Exception:
-                        order_info = "?"
-                        price_str = "N/A"
-                else:
-                    order_info = "?"
-                    price_str = "N/A"
+                        pass
 
-                val_str = f"${alloc:.2f}" if alloc > 0 else "-"
-                symbol_lines.append(f"  {sym}: {price_str} | {val_str} | {order_info}")
+                alloc_str = f"${alloc:.0f}" if alloc >= 1 else "—"
+                coin_rows.append(f"  {base:<6s} {price_str:>8s}  {alloc_str:>5s}  {order_str}")
 
             cash_reserve = total_investment - total_allocated
             alloc_pct = total_allocated / total_investment * 100 if total_investment else 0
 
-            # P&L from DB
             realized_pnl = db_info.get("realized_pnl", 0.0) if db_info else 0.0
             trade_count = db_info.get("trade_count", 0) if db_info else 0
             current_value = total_investment + realized_pnl
+
+            # Accumulate totals
+            total_starting += starting
+            total_current += current_value
+            total_trades += trade_count
+            total_coins += len(coin_rows)
+
+            # P&L percentage
             if starting > 0 and realized_pnl != 0:
                 pnl_pct = realized_pnl / starting * 100
-                pnl_str = f"${realized_pnl:+.2f} ({pnl_pct:+.1f}%) | {trade_count} Trades"
-            elif trade_count > 0:
-                pnl_str = f"$0.00 | {trade_count} Trades"
+                value_str = f"${starting:,.0f} → ${current_value:,.2f} ({pnl_pct:+.1f}%)"
             else:
-                pnl_str = "noch keine Trades"
+                value_str = f"${starting:,.0f} → ${current_value:,.2f} (±0.0%)"
 
+            emoji = COHORT_EMOJIS.get(cohort_name, "🤖")
+            status = _status_emoji(realized_pnl, trade_count)
             mode = state.get("current_mode", "?")
+
+            lines.append(f"\n{emoji} <b>{cohort_name.upper()}</b>  {status}")
+            lines.append(f"<code>{value_str}</code>")
+            lines.append(f"⚙️ Grid {grid_pct}% | Mode: {mode}")
             lines.append(
-                f"\n<b>{cohort_name.title()}</b> (${starting:.0f} -> ${current_value:.2f})"
+                f"💰 ${total_allocated:,.0f} inv. ({alloc_pct:.0f}%) · 💵 ${cash_reserve:,.0f} cash"
             )
-            lines.append(f"  Grid: {grid_pct}% | Risk: {risk} | Mode: {mode}")
-            lines.append(
-                f"  Investiert: ${total_allocated:.2f} ({alloc_pct:.0f}%) "
-                f"| Cash: ${cash_reserve:.2f}"
-            )
-            lines.append(f"  P&L: {pnl_str}")
-            lines.extend(symbol_lines)
+
+            if trade_count > 0:
+                lines.append(f"📈 <b>{realized_pnl:+.2f}$</b> · {trade_count} Trades")
+
+            if coin_rows:
+                lines.append("<code>" + "\n".join(coin_rows) + "</code>")
 
         except Exception as e:
             logger.debug(f"Failed to read {sf}: {e}")
 
-    return "\n".join(lines) if len(lines) > 1 else ""
+    if len(lines) <= 2:
+        return ""
+
+    # Footer
+    if total_starting > 0:
+        total_pnl_pct = (total_current - total_starting) / total_starting * 100
+        lines.append("\n━━━━━━━━━━━━━━━━━━━━━")
+        lines.append(
+            f"📈 <b>Total:</b> ${total_starting:,.0f} → "
+            f"${total_current:,.2f} ({total_pnl_pct:+.1f}%)"
+        )
+        n_bots = len(state_files)
+        lines.append(f"🤖 {n_bots} Bots · {total_coins} Coins · {total_trades} Trades")
+
+    return "\n".join(lines)
 
 
 def task_daily_summary():
