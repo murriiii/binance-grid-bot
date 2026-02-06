@@ -18,6 +18,8 @@ from decimal import Decimal
 
 from dotenv import load_dotenv
 
+from src.utils.singleton import SingletonMixin
+
 load_dotenv()
 
 logger = logging.getLogger("trading_bot")
@@ -73,12 +75,12 @@ class WatchlistCoin:
     min_notional: Decimal | None = None
 
 
-class WatchlistManager:
+class WatchlistManager(SingletonMixin):
     """
     Verwaltet die Watchlist für Multi-Coin Trading.
 
     Features:
-    - Singleton Pattern
+    - Singleton Pattern (via SingletonMixin)
     - Lädt alle aktiven Coins aus der DB
     - Aktualisiert Preise/Volumen von Binance
     - Filtert Coins nach Liquidität
@@ -90,8 +92,6 @@ class WatchlistManager:
         manager.update_market_data()
     """
 
-    _instance: WatchlistManager | None = None
-
     def __init__(self):
         self.conn = None
         self._symbol_cache: dict[str, dict] = {}
@@ -101,20 +101,11 @@ class WatchlistManager:
         self._last_full_update: datetime | None = None
         self.connect()
 
-    @classmethod
-    def get_instance(cls) -> WatchlistManager:
-        """Singleton-Instanz."""
-        if cls._instance is None:
-            cls._instance = cls()
-        return cls._instance
-
-    @classmethod
-    def reset_instance(cls) -> None:
-        """Reset für Tests."""
-        if cls._instance is not None:
-            if cls._instance.conn:
-                cls._instance.conn.close()
-            cls._instance = None
+    def close(self):
+        """Called by SingletonMixin.reset_instance()."""
+        if self.conn:
+            self.conn.close()
+            self.conn = None
 
     def connect(self) -> bool:
         """Verbindet zur PostgreSQL Datenbank."""
