@@ -1,3 +1,9 @@
+## v1.9.0 (2026-02-06)
+
+### Feat
+
+- implement cohort-based multi-bot system with 4 parallel strategies
+
 ## v1.8.3 (2026-02-06)
 
 ### Fix
