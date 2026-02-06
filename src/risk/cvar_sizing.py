@@ -331,9 +331,9 @@ class CVaRPositionSizer:
         if len(wins) == 0 or len(losses) == 0:
             return 0.0
 
-        # Adjust win probability by signal confidence
+        # Use base win rate directly - confidence adjustment happens in calculate_position_size()
         base_win_rate = len(wins) / len(returns)
-        adjusted_win_rate = base_win_rate * (0.5 + signal_confidence * 0.5)
+        adjusted_win_rate = base_win_rate
 
         p = adjusted_win_rate
         q = 1 - p

@@ -78,9 +78,9 @@ class GridBot:
     MAX_BACKOFF_SECONDS = 300
     CIRCUIT_BREAKER_PCT = 10.0  # Emergency stop bei >10% Drop pro Check-Zyklus
 
-    def __init__(self, config: dict):
+    def __init__(self, config: dict, client: BinanceClient | None = None):
         self.config = config
-        self.client = BinanceClient(testnet=config.get("testnet", True))
+        self.client = client or BinanceClient(testnet=config.get("testnet", True))
         self.symbol = config["symbol"]
         self.running = False
         self.strategy = None
@@ -942,6 +942,39 @@ class GridBot:
             logger.exception(f"Fehler beim Laden des States: {e}")
             return False
 
+    def tick(self) -> bool:
+        """Execute one iteration of the main loop.
+
+        Returns:
+            True if the bot should continue, False if it should stop.
+        """
+        self.check_orders()
+        self.save_state()
+
+        current_price = self.client.get_current_price(self.symbol)
+        if current_price:
+            if self._check_circuit_breaker(current_price):
+                return False
+
+            self._check_stop_losses(current_price)
+
+            balance_usdt = self.client.get_account_balance("USDT")
+            logger.info(
+                f"USDT: {balance_usdt:.2f} | "
+                f"{self.symbol}: {current_price:.2f} | "
+                f"Orders: {len(self.active_orders)}"
+            )
+
+        if self.stop_loss_manager:
+            portfolio_value = self.client.get_account_balance("USDT")
+            should_stop, reason = self.stop_loss_manager.check_portfolio_drawdown(portfolio_value)
+            if should_stop:
+                self._emergency_stop(reason)
+                return False
+
+        self.consecutive_errors = 0
+        return True
+
     def run(self):
         """Haupt-Loop mit robustem Error-Handling"""
         if not self.initialize():
@@ -963,38 +996,8 @@ class GridBot:
         try:
             while self.running:
                 try:
-                    # Hauptoperationen
-                    self.check_orders()
-                    self.save_state()
-
-                    # Status und Stop-Loss Check
-                    current_price = self.client.get_current_price(self.symbol)
-                    if current_price:
-                        # Circuit breaker: emergency stop on flash crash
-                        if self._check_circuit_breaker(current_price):
-                            break
-
-                        self._check_stop_losses(current_price)
-
-                        balance_usdt = self.client.get_account_balance("USDT")
-                        logger.info(
-                            f"USDT: {balance_usdt:.2f} | "
-                            f"{self.symbol}: {current_price:.2f} | "
-                            f"Orders: {len(self.active_orders)}"
-                        )
-
-                    # Portfolio Drawdown Check
-                    if self.stop_loss_manager:
-                        portfolio_value = self.client.get_account_balance("USDT")
-                        should_stop, reason = self.stop_loss_manager.check_portfolio_drawdown(
-                            portfolio_value
-                        )
-                        if should_stop:
-                            self._emergency_stop(reason)
-                            break
-
-                    # Reset error counter on success
-                    self.consecutive_errors = 0
+                    if not self.tick():
+                        break
 
                     time.sleep(30)  # Alle 30 Sekunden prüfen
 

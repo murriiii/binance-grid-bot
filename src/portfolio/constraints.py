@@ -234,3 +234,14 @@ AGGRESSIVE_CONSTRAINTS = AllocationConstraints(
     max_total_exposure_pct=90.0,
     max_high_risk_allocation_pct=25.0,
 )
+
+SMALL_PORTFOLIO_CONSTRAINTS = AllocationConstraints(
+    max_per_coin_pct=20.0,
+    min_position_usd=10.0,
+    max_position_usd=80.0,
+    max_per_category_pct=40.0,
+    min_cash_reserve_pct=15.0,
+    max_open_positions=8,
+    max_total_exposure_pct=85.0,
+    max_high_risk_allocation_pct=20.0,
+)

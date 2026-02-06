@@ -228,7 +228,7 @@ class TelegramAIHandler:
         self.ai = DeepSeekAssistant()
         self.last_trade = None
 
-    def handle_message(self, text: str, context: dict = None) -> str | None:
+    def handle_message(self, text: str, context: dict | None = None) -> str | None:
         """Verarbeitet Telegram-Nachrichten"""
 
         text = text.strip()

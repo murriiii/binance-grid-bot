@@ -149,7 +149,7 @@ class GridStrategy:
         """Wenn ein Buy gefüllt wurde, platziere Sell darüber (fee-adjusted)"""
         price = _to_decimal(price)
         for i, level in enumerate(self.levels):
-            if abs(level.price - price) < Decimal("0.01"):
+            if level.price > 0 and abs(level.price - price) / level.price < Decimal("0.001"):
                 level.filled = True
                 if i + 1 < len(self.levels):
                     next_level = self.levels[i + 1]
@@ -166,7 +166,7 @@ class GridStrategy:
         """Wenn ein Sell gefüllt wurde, platziere Buy darunter"""
         price = _to_decimal(price)
         for i, level in enumerate(self.levels):
-            if abs(level.price - price) < Decimal("0.01"):
+            if level.price > 0 and abs(level.price - price) / level.price < Decimal("0.001"):
                 level.filled = False
                 if i - 1 >= 0:
                     prev_level = self.levels[i - 1]

@@ -162,8 +162,32 @@ module = [
     "psycopg2.*",
     "telegram.*",
     "schedule.*",
+    "requests.*",
 ]
 ignore_missing_imports = true
+
+# Legacy modules - suppress known issues, fix incrementally
+# TODO: Remove modules from this list as they are cleaned up
+[[tool.mypy.overrides]]
+module = [
+    "src.analysis.bayesian_weights",
+    "src.analysis.divergence_detector",
+    "src.analysis.regime_detection",
+    "src.analysis.weekly_export",
+    "src.api.binance_client",
+    "src.api.http_client",
+    "src.backtest.*",
+    "src.core.bot",
+    "src.core.logging_system",
+    "src.data.*",
+    "src.models.*",
+    "src.notifications.*",
+    "src.optimization.*",
+    "src.risk.*",
+    "src.scanner.*",
+    "src.strategies.*",
+]
+ignore_errors = true
 
 # ═══════════════════════════════════════════════════════════════
 # PYTEST

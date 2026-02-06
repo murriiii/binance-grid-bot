@@ -13,6 +13,9 @@ from src.api.http_client import HTTPClientError, get_http_client
 
 logger = logging.getLogger("trading_bot")
 
+# Telegram API message length limit
+TELEGRAM_MAX_MESSAGE_LENGTH = 4096
+
 
 class TelegramService:
     """
@@ -68,6 +71,13 @@ class TelegramService:
         """
         if not self.enabled:
             return False
+
+        # B4: Truncate messages exceeding Telegram's 4096 char limit
+        if len(message) > TELEGRAM_MAX_MESSAGE_LENGTH:
+            truncated_suffix = "\n\n<i>...truncated</i>"
+            message = (
+                message[: TELEGRAM_MAX_MESSAGE_LENGTH - len(truncated_suffix)] + truncated_suffix
+            )
 
         try:
             self.http.post(

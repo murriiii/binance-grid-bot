@@ -231,7 +231,7 @@ class TradingMemory:
             return trade_id
 
     def update_trade_outcome(
-        self, trade_id: int, outcome_24h: float = None, outcome_7d: float = None
+        self, trade_id: int, outcome_24h: float | None = None, outcome_7d: float | None = None
     ):
         """Aktualisiert das Ergebnis eines Trades"""
         if not self.conn:
@@ -257,7 +257,11 @@ class TradingMemory:
             self.conn.commit()
 
     def find_similar_situations(
-        self, fear_greed: int, symbol: str = None, market_trend: str = None, limit: int = 10
+        self,
+        fear_greed: int,
+        symbol: str | None = None,
+        market_trend: str | None = None,
+        limit: int = 10,
     ) -> list[dict]:
         """
         Findet ähnliche historische Situationen.

@@ -35,7 +35,7 @@ class TelegramBot:
     - Scheduled Reports (extern via cron/scheduler)
     """
 
-    def __init__(self, token: str = None, chat_id: str = None):
+    def __init__(self, token: str | None = None, chat_id: str | None = None):
         self.token = token or os.getenv("TELEGRAM_BOT_TOKEN")
         self.chat_id = chat_id or os.getenv("TELEGRAM_CHAT_ID")
         self.base_url = f"https://api.telegram.org/bot{self.token}"
@@ -78,7 +78,10 @@ class TelegramBot:
             return False
 
     def send_photo(
-        self, photo_path: str = None, photo_bytes: bytes = None, caption: str = None
+        self,
+        photo_path: str | None = None,
+        photo_bytes: bytes | None = None,
+        caption: str | None = None,
     ) -> bool:
         """
         Sendet ein Bild/Chart.
@@ -123,7 +126,7 @@ class TelegramBot:
             logger.error(f"Telegram Photo Fehler: {e}")
             return False
 
-    def send_document(self, file_path: str, caption: str = None) -> bool:
+    def send_document(self, file_path: str, caption: str | None = None) -> bool:
         """Sendet eine Datei (CSV, PDF, etc.)"""
         if not self.token or not self.chat_id:
             logger.debug(f"Telegram nicht konfiguriert, Dokument übersprungen: {file_path}")

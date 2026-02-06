@@ -149,7 +149,7 @@ class TestDynamicGridStrategy:
         current_grids = strategy._create_simple_grids(100.0, 10, 0.02)
 
         # Preis nah am Zentrum
-        should_recalc, reason = strategy.should_recalculate_grids(
+        should_recalc, _reason = strategy.should_recalculate_grids(
             current_grids, current_price=100.5
         )
 

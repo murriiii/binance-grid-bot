@@ -1209,5 +1209,24 @@ INSERT INTO watchlist (symbol, base_asset, category, tier, min_volume_24h_usd) V
 
 ON CONFLICT (symbol) DO NOTHING;
 
+-- ═══════════════════════════════════════════════════════════════
+-- TRADING_MODE_HISTORY - Hybrid System Mode Transitions
+-- ═══════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS trading_mode_history (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    mode VARCHAR(10) NOT NULL,            -- HOLD, GRID, CASH
+    previous_mode VARCHAR(10),
+    regime VARCHAR(20) NOT NULL,          -- BULL, BEAR, SIDEWAYS, TRANSITION
+    regime_probability DECIMAL(5, 4),
+    regime_duration_days INTEGER,
+    transition_reason TEXT,
+    portfolio_value_usd DECIMAL(20, 2),
+    cash_pct DECIMAL(5, 2),
+    positions_count INTEGER
+);
+
+CREATE INDEX IF NOT EXISTS idx_mode_timestamp ON trading_mode_history(timestamp DESC);
+
 -- Fertig!
 SELECT 'Trading Bot Database initialized successfully with Multi-Coin System!' as status;

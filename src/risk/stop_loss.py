@@ -67,7 +67,7 @@ class StopLossOrder:
         else:
             return self.entry_price * (1 - self.stop_percentage / 100)
 
-    def update(self, current_price: float, current_atr: float = None) -> bool:
+    def update(self, current_price: float, current_atr: float | None = None) -> bool:
         """
         Aktualisiert den Stop basierend auf aktuellem Preis.
 
@@ -176,7 +176,7 @@ class StopLossManager:
         return stop
 
     def update_all(
-        self, prices: dict[str, float], atrs: dict[str, float] = None
+        self, prices: dict[str, float], atrs: dict[str, float] | None = None
     ) -> list[StopLossOrder]:
         """
         Aktualisiert alle Stops mit aktuellen Preisen.

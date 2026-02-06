@@ -366,7 +366,7 @@ class HybridStrategy:
         self.ai = AITradingEnhancer() if use_ai else None
 
     def make_decision(
-        self, math_recommendation: dict, market_data: dict, news: list[dict] = None
+        self, math_recommendation: dict, market_data: dict, news: list[dict] | None = None
     ) -> dict:
         """
         Finale Entscheidung mit optionalem AI-Enhancement.

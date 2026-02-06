@@ -36,7 +36,7 @@ COLORS = {
 
 def create_portfolio_chart(
     portfolio_history: pd.DataFrame,
-    benchmark_data: pd.DataFrame = None,
+    benchmark_data: pd.DataFrame | None = None,
     title: str = "Portfolio Performance",
 ) -> bytes:
     """
@@ -337,7 +337,7 @@ def create_daily_summary_image(
     daily_pnl_pct: float,
     allocations: dict[str, float],
     fear_greed: int,
-    portfolio_history: pd.DataFrame = None,
+    portfolio_history: pd.DataFrame | None = None,
 ) -> bytes:
     """
     Erstellt ein kombiniertes Tages-Summary Bild.

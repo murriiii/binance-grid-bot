@@ -416,6 +416,8 @@ class CoinScanner:
 
             # Analysiere Whale-Aktivität
             total_value = sum(t.amount_usd for t in recent)
+            if total_value == 0:
+                return 0.5, []
             exchange_inflows = sum(
                 t.amount_usd for t in recent if t.to_owner and "exchange" in t.to_owner.lower()
             )

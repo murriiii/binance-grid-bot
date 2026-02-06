@@ -106,7 +106,7 @@ class BinanceDataFetcher:
         return df[["open", "high", "low", "close", "volume"]]
 
     def fetch_multiple_symbols(
-        self, symbols: list[str] = None, interval: str = "1d", days: int = 365
+        self, symbols: list[str] | None = None, interval: str = "1d", days: int = 365
     ) -> pd.DataFrame:
         """
         Holt Daten für mehrere Symbole und erstellt Price-Matrix.

@@ -46,6 +46,57 @@ services:
       - "com.centurylinklabs.watchtower.enable=true"
 
   # ═══════════════════════════════════════════════════════════════
+  # HYBRID BOT - Regime-Adaptive Multi-Coin System
+  # ═══════════════════════════════════════════════════════════════
+  hybrid-bot:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: trading-hybrid
+    restart: unless-stopped
+    entrypoint: ["python", "main_hybrid.py"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      - TZ=Europe/Berlin
+      # Database
+      - DATABASE_URL=postgresql://trading:${POSTGRES_PASSWORD}@postgres:5432/trading_bot
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
+      # Binance
+      - BINANCE_API_KEY=${BINANCE_API_KEY:-}
+      - BINANCE_API_SECRET=${BINANCE_API_SECRET:-}
+      - BINANCE_TESTNET=${BINANCE_TESTNET:-true}
+      # Telegram
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
+      # DeepSeek AI
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      # Hybrid Config
+      - HYBRID_INITIAL_MODE=${HYBRID_INITIAL_MODE:-GRID}
+      - HYBRID_ENABLE_MODE_SWITCHING=${HYBRID_ENABLE_MODE_SWITCHING:-false}
+      - HYBRID_TOTAL_INVESTMENT=${HYBRID_TOTAL_INVESTMENT:-400}
+      - HYBRID_MAX_SYMBOLS=${HYBRID_MAX_SYMBOLS:-8}
+      - HYBRID_MIN_POSITION_USD=${HYBRID_MIN_POSITION_USD:-10}
+      - HYBRID_CONSTRAINTS_PRESET=${HYBRID_CONSTRAINTS_PRESET:-small}
+      # Grid passthrough
+      - GRID_RANGE_PERCENT=${GRID_RANGE_PERCENT:-5}
+      - NUM_GRIDS=${NUM_GRIDS:-3}
+    volumes:
+      - bot_logs:/app/logs
+      - bot_data:/app/data
+      - hybrid_state:/app/config
+    networks:
+      - trading-internal
+      - proxy
+    profiles:
+      - hybrid
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  # ═══════════════════════════════════════════════════════════════
   # TELEGRAM BOT - Interactive Commands Handler
   # ═══════════════════════════════════════════════════════════════
   telegram-handler:
@@ -147,6 +198,7 @@ volumes:
   redis_data:
   bot_logs:
   bot_data:
+  hybrid_state:
 
 networks:
   trading-internal:

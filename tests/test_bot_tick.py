@@ -1,0 +1,171 @@
+"""Tests for GridBot.tick() method and external BinanceClient support."""
+
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+from src.core.bot import GridBot
+
+
+@pytest.fixture
+def bot_config():
+    return {
+        "symbol": "BTCUSDT",
+        "investment": 100,
+        "num_grids": 3,
+        "grid_range_percent": 5,
+        "testnet": True,
+    }
+
+
+@pytest.fixture
+def mock_binance():
+    with patch("src.core.bot.BinanceClient") as mock_cls:
+        client = MagicMock()
+        client.get_account_balance.return_value = 1000.0
+        client.get_current_price.return_value = 50000.0
+        client.get_symbol_info.return_value = {
+            "min_qty": 0.00001,
+            "max_qty": 9000.0,
+            "step_size": 0.00001,
+            "tick_size": 0.01,
+            "min_notional": 5.0,
+        }
+        client.get_open_orders.return_value = []
+        client.place_limit_buy.return_value = {
+            "success": True,
+            "order": {"orderId": 100},
+        }
+        mock_cls.return_value = client
+        yield client
+
+
+@pytest.fixture
+def bot(bot_config, mock_binance):
+    """Create a GridBot with mocked dependencies."""
+    with (
+        patch("src.core.bot.TelegramNotifier"),
+        patch.object(GridBot, "_init_memory"),
+        patch.object(GridBot, "_init_stop_loss"),
+        patch.object(GridBot, "_init_risk_modules"),
+    ):
+        b = GridBot(bot_config)
+        b.client = mock_binance
+        b.stop_loss_manager = None
+        b.cvar_sizer = None
+        b.allocation_constraints = None
+        return b
+
+
+class TestTick:
+    def test_tick_returns_true_on_success(self, bot):
+        """tick() returns True when everything is OK."""
+        bot.client.get_open_orders.return_value = []
+        result = bot.tick()
+        assert result is True
+
+    def test_tick_calls_check_orders(self, bot):
+        """tick() calls check_orders()."""
+        bot.check_orders = MagicMock()
+        bot.tick()
+        bot.check_orders.assert_called_once()
+
+    def test_tick_calls_save_state(self, bot):
+        """tick() calls save_state()."""
+        bot.save_state = MagicMock()
+        bot.tick()
+        bot.save_state.assert_called_once()
+
+    def test_tick_resets_error_counter(self, bot):
+        """tick() resets consecutive_errors on success."""
+        bot.consecutive_errors = 3
+        bot.tick()
+        assert bot.consecutive_errors == 0
+
+    def test_tick_returns_false_on_circuit_breaker(self, bot):
+        """tick() returns False when circuit breaker triggers."""
+        bot._last_known_price = 50000.0
+        # Price dropped >10%
+        bot.client.get_current_price.return_value = 44000.0
+        bot.telegram = MagicMock()
+
+        result = bot.tick()
+        assert result is False
+
+    def test_tick_returns_false_on_portfolio_drawdown(self, bot):
+        """tick() returns False when portfolio drawdown limit is hit."""
+        mock_sl = MagicMock()
+        mock_sl.portfolio_stopped = False
+        mock_sl.check_portfolio_drawdown.return_value = (True, "Max drawdown reached")
+        bot.stop_loss_manager = mock_sl
+        bot.telegram = MagicMock()
+
+        result = bot.tick()
+        assert result is False
+
+    def test_tick_continues_when_price_unavailable(self, bot):
+        """tick() returns True even when price fetch fails."""
+        bot.client.get_current_price.return_value = 0.0
+        result = bot.tick()
+        assert result is True
+
+    def test_tick_checks_stop_losses(self, bot):
+        """tick() calls _check_stop_losses when price is available."""
+        bot._check_stop_losses = MagicMock()
+        bot.client.get_current_price.return_value = 50000.0
+        bot.tick()
+        bot._check_stop_losses.assert_called_once_with(50000.0)
+
+    def test_tick_skips_stop_losses_when_no_price(self, bot):
+        """tick() skips stop loss check when no price available."""
+        bot._check_stop_losses = MagicMock()
+        bot.client.get_current_price.return_value = 0
+        bot.tick()
+        bot._check_stop_losses.assert_not_called()
+
+
+class TestExternalClient:
+    def test_external_client_used_when_provided(self, bot_config):
+        """GridBot uses the provided external client instead of creating one."""
+        external_client = MagicMock()
+        with (
+            patch("src.core.bot.TelegramNotifier"),
+            patch.object(GridBot, "_init_memory"),
+            patch.object(GridBot, "_init_stop_loss"),
+            patch.object(GridBot, "_init_risk_modules"),
+        ):
+            b = GridBot(bot_config, client=external_client)
+            assert b.client is external_client
+
+    def test_internal_client_created_when_not_provided(self, bot_config, mock_binance):
+        """GridBot creates its own client when none provided."""
+        with (
+            patch("src.core.bot.TelegramNotifier"),
+            patch.object(GridBot, "_init_memory"),
+            patch.object(GridBot, "_init_stop_loss"),
+            patch.object(GridBot, "_init_risk_modules"),
+        ):
+            b = GridBot(bot_config)
+            assert b.client is mock_binance
+
+    def test_tick_works_with_external_client(self, bot_config):
+        """tick() works correctly with an external BinanceClient."""
+        external_client = MagicMock()
+        external_client.get_current_price.return_value = 50000.0
+        external_client.get_account_balance.return_value = 1000.0
+        external_client.get_open_orders.return_value = []
+
+        with (
+            patch("src.core.bot.TelegramNotifier"),
+            patch.object(GridBot, "_init_memory"),
+            patch.object(GridBot, "_init_stop_loss"),
+            patch.object(GridBot, "_init_risk_modules"),
+        ):
+            b = GridBot(bot_config, client=external_client)
+            b.stop_loss_manager = None
+            b.cvar_sizer = None
+            b.allocation_constraints = None
+
+            result = b.tick()
+            assert result is True
+            external_client.get_current_price.assert_called_once_with("BTCUSDT")

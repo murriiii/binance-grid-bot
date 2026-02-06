@@ -205,7 +205,7 @@ class RiskScaler:
     Vermögen wird Kapitalerhalt wichtiger.
     """
 
-    def __init__(self, thresholds: list[tuple[float, float]] = None):
+    def __init__(self, thresholds: list[tuple[float, float]] | None = None):
         """
         Args:
             thresholds: Liste von (Portfolio-Größe, Altcoin-Anteil)

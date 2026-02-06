@@ -1,6 +1,6 @@
 # Binance Grid Trading Bot
 
-Ein intelligenter Krypto-Trading-Bot mit Grid-Strategie, Multi-Coin Trading, AI-Enhancement, Memory-System und selbstlernendem Trading Playbook.
+Ein regime-adaptiver Krypto-Trading-Bot mit Hybrid-System (HOLD/GRID/CASH), Multi-Coin Trading, AI-Enhancement, Memory-System und selbstlernendem Trading Playbook.
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -8,11 +8,18 @@ Ein intelligenter Krypto-Trading-Bot mit Grid-Strategie, Multi-Coin Trading, AI-
 
 ## Features
 
+### Hybrid Trading System
+- **Regime-Adaptive Modes** - Automatischer Wechsel zwischen HOLD (Bull), GRID (Sideways) und CASH (Bear)
+- **HMM Regime Detection** - Hidden Markov Model erkennt Markt-Regime (BULL/BEAR/SIDEWAYS)
+- **Hysteresis-Schutz** - Verhindert Flip-Flopping: Mindest-Wahrscheinlichkeit (75%), Mindest-Dauer (2 Tage), 24h Cooldown, Safety-Lock nach 2 Transitions/48h
+- **Emergency Bear Exit** - Sofortiger Wechsel zu CASH bei Bear-Probability >= 85%
+- **6 Transition-Pfade** - Graceful Transitions zwischen allen Modi (GRID<->HOLD, GRID<->CASH, HOLD<->CASH)
+
 ### Core Trading
 - **Grid Trading Strategy** - Automatisches Kaufen/Verkaufen in definierten Preisbändern
 - **Decimal Precision** - Alle Preis-/Mengenberechnungen nutzen `Decimal` statt `float` (keine Binance-Rejections durch Rundungsfehler)
 - **Fee-Aware Trading** - Binance Taker-Fees (0.1%) werden bei Sell-Quantities automatisch abgezogen
-- **Multi-Coin Trading** - Handel über 20-30 Coins mit intelligenter Kapitalverteilung
+- **Multi-Coin Trading** - Handel ueber 5-8 Coins mit intelligenter Kapitalverteilung
 - **Dynamic Grid Strategy** - ATR-basierte Grid-Abstände, asymmetrische Grids basierend auf Trend
 - **AI-Enhanced Decisions** - DeepSeek-Integration für intelligentere Entscheidungen
 - **Trading Playbook** - Selbstlernendes "Erfahrungsgedächtnis" das aus Trades lernt
@@ -63,35 +70,38 @@ Ein intelligenter Krypto-Trading-Bot mit Grid-Strategie, Multi-Coin Trading, AI-
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                           BINANCE GRID BOT                                   │
+│                      HYBRID TRADING SYSTEM                                   │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                              │
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐                   │
-│  │   Telegram   │◄───│   GridBot    │───►│   Binance    │                   │
-│  │   Service    │    │   (Core)     │    │   Client     │                   │
-│  └──────────────┘    └──────┬───────┘    └──────────────┘                   │
-│                             │                                                │
-│      ┌──────────────────────┼──────────────────────┐                        │
-│      │                      │                      │                        │
-│      ▼                      ▼                      ▼                        │
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐                   │
-│  │   Cohort     │    │   Cycle      │    │   Signal     │                   │
-│  │   Manager    │    │   Manager    │    │   Analyzer   │                   │
-│  └──────────────┘    └──────────────┘    └──────────────┘                   │
-│         │                   │                   │                           │
-│         ▼                   ▼                   ▼                           │
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐                   │
-│  │  A/B Testing │    │   Metrics    │    │  Bayesian    │                   │
-│  │  Framework   │    │  Calculator  │    │   Weights    │                   │
-│  └──────────────┘    └──────────────┘    └──────────────┘                   │
-│                             │                                               │
-│      ┌──────────────────────┼──────────────────────┐                        │
-│      │                      │                      │                        │
-│      ▼                      ▼                      ▼                        │
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐                   │
-│  │   Regime     │    │  Divergence  │    │   Dynamic    │                   │
-│  │   Detector   │    │  Detector    │    │   Grid       │                   │
-│  └──────────────┘    └──────────────┘    └──────────────┘                   │
+│  ┌──────────────┐    ┌──────────────────┐    ┌──────────────┐               │
+│  │   Telegram   │◄───│   Hybrid         │───►│   Binance    │               │
+│  │   Service    │    │   Orchestrator   │    │   Client     │               │
+│  └──────────────┘    └────────┬─────────┘    └──────────────┘               │
+│                               │                                              │
+│                    ┌──────────┼──────────┐                                   │
+│                    │          │          │                                   │
+│                    ▼          ▼          ▼                                   │
+│              ┌──────────┐ ┌──────┐ ┌──────────┐                             │
+│              │   HOLD   │ │ GRID │ │   CASH   │                             │
+│              │   Mode   │ │ Mode │ │   Mode   │                             │
+│              │ (BULL)   │ │(SIDE)│ │  (BEAR)  │                             │
+│              └──────────┘ └──┬───┘ └──────────┘                             │
+│                              │                                               │
+│                    ┌─────────┴─────────┐                                    │
+│                    │                   │                                    │
+│                    ▼                   ▼                                    │
+│              ┌──────────┐       ┌──────────────┐                            │
+│              │   Mode   │       │   GridBot    │                            │
+│              │  Manager │       │   (tick)     │                            │
+│              │(Hysteres)│       └──────────────┘                            │
+│              └──────────┘                                                    │
+│                    │                                                         │
+│      ┌─────────────┼─────────────┐                                          │
+│      ▼             ▼             ▼                                          │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐                                    │
+│  │  Regime  │ │  Signal  │ │ Bayesian │                                    │
+│  │ Detector │ │ Analyzer │ │ Weights  │                                    │
+│  └──────────┘ └──────────┘ └──────────┘                                    │
 │                                                                              │
 │  ┌────────────────────────────────────────────────────────────────────────┐ │
 │  │                         MULTI-COIN SYSTEM                              │ │
@@ -170,9 +180,82 @@ Jede Cohort durchläuft wöchentliche Zyklen:
 - **Samstag 23:59**: Zyklus endet, Metriken werden berechnet
 - **Automatisch**: Sharpe, Sortino, Kelly, VaR, CVaR pro Zyklus
 
+## Hybrid Trading System
+
+Das **Hybrid System** wechselt automatisch zwischen drei Trading-Modi basierend auf dem erkannten Markt-Regime:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    HYBRID TRADING MODES                          │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  HOLD (BULL)                  GRID (SIDEWAYS)                   │
+│  ├─ Market-Buy Allocations    ├─ Grid-Trading pro Symbol         │
+│  ├─ 7% Trailing Stop          ├─ ATR-basierte Grid-Abstände     │
+│  ├─ Trend reiten              ├─ BUY → SELL → BUY Cycle         │
+│  └─ Kein aktives Trading      └─ Bestehende Grid-Logik          │
+│                                                                  │
+│  CASH (BEAR)                  TRANSITIONS                       │
+│  ├─ Offene Orders canceln     ├─ GRID → HOLD: Grids auslaufen   │
+│  ├─ Positionen verkaufen      ├─ GRID → CASH: Orders canceln    │
+│  ├─ Kapital in USDT           ├─ HOLD → CASH: Enge Trailing     │
+│  └─ Nur Regime-Monitoring     ├─ CASH → GRID: Neues Scanning    │
+│                                ├─ CASH → HOLD: Market-Buy        │
+│                                └─ HOLD → GRID: Grid um Position  │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Mode-Management mit Hysteresis
+
+Der ModeManager verhindert Flip-Flopping durch mehrere Schutzmechanismen:
+
+| Regel | Wert | Beschreibung |
+|-------|------|--------------|
+| Min. Regime-Wahrscheinlichkeit | 75% | Regime muss sicher erkannt sein |
+| Min. Regime-Dauer | 2 Tage | Kurzfristige Schwankungen ignorieren |
+| Cooldown nach Wechsel | 24h | Keine sofortige Rueckkehr |
+| Max. Transitions / 48h | 2 | Safety-Lock auf GRID bei Ueberschreitung |
+| Emergency Bear | 85% | Sofortiger CASH-Wechsel ohne Cooldown |
+
+### Regime-zu-Mode Mapping
+
+| Regime | Mode | Constraints |
+|--------|------|-------------|
+| BULL | HOLD | Aggressive (max 15% pro Coin) |
+| SIDEWAYS | GRID | Balanced / Small Portfolio |
+| BEAR | CASH | Conservative (min 30% Cash) |
+| TRANSITION | Aktuellen Modus beibehalten | Aktuelle Constraints |
+| None/Unbekannt | GRID (Fallback) | Balanced |
+
+### Starten
+
+```bash
+# Hybrid-Bot (Multi-Coin, Regime-Adaptive)
+cd docker && docker-compose --profile hybrid up -d
+
+# Klassischer Single-Coin GridBot (weiterhin verfuegbar)
+cd docker && docker-compose up -d
+```
+
+### Konfiguration
+
+```env
+# Hybrid-System
+HYBRID_INITIAL_MODE=GRID
+HYBRID_ENABLE_MODE_SWITCHING=false     # Erstmal nur Multi-Coin GRID testen
+HYBRID_TOTAL_INVESTMENT=400
+HYBRID_MAX_SYMBOLS=8
+HYBRID_MIN_POSITION_USD=10
+HYBRID_HOLD_TRAILING_STOP_PCT=7.0
+HYBRID_MODE_COOLDOWN_HOURS=24
+HYBRID_MIN_REGIME_PROBABILITY=0.75
+HYBRID_MIN_REGIME_DURATION_DAYS=2
+```
+
 ## Multi-Coin Trading System
 
-Das **Multi-Coin System** ermöglicht diversifiziertes Trading über viele Coins:
+Das **Multi-Coin System** ermöglicht diversifiziertes Trading ueber mehrere Coins:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -326,11 +409,15 @@ Siehe [docs/CLAUDE_ANALYSIS_GUIDE.md](docs/CLAUDE_ANALYSIS_GUIDE.md) für den An
 binance-grid-bot/
 ├── src/
 │   ├── core/
-│   │   ├── bot.py              # Haupt-Bot-Logik
+│   │   ├── bot.py              # GridBot mit tick() Methode
 │   │   ├── config.py           # Zentrale Konfiguration
+│   │   ├── hybrid_orchestrator.py # Hybrid-System Orchestrator
+│   │   ├── hybrid_config.py    # Hybrid-System Konfiguration
+│   │   ├── mode_manager.py     # Mode-Management mit Hysteresis
+│   │   ├── trading_mode.py     # TradingMode Enum, ModeState
 │   │   ├── logging_system.py   # Strukturiertes Logging
-│   │   ├── cohort_manager.py   # Parallele Strategie-Varianten (NEU)
-│   │   └── cycle_manager.py    # Wöchentliche Zyklen (NEU)
+│   │   ├── cohort_manager.py   # Parallele Strategie-Varianten
+│   │   └── cycle_manager.py    # Woechentliche Zyklen
 │   ├── api/
 │   │   ├── binance_client.py   # Binance API Wrapper
 │   │   └── http_client.py      # HTTP Client mit Retry/Caching
@@ -379,6 +466,8 @@ binance-grid-bot/
 │   │   ├── telegram_bot.py     # Telegram Bot Commands
 │   │   ├── charts.py           # Performance-Charts
 │   │   └── ai_assistant.py     # AI Chat Integration
+│   ├── utils/
+│   │   └── task_lock.py        # Thread-safe Task-Locking
 │   └── backtest/
 │       └── engine.py           # Backtesting Engine
 ├── docker/
@@ -394,7 +483,8 @@ binance-grid-bot/
 ├── analysis_exports/           # Wöchentliche Exports (gitignored)
 ├── docs/
 │   └── CLAUDE_ANALYSIS_GUIDE.md
-├── main.py                     # Entry Point
+├── main.py                     # Entry Point (Single-Coin GridBot)
+├── main_hybrid.py              # Entry Point (Hybrid Multi-Coin)
 ├── requirements.txt
 ├── pyproject.toml              # Linting/Formatting Config
 └── .github/
@@ -420,6 +510,7 @@ binance-grid-bot/
 | `coin_performance` | Per-Coin Performance Metriken | Coin-spezifische Optimierung |
 | `cohort_allocations` | Positionen pro Cohort | Portfolio Management |
 | `opportunities` | Scanner-Ergebnisse | Opportunity Tracking |
+| `trading_mode_history` | Mode-Wechsel History | Hybrid-System Tracking |
 | **Data Provider Tabellen** | | |
 | `social_sentiment` | Social Media Tracking | Sentiment Signale |
 | `etf_flows` | BTC/ETH ETF Zuflüsse | Institutional Flows |
@@ -513,14 +604,18 @@ python main.py
 ### Docker Setup (Empfohlen)
 
 ```bash
-# Alles mit Docker starten
+# Klassischer Single-Coin GridBot
 cd docker
 docker-compose up -d
 
-# Logs anzeigen
-docker logs -f trading-bot
+# ODER: Hybrid Multi-Coin System
+docker-compose --profile hybrid up -d
 
-# Status prüfen
+# Logs anzeigen
+docker logs -f trading-bot       # Single-Coin
+docker logs -f hybrid-bot        # Hybrid
+
+# Status pruefen
 docker-compose ps
 ```
 
@@ -581,10 +676,13 @@ DATABASE_URL=postgresql://trading:password@localhost:5433/trading_bot
 
 | Task | Zeitplan | Beschreibung |
 |------|----------|--------------|
+| **Hybrid-System Tasks** | | |
+| Mode Evaluation | Stuendlich | Regime auswerten, Mode-Wechsel pruefen |
+| Hybrid Rebalance | 6h | Allocation-Drift pruefen (>5%) |
 | **Multi-Coin Tasks** | | |
-| Watchlist Update | 30 Min | Marktdaten für alle Coins aktualisieren |
+| Watchlist Update | 30 Min | Marktdaten fuer alle Coins aktualisieren |
 | Opportunity Scan | 2h | Alle Coins nach Opportunities scannen |
-| Portfolio Rebalance | 06:00 | Allocation prüfen und anpassen |
+| Portfolio Rebalance | 06:00 | Allocation pruefen und anpassen |
 | Coin Performance | 21:30 | Per-Coin Metriken aktualisieren |
 | **Data Collection** | | |
 | Market Snapshot | Stündlich | Marktdaten speichern |

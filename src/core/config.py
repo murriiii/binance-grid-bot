@@ -7,6 +7,8 @@ import logging
 import os
 from dataclasses import dataclass, field
 
+from src.core.hybrid_config import HybridConfig
+
 logger = logging.getLogger("trading_bot")
 
 
@@ -397,6 +399,7 @@ class AppConfig:
     sentiment: SentimentConfig = field(default_factory=SentimentConfig)
     scheduler: SchedulerConfig = field(default_factory=SchedulerConfig)
     database: DatabaseConfig = field(default_factory=DatabaseConfig)
+    hybrid: HybridConfig = field(default_factory=HybridConfig)
 
     @classmethod
     def from_env(cls) -> "AppConfig":
@@ -406,6 +409,7 @@ class AppConfig:
             api=APIConfig.from_env(),
             scheduler=SchedulerConfig.from_env(),
             database=DatabaseConfig.from_env(),
+            hybrid=HybridConfig.from_env(),
         )
 
 

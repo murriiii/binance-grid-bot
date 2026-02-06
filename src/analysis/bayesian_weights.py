@@ -127,6 +127,11 @@ class BayesianWeightLearner:
     @classmethod
     def reset_instance(cls):
         """Reset für Tests"""
+        if cls._instance is not None:
+            try:
+                cls._instance.close()
+            except Exception:
+                pass
         cls._instance = None
 
     def _connect_db(self):

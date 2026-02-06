@@ -36,7 +36,7 @@ class TestDivergenceDetector:
         from src.analysis.divergence_detector import DivergenceDetector
 
         detector = DivergenceDetector()
-        k, d = detector._calculate_stochastic(
+        k, _d = detector._calculate_stochastic(
             sample_ohlcv_data["high"],
             sample_ohlcv_data["low"],
             sample_ohlcv_data["close"],

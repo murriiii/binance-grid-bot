@@ -246,7 +246,7 @@ class TestEnvironmentValidation:
         """Testet Validierung mit allen Variablen"""
         from src.core.config import validate_environment
 
-        is_valid, warnings = validate_environment()
+        is_valid, _warnings = validate_environment()
 
         # Sollte valid sein da mock_env_vars alle setzt
         assert is_valid is True
@@ -257,7 +257,7 @@ class TestEnvironmentValidation:
 
         monkeypatch.delenv("BINANCE_TESTNET_API_KEY", raising=False)
 
-        is_valid, warnings = validate_environment()
+        _is_valid, warnings = validate_environment()
 
         assert any("API_KEY" in w for w in warnings)
 
@@ -267,6 +267,6 @@ class TestEnvironmentValidation:
 
         monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
 
-        is_valid, warnings = validate_environment()
+        _is_valid, warnings = validate_environment()
 
         assert any("TELEGRAM" in w for w in warnings)

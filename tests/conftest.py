@@ -333,6 +333,13 @@ def reset_new_singletons():
     except ImportError:
         pass
 
+    try:
+        from src.core.mode_manager import ModeManager
+
+        ModeManager.reset_instance()
+    except ImportError:
+        pass
+
 
 @pytest.fixture
 def sample_ohlcv_data():

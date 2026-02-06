@@ -17,7 +17,12 @@ from datetime import datetime
 
 from dotenv import load_dotenv
 
-from src.portfolio.constraints import BALANCED_CONSTRAINTS, AllocationConstraints
+from src.portfolio.constraints import (
+    AGGRESSIVE_CONSTRAINTS,
+    BALANCED_CONSTRAINTS,
+    CONSERVATIVE_CONSTRAINTS,
+    AllocationConstraints,
+)
 from src.scanner.opportunity import Opportunity, OpportunityRisk
 
 load_dotenv()
@@ -124,12 +129,24 @@ class PortfolioAllocator:
         """Setzt neue Allocation Constraints."""
         self.constraints = constraints
 
+    def _get_regime_constraints(self, regime: str | None) -> AllocationConstraints:
+        """Return constraints appropriate for the given market regime."""
+        regime_constraints = {
+            "BULL": AGGRESSIVE_CONSTRAINTS,
+            "SIDEWAYS": BALANCED_CONSTRAINTS,
+            "BEAR": CONSERVATIVE_CONSTRAINTS,
+        }
+        return (
+            regime_constraints.get(regime, BALANCED_CONSTRAINTS) if regime else BALANCED_CONSTRAINTS
+        )
+
     def calculate_allocation(
         self,
         opportunities: list[Opportunity],
         available_capital: float,
         current_portfolio: dict[str, dict] | None = None,
         cohort_id: str | None = None,
+        regime: str | None = None,
     ) -> AllocationResult:
         """
         Berechnet die optimale Kapitalverteilung.
@@ -139,10 +156,15 @@ class PortfolioAllocator:
             available_capital: Verfügbares Kapital in USD
             current_portfolio: {symbol: {amount, category, tier}}
             cohort_id: Optional Cohort für DB-Tracking
+            regime: Market regime (BULL/BEAR/SIDEWAYS) for auto-constraints
 
         Returns:
             AllocationResult mit {symbol: amount_usd}
         """
+        # Auto-select constraints based on regime if provided
+        if regime:
+            self.constraints = self._get_regime_constraints(regime)
+
         result = AllocationResult(cash_remaining=available_capital)
 
         if not opportunities:

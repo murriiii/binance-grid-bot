@@ -146,8 +146,9 @@ class DynamicGridStrategy:
         self.http = get_http_client() if get_http_client else None
         self._connect_db()
 
-        # Cache
+        # Cache with max size to prevent memory leak (B6)
         self._price_cache: dict[str, tuple[datetime, dict]] = {}
+        self._max_cache_size: int = 50
 
     @classmethod
     def get_instance(cls) -> "DynamicGridStrategy":
@@ -159,6 +160,11 @@ class DynamicGridStrategy:
     @classmethod
     def reset_instance(cls):
         """Reset für Tests"""
+        if cls._instance is not None:
+            try:
+                cls._instance.close()
+            except Exception:
+                pass
         cls._instance = None
 
     def _connect_db(self):
@@ -657,10 +663,14 @@ class DynamicGridStrategy:
 
         # Check Cache
         cache_key = f"{symbol}_{timeframe}"
+        now = datetime.now()
         if cache_key in self._price_cache:
             cache_time, cached_data = self._price_cache[cache_key]
-            if datetime.now() - cache_time < timedelta(minutes=5):
+            if now - cache_time < timedelta(minutes=5):
                 return cached_data
+
+        # B6: Evict expired entries to prevent memory leak
+        self._evict_expired_cache()
 
         if not self.http:
             return None
@@ -685,8 +695,8 @@ class DynamicGridStrategy:
                     "volume": data[:, 5].astype(float),
                 }
 
-                # Cache
-                self._price_cache[cache_key] = (datetime.now(), result)
+                # Cache with size cap
+                self._price_cache[cache_key] = (now, result)
 
                 return result
 
@@ -694,6 +704,19 @@ class DynamicGridStrategy:
             logger.error(f"OHLCV Fetch Fehler: {e}")
 
         return None
+
+    def _evict_expired_cache(self) -> None:
+        """Remove expired cache entries and cap cache size (B6)."""
+        now = datetime.now()
+        expired = [k for k, (t, _) in self._price_cache.items() if now - t >= timedelta(minutes=5)]
+        for k in expired:
+            del self._price_cache[k]
+
+        # If still over max size, remove oldest entries
+        if len(self._price_cache) > self._max_cache_size:
+            sorted_keys = sorted(self._price_cache, key=lambda k: self._price_cache[k][0])
+            for k in sorted_keys[: len(self._price_cache) - self._max_cache_size]:
+                del self._price_cache[k]
 
     # ═══════════════════════════════════════════════════════════════
     # GRID ADJUSTMENT
@@ -870,7 +893,8 @@ class DynamicGridStrategy:
             return []
 
     def close(self):
-        """Schließe DB-Verbindung"""
+        """Schließe DB-Verbindung und leere Cache"""
+        self._price_cache.clear()
         if self.conn:
             self.conn.close()
             self.conn = None

@@ -675,8 +675,8 @@ class CycleManager:
         """Prüfe ob ein neuer Zyklus gestartet werden sollte"""
         if cohort_id in self.active_cycles:
             cycle = self.active_cycles[cohort_id]
-            days_elapsed = (datetime.now() - cycle.start_date).days
-            return days_elapsed >= self.CYCLE_DURATION_DAYS
+            elapsed_seconds = (datetime.now() - cycle.start_date).total_seconds()
+            return elapsed_seconds >= self.CYCLE_DURATION_DAYS * 86400
         return True
 
     def close(self):
