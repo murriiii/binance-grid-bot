@@ -1,3 +1,9 @@
+## v1.10.0 (2026-02-06)
+
+### Feat
+
+- add /report command for on-demand cohort status
+
 ## v1.9.0 (2026-02-06)
 
 ### Feat
