@@ -149,7 +149,7 @@ MyService.reset_instance()  # calls close() if defined
 
 `__init_subclass__` ensures each subclass gets its own `_instance`. Tests use the `reset_new_singletons` fixture which recursively resets ALL `SingletonMixin` subclasses.
 
-**Legacy singletons** (not yet migrated): `get_config()`, `get_http_client()`, `DatabaseManager`, `WatchlistManager`, `CoinScanner`. These use module-level `_instance` variables with custom `get_*()` functions and are reset via the `reset_singletons` fixture.
+**Legacy singletons** (not migrated): `AppConfig` / `get_config()` in `src/core/config.py`. Uses a module-level `_config` variable with a `get_config()` factory function (dataclass with `from_env()` doesn't fit `SingletonMixin`). Reset via the `reset_singletons` fixture.
 
 ### HTTP Client Pattern
 
@@ -290,8 +290,8 @@ Tests use fixtures from `tests/conftest.py`:
 - `bot` - Fully mocked GridBot (patches BinanceClient, TelegramNotifier, memory, stop-loss, risk modules)
 - `bot_config` - Minimal config dict: `{"symbol": "BTCUSDT", "investment": 100, "num_grids": 3, ...}`
 - `mock_binance` - MagicMock BinanceClient with sensible defaults (price 50000, balance 1000)
-- `reset_singletons` - Resets legacy singletons (config, http_client, telegram, market_data)
-- `reset_new_singletons` - Resets ALL `SingletonMixin` subclasses via recursive `__subclasses__()` walk
+- `reset_singletons` - Resets AppConfig only (sole remaining legacy singleton)
+- `reset_new_singletons` - Resets ALL `SingletonMixin` subclasses via recursive `__subclasses__()` walk + AppConfig
 - `sample_ohlcv_data` - 100 periods OHLCV data (numpy seed 42)
 - `sample_returns` - 100 days of return data
 - `sample_trade_history` - 8 trades with win/loss data
