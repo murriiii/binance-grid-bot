@@ -3,6 +3,7 @@
 Ein regime-adaptiver Krypto-Trading-Bot mit Hybrid-System (HOLD/GRID/CASH), Multi-Coin Trading, AI-Enhancement, Memory-System und selbstlernendem Trading Playbook.
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![Version: 1.8.1](https://img.shields.io/badge/version-1.8.1-green.svg)](https://github.com/murriiii/binance-grid-bot/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 
@@ -78,6 +79,8 @@ Ein regime-adaptiver Krypto-Trading-Bot mit Hybrid-System (HOLD/GRID/CASH), Mult
 - **Comprehensive Logging** - JSON-strukturierte Logs fuer langfristige Analyse
 - **Weekly Analysis Export** - Automatische Reports fuer Claude Code Optimierung
 - **Telegram Notifications** - Echtzeit-Alerts und taegliche Reports (TelegramNotifier delegiert an TelegramService Singleton)
+- **SingletonMixin Pattern** - Alle Services (DatabaseManager, HTTPClient, WatchlistManager, CoinScanner, TelegramService, MarketDataProvider, ModeManager etc.) nutzen `SingletonMixin` mit automatischem `close()` Lifecycle und `reset_instance()`
+- **Atomic State Writes** - Temp-File + Rename Pattern fuer korruptionsfreie State-Persistenz (DecimalEncoder, Temp-File Cleanup bei Fehlern)
 
 ## Architektur
 
@@ -245,10 +248,10 @@ Der ModeManager verhindert Flip-Flopping durch mehrere Schutzmechanismen:
 
 ```bash
 # Hybrid-Bot (Multi-Coin, Regime-Adaptive)
-cd docker && docker-compose --profile hybrid up -d
+cd docker && docker compose --profile hybrid up -d
 
 # Klassischer Single-Coin GridBot (weiterhin verfuegbar)
-cd docker && docker-compose up -d
+cd docker && docker compose up -d
 ```
 
 ### Konfiguration
@@ -439,12 +442,12 @@ binance-grid-bot/
 │   │   └── http_client.py      # HTTP Client mit Retry/Caching
 │   ├── strategies/
 │   │   ├── grid_strategy.py    # Grid-Trading-Logik
-│   │   ├── dynamic_grid.py     # ATR-basierte Grids (NEU)
+│   │   ├── dynamic_grid.py     # ATR-basierte Grids
 │   │   ├── ai_enhanced.py      # DeepSeek AI + Playbook Integration
 │   │   └── portfolio_rebalance.py
 │   ├── data/
 │   │   ├── market_data.py      # Zentraler Marktdaten-Provider
-│   │   ├── watchlist.py        # Multi-Coin Watchlist Manager (NEU)
+│   │   ├── watchlist.py        # Multi-Coin Watchlist Manager
 │   │   ├── sentiment.py        # Fear & Greed, CoinGecko
 │   │   ├── social_sentiment.py # LunarCrush, Reddit, Twitter
 │   │   ├── etf_flows.py        # Bitcoin/ETH ETF Tracking
@@ -454,11 +457,11 @@ binance-grid-bot/
 │   │   ├── memory.py           # Trading Memory System (RAG)
 │   │   ├── playbook.py         # Trading Playbook Generator
 │   │   └── fetcher.py          # Historische Daten
-│   ├── scanner/                # Multi-Coin Opportunity Scanner (NEU)
+│   ├── scanner/                # Multi-Coin Opportunity Scanner
 │   │   ├── __init__.py
 │   │   ├── coin_scanner.py     # Opportunity Detection
 │   │   └── opportunity.py      # Opportunity Dataclass
-│   ├── portfolio/              # Portfolio Management (NEU)
+│   ├── portfolio/              # Portfolio Management
 │   │   ├── __init__.py
 │   │   ├── allocator.py        # Kelly-basierte Kapitalverteilung
 │   │   └── constraints.py      # Allocation Rules & Limits
@@ -469,13 +472,13 @@ binance-grid-bot/
 │   ├── analysis/
 │   │   ├── technical_indicators.py
 │   │   ├── weekly_export.py    # Wöchentlicher Analyse-Export
-│   │   ├── signal_analyzer.py  # Signal-Breakdown Storage (NEU)
-│   │   ├── metrics_calculator.py # Sharpe, Sortino, Kelly (NEU)
-│   │   ├── regime_detection.py # HMM Markt-Regime (NEU)
-│   │   ├── bayesian_weights.py # Adaptive Signal-Gewichte (NEU)
-│   │   └── divergence_detector.py # RSI/MACD Divergenzen (NEU)
+│   │   ├── signal_analyzer.py  # Signal-Breakdown Storage
+│   │   ├── metrics_calculator.py # Sharpe, Sortino, Kelly
+│   │   ├── regime_detection.py # HMM Markt-Regime
+│   │   ├── bayesian_weights.py # Adaptive Signal-Gewichte
+│   │   └── divergence_detector.py # RSI/MACD Divergenzen
 │   ├── optimization/
-│   │   └── ab_testing.py       # A/B Testing Framework (NEU)
+│   │   └── ab_testing.py       # A/B Testing Framework
 │   ├── models/
 │   │   └── portfolio.py        # Markowitz, Kelly Criterion
 │   ├── notifications/
@@ -484,7 +487,7 @@ binance-grid-bot/
 │   │   ├── charts.py           # Performance-Charts
 │   │   └── ai_assistant.py     # AI Chat Integration
 │   ├── utils/
-│   │   ├── singleton.py        # SingletonMixin Basisklasse
+│   │   ├── singleton.py        # SingletonMixin Basisklasse (alle Services)
 │   │   ├── heartbeat.py        # Docker Health-Check Heartbeat
 │   │   └── task_lock.py        # Thread-safe Task-Locking
 │   ├── tasks/                  # Domain-spezifische Scheduler Tasks
@@ -623,7 +626,7 @@ cp .env.example .env
 
 # Docker Services starten (PostgreSQL, Redis)
 cd docker
-docker-compose up -d
+docker compose up -d
 
 # Bot starten
 cd ..
@@ -635,17 +638,17 @@ python main.py
 ```bash
 # Klassischer Single-Coin GridBot
 cd docker
-docker-compose up -d
+docker compose up -d
 
 # ODER: Hybrid Multi-Coin System
-docker-compose --profile hybrid up -d
+docker compose --profile hybrid up -d
 
 # Logs anzeigen
 docker logs -f trading-bot       # Single-Coin
 docker logs -f hybrid-bot        # Hybrid
 
 # Status pruefen
-docker-compose ps
+docker compose ps
 ```
 
 ## Konfiguration
