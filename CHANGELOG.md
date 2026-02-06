@@ -1,3 +1,9 @@
+## v1.11.0 (2026-02-06)
+
+### Feat
+
+- add min_confidence filtering for cohort coin differentiation
+
 ## v1.10.3 (2026-02-06)
 
 ### Fix
