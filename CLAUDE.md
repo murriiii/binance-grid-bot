@@ -52,8 +52,6 @@ cd docker && docker-compose --profile hybrid up -d
 
 ### Two Entry Points
 
-The system has two operational modes:
-
 1. **`main.py`** - Classic single-coin GridBot (standalone)
 2. **`main_hybrid.py`** - Hybrid multi-coin system with regime-adaptive mode switching
 
@@ -72,6 +70,34 @@ HybridOrchestrator ──── ModeManager (hysteresis)
      └── BinanceClient ──── Shared across all symbols
 ```
 
+### GridBot Mixin Decomposition
+
+`GridBot` (`src/core/bot.py`) uses multiple inheritance with three mixins:
+
+```python
+class GridBot(RiskGuardMixin, OrderManagerMixin, StateManagerMixin):
+```
+
+| Mixin | File | Responsibility |
+|-------|------|----------------|
+| `OrderManagerMixin` | `src/core/order_manager.py` | Order lifecycle, fill detection, follow-up orders, partial fills, downtime recovery |
+| `StateManagerMixin` | `src/core/state_manager.py` | JSON state persistence (atomic writes), state loading with Binance verification |
+| `RiskGuardMixin` | `src/core/risk_guard.py` | CVaR/drawdown/allocation validation, circuit breaker, stop-loss, market sells |
+
+Each mixin documents its expected host attributes in the class docstring. When adding methods, ensure they match the documented contract.
+
+**tick() pattern**: `GridBot.tick()` executes one iteration (check orders → save state → check circuit breaker → check stops) and returns `bool` (True = continue). `run()` calls `tick()` in a loop for standalone mode; `HybridOrchestrator` calls `tick()` per symbol in GRID mode.
+
+**Downtime recovery**: `_pending_followups: list[dict]` queues follow-up actions for fills detected during downtime. `load_state()` detects FILLED/partially-CANCELED orders and queues follow-ups, which `_process_pending_followups()` executes after strategy initialization.
+
+**Atomic state writes**: Both `StateManagerMixin` and `HybridOrchestrator` use temp file + rename:
+```python
+temp_file = self.state_file.with_suffix(".tmp")
+with open(temp_file, "w") as f:
+    json.dump(state, f, indent=2)
+temp_file.replace(self.state_file)
+```
+
 ### Hybrid Trading System
 
 The HybridOrchestrator (`src/core/hybrid_orchestrator.py`) manages multi-coin trading across three regime-adaptive modes:
@@ -88,7 +114,7 @@ The HybridOrchestrator (`src/core/hybrid_orchestrator.py`) manages multi-coin tr
 - Safety lock: >2 transitions in 48h forces GRID mode
 - **Exception**: BEAR with probability >= 85% triggers immediate CASH (emergency capital protection)
 
-**Per-symbol state** is tracked via `SymbolState` dataclass (mode, grid bot instance, hold quantity, allocation, stop-loss IDs). State is persisted to `config/hybrid_state.json` with atomic writes (temp + rename).
+**Per-symbol state** is tracked via `SymbolState` dataclass (mode, grid bot instance, hold quantity, allocation, stop-loss IDs). State is persisted to `config/hybrid_state.json` with atomic writes.
 
 **6 transition paths**: GRID↔HOLD, GRID↔CASH, HOLD↔CASH. Each transition has specific cleanup logic (e.g., GRID→HOLD converts active orders to hold position; HOLD→CASH tightens trailing stop to 3%).
 
@@ -99,31 +125,25 @@ HYBRID_MAX_SYMBOLS, HYBRID_MIN_POSITION_USD, HYBRID_HOLD_TRAILING_STOP_PCT,
 HYBRID_MODE_COOLDOWN_HOURS, HYBRID_MIN_REGIME_PROBABILITY, HYBRID_MIN_REGIME_DURATION_DAYS
 ```
 
-### GridBot with tick()
+### Singleton Pattern
 
-`GridBot` (`src/core/bot.py`) exposes a `tick()` method extracted from the main loop. This allows:
-- **Standalone**: `GridBot.run()` calls `tick()` in a loop (classic mode via `main.py`)
-- **Orchestrated**: `HybridOrchestrator` calls `GridBot.tick()` per symbol in GRID mode
-- GridBot accepts an optional external `BinanceClient` to share connections across symbols
+New singletons should extend `SingletonMixin` from `src/utils/singleton.py`:
 
-### Singleton Services
+```python
+from src.utils.singleton import SingletonMixin
 
-Critical shared resources use the singleton pattern with `get_instance()` and `reset_instance()` methods:
-- `get_config()` - Global configuration from environment
-- `get_http_client()` - Centralized HTTP with retry/caching/file uploads
-- `DatabaseManager.get_instance()` - PostgreSQL connection pooling (1-10 connections)
-- `TelegramService.get_instance()` - Notification service (4096 char message limit with truncation)
-- `ModeManager.get_instance()` - Regime-adaptive mode switching with hysteresis
-- `MarketDataProvider.get_instance()` - Price data with caching
-- `WatchlistManager.get_instance()` - Multi-coin universe management
-- `CoinScanner.get_instance()` - Opportunity detection across coins
-- `PortfolioAllocator.get_instance()` - Kelly-based capital allocation (regime-aware)
-- `RegimeDetector.get_instance()` - HMM market regime detection
-- `DynamicGridStrategy.get_instance()` - ATR-based grid spacing (cache with eviction policy, max 50 entries)
-- `CohortManager.get_instance()`, `CycleManager.get_instance()`, `SignalAnalyzer.get_instance()`,
-  `MetricsCalculator.get_instance()`, `BayesianWeightLearner.get_instance()`,
-  `DivergenceDetector.get_instance()`, `ABTestingFramework.get_instance()`,
-  `CVaRPositionSizer.get_instance()`
+class MyService(SingletonMixin):
+    def __init__(self): ...
+    def close(self):  # optional — called by reset_instance()
+        ...
+
+svc = MyService.get_instance()
+MyService.reset_instance()  # calls close() if defined
+```
+
+`__init_subclass__` ensures each subclass gets its own `_instance`. 18+ services use this mixin.
+
+**Legacy singletons** (not yet migrated to mixin): `get_config()`, `get_http_client()`, `DatabaseManager`, `WatchlistManager`, `CoinScanner`. These use module-level `_instance` variables with custom `get_*()` functions.
 
 ### HTTP Client Pattern
 
@@ -156,18 +176,35 @@ with db.get_cursor() as cur:
 3. Validate against Binance min_qty and min_notional (percentage-based price matching: 0.1% tolerance)
 4. On BUY fill → place SELL at next higher level
 5. On SELL fill → place BUY at next lower level
+6. Fee handling: `TAKER_FEE_RATE` from `grid_strategy.py` applied to sell quantities
 
 ### Multi-Coin Trading Pipeline
 
 1. **WatchlistManager** maintains coin universe (25+ coins in 6 categories: LARGE_CAP, MID_CAP, L2, DEFI, AI, GAMING)
 2. **CoinScanner** scores opportunities on 5 dimensions: technical (30%), volume (20%), sentiment (15%), whale (15%), momentum (20%)
 3. **PortfolioAllocator** distributes capital via Kelly Criterion with regime-aware constraints
-4. Constraint presets: `CONSERVATIVE_CONSTRAINTS`, `BALANCED_CONSTRAINTS`, `AGGRESSIVE_CONSTRAINTS`, `SMALL_PORTFOLIO_CONSTRAINTS`
+4. Constraint presets in `src/portfolio/constraints.py`: `CONSERVATIVE_CONSTRAINTS`, `BALANCED_CONSTRAINTS`, `AGGRESSIVE_CONSTRAINTS`, `SMALL_PORTFOLIO_CONSTRAINTS`
 5. ModeManager selects constraints based on current mode (HOLD→aggressive, GRID→balanced/small, CASH→conservative)
+
+### Scheduled Tasks (`src/tasks/`)
+
+Tasks are organized in domain-specific modules under `src/tasks/`, registered by `docker/scheduler.py`:
+
+| Module | Tasks |
+|--------|-------|
+| `hybrid_tasks.py` | Mode evaluation (hourly), hybrid rebalance (6h) |
+| `portfolio_tasks.py` | Watchlist update (30min), opportunity scan (2h), portfolio rebalance (daily), coin performance (daily) |
+| `analysis_tasks.py` | Regime detection (4h), signal weights (daily), divergence scan (2h), pattern learning (daily) |
+| `cycle_tasks.py` | Cycle management (weekly), weekly rebalance, A/B test check (daily) |
+| `data_tasks.py` | ETF flows, social sentiment, token unlocks, whale checks |
+| `market_tasks.py` | Market snapshots (hourly), sentiment checks (4h) |
+| `reporting_tasks.py` | Daily summary, playbook update (weekly), weekly export |
+| `system_tasks.py` | Stop-loss check (5min), health check (6h), macro events, outcome updates |
+
+Shared infrastructure in `src/tasks/base.py` provides `get_db_connection()`. All tasks use `@task_locked` from `src/utils/task_lock.py` to prevent concurrent execution (non-blocking skip).
 
 ### Task Locking
 
-Scheduled tasks use `@task_locked` from `src/utils/task_lock.py` to prevent concurrent execution:
 ```python
 from src.utils.task_lock import task_locked
 
@@ -182,6 +219,7 @@ def my_scheduled_task():
 - Consecutive error limit: 5 errors → emergency stop
 - Graceful degradation: Bot continues if Memory/Stop-Loss unavailable
 - AI fallback: Returns NEUTRAL signal on any failure
+- Circuit breaker: >10% flash crash triggers emergency stop
 
 ## Configuration
 
@@ -201,35 +239,19 @@ Hybrid-specific config in `src/core/hybrid_config.py` with `HYBRID_*` prefix.
 - `trading-bot` - Classic single-coin GridBot
 - `hybrid-bot` - Hybrid multi-coin system (requires `--profile hybrid`)
 - `telegram-handler` - Telegram commands (separate process)
-- `scheduler` - Background tasks (see Key Scheduled Tasks)
+- `scheduler` - Background tasks (see Scheduled Tasks above)
 - `postgres` - Trading memory database
 - `redis` - Caching
-
-### Key Scheduled Tasks
-
-| Task | Schedule | Description |
-|------|----------|-------------|
-| Mode Evaluation | Hourly (:15) | Evaluate regime, check mode switch |
-| Hybrid Rebalance | Every 6h | Check allocation drift (>5% threshold) |
-| Cycle Management | Sun 00:00 | End/start weekly cycles |
-| Watchlist Update | Every 30min | Update market data for all coins |
-| Opportunity Scan | Every 2h | Scan coins for trading opportunities |
-| Portfolio Rebalance | 06:00 daily | Check allocation constraints |
-| Regime Detection | Every 4h | HMM market regime update |
-| Signal Weights | 22:00 daily | Bayesian weight update |
-| Divergence Scan | Every 2h | RSI/MACD divergences |
-| Playbook Update | Sun 19:00 | Generate new playbook |
-| Weekly Export | Sat 23:00 | Create analysis export |
 
 ## Testing Notes
 
 Tests use fixtures from `tests/conftest.py`:
-- `reset_singletons` - Resets original singleton instances between tests
-- `reset_new_singletons` - Resets hybrid system singletons (ModeManager, etc.)
-- `mock_env_vars` - Sets test environment variables (autouse)
-- `sample_ohlcv_data` - OHLCV data for technical analysis tests
-- `sample_returns` - Return data for risk calculation tests
-- `sample_trade_history` - Trade history for signal analysis
+- `mock_env_vars` (autouse) - Sets test environment variables
+- `reset_singletons` - Resets legacy singletons (config, http_client, telegram, market_data)
+- `reset_new_singletons` - Resets ALL `SingletonMixin` subclasses via reflection
+- `sample_ohlcv_data` - 100 periods OHLCV data (numpy seed 42)
+- `sample_returns` - 100 days of return data
+- `sample_trade_history` - 8 trades with win/loss data
 
 Mock external APIs at module level: `@patch("src.module.get_http_client")`
 
