@@ -166,14 +166,14 @@ def _build_cohort_status() -> str:
             risk = config_data.get("risk_tolerance", "?") if config_data else "?"
 
             # Calculate current value from symbols
-            # Note: all cohorts share one Binance account, so we use
-            # allocation_usd from the state file (virtual per-cohort tracking)
-            # instead of get_account_balance() which returns the total.
-            total_value = 0.0
+            # All cohorts share one Binance account — use allocation_usd from
+            # state (virtual per-cohort tracking). Cash = total - allocated.
+            total_investment = state.get("config", {}).get("total_investment", starting)
+            total_allocated = 0.0
             symbol_lines = []
             for sym, sdata in state.get("symbols", {}).items():
                 alloc = sdata.get("allocation_usd", 0)
-                total_value += alloc
+                total_allocated += alloc
 
                 if client:
                     try:
@@ -193,18 +193,16 @@ def _build_cohort_status() -> str:
                 val_str = f"${alloc:.2f}" if alloc > 0 else "-"
                 symbol_lines.append(f"  {sym}: {price_str} | {val_str} | {order_info}")
 
-            # P&L calculation
-            if total_value > 0 and starting > 0:
-                pnl_pct = (total_value - starting) / starting * 100
-                pnl_str = f"{pnl_pct:+.1f}%"
-            else:
-                pnl_str = "N/A"
+            cash_reserve = total_investment - total_allocated
+            alloc_pct = total_allocated / total_investment * 100 if total_investment else 0
 
             mode = state.get("current_mode", "?")
-            lines.append(
-                f"\n<b>{cohort_name.title()}</b> (${starting:.0f} -> ${total_value:.2f}, {pnl_str})"
-            )
+            lines.append(f"\n<b>{cohort_name.title()}</b> (${total_investment:.0f})")
             lines.append(f"  Grid: {grid_pct}% | Risk: {risk} | Mode: {mode}")
+            lines.append(
+                f"  Investiert: ${total_allocated:.2f} ({alloc_pct:.0f}%) "
+                f"| Cash: ${cash_reserve:.2f}"
+            )
             lines.extend(symbol_lines)
 
         except Exception as e:
