@@ -55,7 +55,7 @@ class RiskGuardMixin:
                 portfolio_value = self.client.get_account_balance("USDT")
                 if portfolio_value > 0:
                     current_invested = sum(
-                        o["quantity"] * o["price"]
+                        float(o["quantity"]) * float(o["price"])
                         for o in self.active_orders.values()
                         if o["type"] == "BUY"
                     )

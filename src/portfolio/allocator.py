@@ -199,6 +199,26 @@ class PortfolioAllocator(SingletonMixin):
             logger.debug("PortfolioAllocator: Keine neuen Opportunities nach Filter")
             return result
 
+        # Pre-feasibility: skip coins whose max allocation can't meet min_position
+        filtered_opps = [
+            o
+            for o in filtered_opps
+            if (
+                total_capital
+                * self.constraints.get_max_for_coin(
+                    o.symbol,
+                    o.category,
+                    1 if o.category == "LARGE_CAP" else 2,
+                )
+            )
+            / 100
+            >= self.constraints.min_position_usd
+        ]
+
+        if not filtered_opps:
+            logger.debug("PortfolioAllocator: No feasible opportunities after constraint check")
+            return result
+
         # Limit to max_positions (top-scored) after filtering
         if max_positions > 0:
             filtered_opps = filtered_opps[:max_positions]
@@ -389,12 +409,12 @@ class PortfolioAllocator(SingletonMixin):
                     cur.execute(
                         """
                         INSERT INTO cohort_allocations (
-                            cohort_id, symbol, target_allocation_pct, position_usd
+                            cohort_id, symbol, target_allocation_pct, target_position_usd
                         ) VALUES (%s, %s, %s, %s)
                         ON CONFLICT (cohort_id, symbol, cycle_id)
                         DO UPDATE SET
                             target_allocation_pct = EXCLUDED.target_allocation_pct,
-                            position_usd = EXCLUDED.position_usd,
+                            target_position_usd = EXCLUDED.target_position_usd,
                             updated_at = NOW()
                         """,
                         (cohort_id, symbol, amount / result.total_allocated * 100, amount),

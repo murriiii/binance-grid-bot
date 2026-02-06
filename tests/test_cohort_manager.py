@@ -134,8 +134,8 @@ class TestHybridConfigFromCohort:
         assert hc.min_confidence == 0.7
         assert hc.allowed_categories == ("LARGE_CAP",)
         assert hc.total_investment == 100
-        assert hc.max_symbols == 2
-        assert hc.portfolio_constraints_preset == "small"
+        assert hc.max_symbols == 3
+        assert hc.portfolio_constraints_preset == "conservative"
 
     def test_from_cohort_aggressive(self):
         from src.core.cohort_manager import Cohort, CohortConfig
@@ -163,7 +163,7 @@ class TestHybridConfigFromCohort:
             "GAMING",
         )
         assert hc.total_investment == 95
-        assert hc.portfolio_constraints_preset == "small"
+        assert hc.portfolio_constraints_preset == "aggressive"
 
     def test_from_cohort_validates(self):
         from src.core.cohort_manager import Cohort, CohortConfig

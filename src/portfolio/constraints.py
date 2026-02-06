@@ -240,6 +240,16 @@ SMALL_PORTFOLIO_CONSTRAINTS = AllocationConstraints(
     min_position_usd=10.0,
     max_position_usd=80.0,
     max_per_category_pct=50.0,
+    # Override defaults — with only $100 per cohort the default GAMING=10%
+    # ($10 max) falls below min_position after Kelly adjustment.
+    category_limits={
+        "LARGE_CAP": 50.0,
+        "MID_CAP": 40.0,
+        "L2": 40.0,
+        "DEFI": 40.0,
+        "AI": 40.0,
+        "GAMING": 30.0,
+    },
     min_cash_reserve_pct=15.0,
     max_open_positions=8,
     max_total_exposure_pct=85.0,

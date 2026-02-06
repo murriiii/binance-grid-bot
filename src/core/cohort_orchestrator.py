@@ -95,14 +95,20 @@ class CohortOrchestrator:
     def initial_allocation(self) -> int:
         """Run initial scan_and_allocate for each cohort.
 
+        Each cohort's chosen symbols are excluded from subsequent cohorts
+        so every cohort gets unique coins.
+
         Returns the number of cohorts that got allocations.
         """
         allocated = 0
+        taken_symbols: set[str] = set()
+
         for name, orch in self.orchestrators.items():
             try:
-                result = orch.scan_and_allocate()
+                result = orch.scan_and_allocate(exclude_symbols=taken_symbols)
                 if result and result.allocations:
                     allocated += 1
+                    taken_symbols.update(result.allocations.keys())
                     symbols = ", ".join(result.allocations.keys())
                     logger.info(
                         f"CohortOrchestrator: {name} allocated "

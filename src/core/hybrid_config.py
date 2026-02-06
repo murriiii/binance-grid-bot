@@ -109,18 +109,16 @@ class HybridConfig:
         Maps CohortConfig fields to HybridConfig equivalents,
         falling back to env vars for fields not in CohortConfig.
         """
-        # All $100 cohorts use "small" preset — conservative/aggressive constraint
-        # presets have per-coin limits (8%/15%) that produce positions below
-        # Binance's $10 minimum after Kelly adjustment.
-        preset = "small"
-
-        # Category filter by risk tolerance — the main coin differentiator
+        # Map risk tolerance → constraint preset and categories
         risk = cohort.config.risk_tolerance
         if risk == "low":
+            preset = "conservative"
             categories = ("LARGE_CAP",)
         elif risk == "high":
+            preset = "aggressive"
             categories = ("LARGE_CAP", "MID_CAP", "L2", "DEFI", "AI", "GAMING")
         else:
+            preset = "balanced"
             categories = ("LARGE_CAP", "MID_CAP", "L2")
 
         return cls(
@@ -134,9 +132,9 @@ class HybridConfig:
             min_confidence=cohort.config.min_confidence,
             allowed_categories=categories,
             grid_range_percent=cohort.config.grid_range_pct,
-            num_grids=2,  # $100 budget → 2 grids to keep per-grid above $5 min_notional
+            num_grids=3,
             cash_exit_timeout_hours=float(os.getenv("HYBRID_CASH_EXIT_TIMEOUT_HOURS", 2.0)),
-            max_symbols=2,  # $100 budget → max 2 coins
+            max_symbols=3,
             min_position_usd=float(os.getenv("HYBRID_MIN_POSITION_USD", 10.0)),
             total_investment=cohort.current_capital,
             portfolio_constraints_preset=preset,

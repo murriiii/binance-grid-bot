@@ -674,11 +674,19 @@ class HybridOrchestrator:
     # Multi-coin: scan, allocate, rebalance
     # ------------------------------------------------------------------
 
-    def scan_and_allocate(self, regime: str | None = None) -> AllocationResult | None:
+    def scan_and_allocate(
+        self,
+        regime: str | None = None,
+        exclude_symbols: set[str] | None = None,
+    ) -> AllocationResult | None:
         """Scan for opportunities and allocate capital across symbols.
 
         Uses CoinScanner for opportunity scoring and PortfolioAllocator
         for capital distribution. Updates the orchestrator's symbol list.
+
+        Args:
+            regime: Market regime for auto-constraints.
+            exclude_symbols: Symbols to skip (already taken by other cohorts).
 
         Returns:
             AllocationResult or None if scanning fails.
@@ -697,6 +705,10 @@ class HybridOrchestrator:
             if not opportunities:
                 logger.info("Orchestrator: no opportunities found")
                 return None
+
+            # Remove symbols already taken by other cohorts
+            if exclude_symbols:
+                opportunities = [o for o in opportunities if o.symbol not in exclude_symbols]
 
             # Pass extra opportunities so category/confidence filters in the
             # allocator still have enough candidates after filtering.
