@@ -1,3 +1,9 @@
+## v1.14.4 (2026-02-06)
+
+### Fix
+
+- show open order counts instead of 0 trades in dashboard footer
+
 ## v1.14.3 (2026-02-06)
 
 ### Fix
