@@ -42,10 +42,12 @@ Ein regime-adaptiver Krypto-Trading-Bot mit Hybrid-System (HOLD/GRID/CASH), Mult
 - **Risk Enforcement Pipeline** - Jede Order wird gegen CVaR-Limits, Allocation-Constraints und Portfolio-Drawdown geprüft
 - **Circuit Breaker** - Emergency-Stop bei >10% Flash-Crash zwischen Check-Zyklen
 - **CVaR Position Sizing** - Conditional Value at Risk basierte Positionsgrößen
-- **Stop-Loss Management** - Fixed, Trailing und ATR-basierte Stops mit DB-Persistenz und automatischer Market-Sell-Ausführung
-- **Partial-Fill-Handling** - Teilweise gefüllte Orders werden korrekt verarbeitet statt verworfen
-- **Downtime-Fill-Recovery** - Bei Neustart werden während der Downtime gefüllte Orders erkannt und Follow-ups platziert
-- **Kelly Criterion** - Optimale Positionsgrößen-Berechnung
+- **Stop-Loss Execution** - Retry-Logik (3 Versuche mit Backoff), Balance-Awareness (tatsaechliche Balance statt Soll-Menge), Step-Size-Rounding, Telegram-Alert bei totalem Fehlschlag
+- **Stop-Loss Lifecycle** - Zwei-Phasen-Trigger: `update()` erkennt Trigger, `confirm_trigger()` deaktiviert erst nach erfolgreichem Market-Sell, `reactivate()` bei Sell-Fehler
+- **Daily Drawdown Reset** - Automatischer Reset der Drawdown-Baseline um Mitternacht (Scheduler-Task + in-tick Detection)
+- **Partial-Fill-Handling** - Teilweise gefuellte Orders werden korrekt verarbeitet statt verworfen
+- **Downtime-Fill-Recovery** - Bei Neustart werden waehrend der Downtime gefuellte Orders erkannt und Follow-ups platziert
+- **Kelly Criterion** - Optimale Positionsgroessen-Berechnung
 - **Sharpe/Sortino Ratio** - Risiko-adjustierte Performance-Metriken
 
 ### Data Sources
@@ -62,9 +64,13 @@ Ein regime-adaptiver Krypto-Trading-Bot mit Hybrid-System (HOLD/GRID/CASH), Mult
 - **Support/Resistance** - Automatische Level-Erkennung
 
 ### Infrastructure
-- **Comprehensive Logging** - JSON-strukturierte Logs für langfristige Analyse
-- **Weekly Analysis Export** - Automatische Reports für Claude Code Optimierung
-- **Telegram Notifications** - Echtzeit-Alerts und tägliche Reports
+- **Graceful Shutdown** - SIGTERM-Handling in allen Entry Points (main.py, main_hybrid.py, scheduler.py) fuer sauberes Docker stop/restart
+- **Heartbeat Health Checks** - Docker Health Checks via `data/heartbeat` Datei statt HTTP-Endpoint
+- **Config Validation** - `BotConfig.from_env()` mit `validate()` prueft alle Parameter vor dem Start (Investment, Grids, Range, Risk)
+- **Centralized DB Connections** - Alle Module nutzen DatabaseManager Connection Pool statt eigene Connections
+- **Comprehensive Logging** - JSON-strukturierte Logs fuer langfristige Analyse
+- **Weekly Analysis Export** - Automatische Reports fuer Claude Code Optimierung
+- **Telegram Notifications** - Echtzeit-Alerts und taegliche Reports (TelegramNotifier delegiert an TelegramService Singleton)
 
 ## Architektur
 
@@ -410,7 +416,10 @@ binance-grid-bot/
 ├── src/
 │   ├── core/
 │   │   ├── bot.py              # GridBot mit tick() Methode
-│   │   ├── config.py           # Zentrale Konfiguration
+│   │   ├── order_manager.py    # OrderManagerMixin (Order-Lifecycle)
+│   │   ├── state_manager.py    # StateManagerMixin (State-Persistenz)
+│   │   ├── risk_guard.py       # RiskGuardMixin (Risk-Validierung)
+│   │   ├── config.py           # Zentrale Konfiguration mit Validierung
 │   │   ├── hybrid_orchestrator.py # Hybrid-System Orchestrator
 │   │   ├── hybrid_config.py    # Hybrid-System Konfiguration
 │   │   ├── mode_manager.py     # Mode-Management mit Hysteresis
@@ -447,8 +456,9 @@ binance-grid-bot/
 │   │   ├── allocator.py        # Kelly-basierte Kapitalverteilung
 │   │   └── constraints.py      # Allocation Rules & Limits
 │   ├── risk/
-│   │   ├── stop_loss.py        # Stop-Loss Management
-│   │   └── cvar_sizing.py      # CVaR Position Sizing (NEU)
+│   │   ├── stop_loss.py        # Stop-Loss Management (Lifecycle: confirm/reactivate)
+│   │   ├── stop_loss_executor.py # Retry + Balance-Aware Market-Sell
+│   │   └── cvar_sizing.py      # CVaR Position Sizing
 │   ├── analysis/
 │   │   ├── technical_indicators.py
 │   │   ├── weekly_export.py    # Wöchentlicher Analyse-Export
@@ -467,7 +477,18 @@ binance-grid-bot/
 │   │   ├── charts.py           # Performance-Charts
 │   │   └── ai_assistant.py     # AI Chat Integration
 │   ├── utils/
+│   │   ├── singleton.py        # SingletonMixin Basisklasse
 │   │   └── task_lock.py        # Thread-safe Task-Locking
+│   ├── tasks/                  # Domain-spezifische Scheduler Tasks
+│   │   ├── base.py             # Shared Infra (DB-Connection via Pool)
+│   │   ├── system_tasks.py     # Health, Stops, Drawdown Reset
+│   │   ├── analysis_tasks.py   # Regime, Weights, Divergence
+│   │   ├── market_tasks.py     # Snapshots, Sentiment
+│   │   ├── data_tasks.py       # ETF, Social, Whale, Unlocks
+│   │   ├── hybrid_tasks.py     # Mode Eval, Rebalance
+│   │   ├── portfolio_tasks.py  # Watchlist, Scan, Allocation
+│   │   ├── cycle_tasks.py      # Cycle Mgmt, Weekly Rebalance
+│   │   └── reporting_tasks.py  # Summary, Export, Playbook
 │   └── backtest/
 │       └── engine.py           # Backtesting Engine
 ├── docker/
@@ -698,10 +719,11 @@ DATABASE_URL=postgresql://trading:password@localhost:5433/trading_bot
 | Signal Weights | 22:00 | Bayesian Weight Update |
 | Pattern Learning | 21:00 | Tägliche Trade-Analyse |
 | **Risk & Performance** | | |
-| Stop-Loss Check | 5 Min | Aktive Stops prüfen |
+| Stop-Loss Check | 5 Min | Aktive Stops pruefen + Market-Sell mit Retry |
+| Drawdown Reset | 00:00 | Daily Drawdown Baseline zuruecksetzen |
 | Outcome Update | 6h | Trade-Ergebnisse aktualisieren |
-| System Health | 6h | DB, API, Memory prüfen |
-| A/B Test Check | 23:00 | Statistische Signifikanz prüfen |
+| System Health | 6h | DB, API, Memory pruefen |
+| A/B Test Check | 23:00 | Statistische Signifikanz pruefen |
 | **Reports** | | |
 | Daily Summary | 20:00 | Portfolio-Report |
 | Weekly Export | Sa 23:00 | Analyse-Export erstellen |
@@ -761,21 +783,31 @@ print(signal.reasoning)    # "Fed dovish → Risk-On, Playbook sagt BUY bei F&G 
 
 ### Order Risk Pipeline
 
-Jede Order (initial + follow-up) durchläuft vor Platzierung:
+Jede Order (initial + follow-up) durchlaeuft vor Platzierung:
 
-1. **Portfolio Drawdown Check** - Handel gestoppt bei >10% Tagesverlust
-2. **CVaR Max Position** - Orderwert darf CVaR-Limit nicht überschreiten
+1. **Portfolio Drawdown Check** - Handel gestoppt bei >10% Tagesverlust (Baseline wird taeglich um Mitternacht zurueckgesetzt)
+2. **CVaR Max Position** - Orderwert darf CVaR-Limit nicht ueberschreiten
 3. **Allocation Constraints** - Cash-Reserve und Exposure-Limits eingehalten
 4. **Circuit Breaker** - Emergency-Stop bei Flash-Crash (>10% Drop pro Check-Zyklus)
 
 Bei Fehler der Risk-Module: Graceful Degradation (Order wird zugelassen).
 
+### Stop-Loss Execution Pipeline
+
+Bei Stop-Loss-Trigger durchlaeuft die Ausfuehrung:
+
+1. **Balance Check** - Tatsaechliche Balance via API abfragen, `min(intended, actual)` verkaufen
+2. **Step-Size Rounding** - Quantity auf Binance `step_size` runden
+3. **Retry Loop** - 3 Versuche mit Backoff (2s, 5s, 10s)
+4. **Confirm/Reactivate** - Bei Erfolg: `confirm_trigger()` deaktiviert Stop. Bei Fehler: `reactivate()` haelt Stop aktiv fuer naechsten Tick
+5. **Critical Alert** - Bei totalem Fehlschlag: CRITICAL Log + Telegram "Manual sell needed"
+
 ### Portfolio Risk
 
 - **Max Daily Drawdown**: Automatischer Stop bei 10% Tagesverlust
-- **Position Sizing**: Kelly Criterion für optimale Größe
+- **Position Sizing**: Kelly Criterion fuer optimale Groesse
 - **Diversifikation**: Markowitz Mean-Variance Optimization
-- **Stop-Loss Persistenz**: Stops werden in PostgreSQL gespeichert und nach Neustart automatisch wiederhergestellt
+- **Stop-Loss Persistenz**: Stops werden in PostgreSQL gespeichert und nach Neustart automatisch wiederhergestellt (Reconciliation bei `load_state()`)
 
 ## Development
 

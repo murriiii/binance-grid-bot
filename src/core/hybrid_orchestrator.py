@@ -90,7 +90,18 @@ class HybridOrchestrator:
         self.client = client or BinanceClient(testnet=True)
         self.mode_manager = ModeManager(config)
         self.telegram = TelegramNotifier()
-        self.stop_loss_manager = StopLossManager()
+
+        # Init StopLossManager with DB persistence if available
+        db_manager = None
+        try:
+            from src.data.database import DatabaseManager
+
+            db_manager = DatabaseManager.get_instance()
+            if db_manager and not db_manager._pool:
+                db_manager = None
+        except Exception:
+            pass
+        self.stop_loss_manager = StopLossManager(db_manager=db_manager)
 
         self.symbols: dict[str, SymbolState] = {}
         self.running = False
@@ -152,6 +163,10 @@ class HybridOrchestrator:
 
         self.save_state()
         self.consecutive_errors = 0
+
+        # Heartbeat for Docker health check
+        Path("data/heartbeat").touch()
+
         return True
 
     def evaluate_and_switch(
@@ -469,20 +484,25 @@ class HybridOrchestrator:
         if state.hold_quantity <= 0:
             return
 
-        result = self.client.place_market_sell(state.symbol, state.hold_quantity)
+        from src.risk.stop_loss_executor import execute_stop_loss_sell
+
+        result = execute_stop_loss_sell(
+            self.client,
+            state.symbol,
+            state.hold_quantity,
+            telegram=self.telegram,
+        )
         if result["success"]:
             logger.info(f"CASH: sold {state.hold_quantity} {state.symbol}")
             self.telegram.send(f"CASH Sell: {state.symbol}\nMenge: {state.hold_quantity}")
+            if state.hold_stop_id:
+                self.stop_loss_manager.cancel_stop(state.hold_stop_id)
+                state.hold_stop_id = None
+            state.hold_quantity = 0.0
+            state.hold_entry_price = 0.0
+            state.cash_exit_started = None
         else:
-            logger.error(f"CASH: sell failed for {state.symbol}: {result.get('error')}")
-
-        # Cancel stop and reset
-        if state.hold_stop_id:
-            self.stop_loss_manager.cancel_stop(state.hold_stop_id)
-            state.hold_stop_id = None
-        state.hold_quantity = 0.0
-        state.hold_entry_price = 0.0
-        state.cash_exit_started = None
+            logger.error(f"CASH: sell failed for {state.symbol}, will retry next tick")
 
     def _update_stop_losses(self) -> None:
         """Update all stop losses with current prices."""
@@ -495,6 +515,8 @@ class HybridOrchestrator:
         if not prices:
             return
 
+        from src.risk.stop_loss_executor import execute_stop_loss_sell
+
         triggered = self.stop_loss_manager.update_all(prices)
         for stop in triggered:
             state = self.symbols.get(stop.symbol)
@@ -504,20 +526,24 @@ class HybridOrchestrator:
             logger.warning(f"Stop triggered: {stop.symbol} @ {stop.triggered_price}")
             self.telegram.send(
                 f"Stop-Loss Triggered: {stop.symbol}\nPreis: {stop.triggered_price:.2f}",
-                urgent=True,
             )
 
-            # Execute market sell
-            result = self.client.place_market_sell(stop.symbol, stop.quantity)
+            result = execute_stop_loss_sell(
+                self.client,
+                stop.symbol,
+                stop.quantity,
+                telegram=self.telegram,
+            )
             if result["success"]:
+                stop.confirm_trigger()
+                self.stop_loss_manager.notify_and_persist_trigger(stop)
                 logger.info(f"Stop sell executed: {stop.quantity} {stop.symbol}")
+                state.hold_quantity = 0.0
+                state.hold_entry_price = 0.0
+                state.hold_stop_id = None
             else:
-                logger.error(f"Stop sell failed: {result.get('error')}")
-
-            # Reset hold state
-            state.hold_quantity = 0.0
-            state.hold_entry_price = 0.0
-            state.hold_stop_id = None
+                stop.reactivate()
+                logger.critical(f"Stop sell FAILED for {stop.symbol}, stop re-activated")
 
     def _cleanup_symbol(self, state: SymbolState) -> None:
         """Clean up a symbol before removal."""
@@ -582,6 +608,25 @@ class HybridOrchestrator:
             # Restore rebalance timestamp
             if data.get("last_rebalance"):
                 self._last_rebalance = datetime.fromisoformat(data["last_rebalance"])
+
+            # Reconcile stop-losses: ensure hold_stop_id references exist
+            for symbol, state in self.symbols.items():
+                if (
+                    state.hold_stop_id
+                    and state.hold_stop_id not in self.stop_loss_manager.stops
+                    and state.hold_quantity > 0
+                    and state.hold_entry_price > 0
+                ):
+                    trailing_pct = getattr(self.config, "hold_trailing_stop_pct", 7.0)
+                    stop = self.stop_loss_manager.create_stop(
+                        symbol=symbol,
+                        entry_price=state.hold_entry_price,
+                        quantity=state.hold_quantity,
+                        stop_type=StopType.TRAILING,
+                        stop_percentage=trailing_pct,
+                    )
+                    state.hold_stop_id = stop.id
+                    logger.info(f"Orchestrator: recreated stop for {symbol} -> {stop.id}")
 
             logger.info(f"Orchestrator: state loaded ({len(data.get('symbols', {}))} symbols)")
             return True

@@ -2,21 +2,16 @@
 
 import logging
 
-import psycopg2
-
 logger = logging.getLogger("trading_bot")
 
 
 def get_db_connection():
-    """Erstellt Datenbankverbindung."""
-    from src.core.config import get_config
-
-    config = get_config()
-    db_url = config.database.url
-    if not db_url:
-        return None
+    """Erstellt Datenbankverbindung aus dem DatabaseManager Pool."""
     try:
-        return psycopg2.connect(db_url)
+        from src.data.database import DatabaseManager
+
+        db = DatabaseManager.get_instance()
+        return db.get_connection()
     except Exception as e:
         logger.error(f"DB Connection Error: {e}")
         return None

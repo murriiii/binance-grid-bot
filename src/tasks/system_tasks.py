@@ -1,8 +1,11 @@
 """System operation tasks."""
 
+import os
+
 from psycopg2.extras import RealDictCursor
 
 from src.tasks.base import get_db_connection, logger
+from src.utils.task_lock import task_locked
 
 
 def task_system_health_check():
@@ -60,10 +63,12 @@ def task_system_health_check():
         trading_logger.error("Health check failed", e, {"task": "health_check"})
 
 
+@task_locked
 def task_check_stops():
-    """Prüft Stop-Loss Orders alle 5 Minuten."""
+    """Prüft Stop-Loss Orders alle 5 Minuten (Safety-Net bei Bot-Downtime)."""
     from src.data.market_data import get_market_data
     from src.notifications.telegram_service import get_telegram
+    from src.risk.stop_loss_executor import execute_stop_loss_sell
 
     logger.info("Checking stop-loss orders...")
 
@@ -71,45 +76,110 @@ def task_check_stops():
     if not conn:
         return
 
+    client = None
+
     try:
         market_data = get_market_data()
 
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("""
-                SELECT id, symbol, entry_price, stop_price, quantity, stop_type
+                SELECT id, symbol, entry_price, stop_price, quantity,
+                       stop_type, highest_price, trailing_distance
                 FROM stop_loss_orders
                 WHERE is_active = true
             """)
             stops = cur.fetchall()
 
-            for stop in stops:
-                current_price = market_data.get_price(stop["symbol"])
+        for stop in stops:
+            current_price = market_data.get_price(stop["symbol"])
+            if not current_price or current_price <= 0:
+                continue
 
-                if current_price <= stop["stop_price"]:
-                    logger.warning(f"STOP TRIGGERED: {stop['symbol']} @ {current_price}")
+            # Update trailing stop if price went higher
+            if stop["stop_type"] == "trailing" and stop.get("highest_price"):
+                highest = float(stop["highest_price"])
+                trailing_dist = float(stop.get("trailing_distance") or 3.0)
+                if current_price > highest:
+                    new_stop = current_price * (1 - trailing_dist / 100)
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            """
+                            UPDATE stop_loss_orders
+                            SET highest_price = %s,
+                                stop_price = GREATEST(stop_price, %s)
+                            WHERE id = %s AND is_active = true
+                            """,
+                            (current_price, new_stop, stop["id"]),
+                        )
+                    conn.commit()
+                    continue  # Price above stop, no trigger
 
-                    cur.execute(
-                        """
-                        UPDATE stop_loss_orders
-                        SET is_active = false, triggered_at = NOW()
-                        WHERE id = %s
-                    """,
-                        (stop["id"],),
-                    )
+            if current_price <= float(stop["stop_price"]):
+                logger.warning(f"STOP TRIGGERED (scheduler): {stop['symbol']} @ {current_price}")
+
+                # Lazy-init BinanceClient
+                if client is None:
+                    from src.api.binance_client import BinanceClient
+
+                    testnet = os.getenv("BINANCE_TESTNET", "true").lower() == "true"
+                    client = BinanceClient(testnet=testnet)
+
+                telegram = get_telegram()
+                result = execute_stop_loss_sell(
+                    client,
+                    stop["symbol"],
+                    float(stop["quantity"]),
+                    telegram=telegram,
+                )
+
+                if result["success"]:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            """
+                            UPDATE stop_loss_orders
+                            SET is_active = false, triggered_at = NOW(),
+                                triggered_price = %s
+                            WHERE id = %s
+                            """,
+                            (current_price, stop["id"]),
+                        )
                     conn.commit()
 
-                    telegram = get_telegram()
                     telegram.send_stop_loss_alert(
                         symbol=stop["symbol"],
                         trigger_price=current_price,
-                        stop_price=stop["stop_price"],
-                        quantity=stop["quantity"],
+                        stop_price=float(stop["stop_price"]),
+                        quantity=float(stop["quantity"]),
                     )
+                else:
+                    logger.critical(f"Scheduler stop-loss sell FAILED for {stop['symbol']}")
 
     except Exception as e:
         logger.error(f"Stop Check Error: {e}")
     finally:
         conn.close()
+
+
+@task_locked
+def task_reset_daily_drawdown():
+    """Reset daily drawdown baseline at midnight."""
+    logger.info("Resetting daily drawdown baseline...")
+
+    try:
+        from src.api.binance_client import BinanceClient
+
+        testnet = os.getenv("BINANCE_TESTNET", "true").lower() == "true"
+        client = BinanceClient(testnet=testnet)
+        portfolio_value = client.get_account_balance("USDT")
+
+        if portfolio_value <= 0:
+            logger.warning("Daily drawdown reset: could not get portfolio value")
+            return
+
+        logger.info(f"Daily drawdown reset: baseline set to ${portfolio_value:.2f}")
+
+    except Exception as e:
+        logger.error(f"Daily Drawdown Reset Error: {e}")
 
 
 def task_update_outcomes():

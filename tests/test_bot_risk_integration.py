@@ -975,7 +975,7 @@ class TestStopLossDBPersistence:
         assert mock_db.get_cursor.call_count == 2
 
     def test_update_db_on_trigger(self):
-        """Triggered stop should update DB"""
+        """Triggered stop should update DB after confirm"""
         from src.risk.stop_loss import StopLossManager
 
         mock_db = MagicMock()
@@ -987,11 +987,17 @@ class TestStopLossDBPersistence:
         manager = StopLossManager(db_manager=mock_db)
         stop = manager.create_stop("BTCUSDT", 50000.0, 0.001, stop_percentage=5.0)
 
-        # Trigger: price drops below stop
+        # Trigger: price drops below stop (does NOT auto-update DB anymore)
         triggered = manager.update_all(prices={"BTCUSDT": 40000.0})
 
         assert len(triggered) == 1
-        # load(1) + save(1) + update(1) = 3 calls to get_cursor
+        # load(1) + save(1) = 2 calls (no auto-update on trigger)
+        assert mock_db.get_cursor.call_count == 2
+
+        # Caller confirms trigger → then DB update
+        triggered[0].confirm_trigger()
+        manager.notify_and_persist_trigger(triggered[0])
+        # load(1) + save(1) + update(1) = 3 calls
         assert mock_db.get_cursor.call_count == 3
 
     def test_create_stop_uses_full_uuid(self):
@@ -1017,9 +1023,10 @@ class TestStopLossDBPersistence:
 class TestStopLossMarketSell:
     """Tests for market-sell execution when stop-loss triggers"""
 
-    def test_market_sell_on_trigger(self, bot, mock_binance):
-        """Stop-loss trigger should execute market sell"""
-        mock_binance.place_market_sell.return_value = {"success": True, "order": {}}
+    @patch("src.risk.stop_loss_executor.execute_stop_loss_sell")
+    def test_market_sell_on_trigger(self, mock_executor, bot, mock_binance):
+        """Stop-loss trigger should execute market sell via executor"""
+        mock_executor.return_value = {"success": True, "order": {}}
 
         bot.stop_loss_manager = MagicMock()
         triggered_stop = MagicMock()
@@ -1029,12 +1036,15 @@ class TestStopLossMarketSell:
 
         bot._check_stop_losses(45000.0)
 
-        mock_binance.place_market_sell.assert_called_once_with("BTCUSDT", 0.001)
+        mock_executor.assert_called_once()
+        triggered_stop.confirm_trigger.assert_called_once()
 
-    def test_market_sell_failure_notifies(self, bot, mock_binance):
-        """Failed market sell should send urgent Telegram notification"""
-        mock_binance.place_market_sell.return_value = {
+    @patch("src.risk.stop_loss_executor.execute_stop_loss_sell")
+    def test_market_sell_failure_reactivates_stop(self, mock_executor, bot, mock_binance):
+        """Failed market sell should reactivate stop"""
+        mock_executor.return_value = {
             "success": False,
+            "order": None,
             "error": "Insufficient balance",
         }
 
@@ -1046,11 +1056,8 @@ class TestStopLossMarketSell:
 
         bot._check_stop_losses(45000.0)
 
-        # Should send 2 messages: trigger notification + failure notification
-        assert bot.telegram.send.call_count == 2
-        failure_call = bot.telegram.send.call_args_list[1]
-        assert "fehlgeschlagen" in failure_call.args[0]
-        assert failure_call.kwargs.get("urgent") is True
+        triggered_stop.reactivate.assert_called_once()
+        triggered_stop.confirm_trigger.assert_not_called()
 
     def test_no_trigger_no_sell(self, bot, mock_binance):
         """No triggered stops should not place any sell"""

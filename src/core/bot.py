@@ -1,7 +1,6 @@
 """Main Bot Logic - Production Ready"""
 
 import logging
-import os
 import time
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
@@ -9,7 +8,6 @@ from pathlib import Path
 from typing import Any
 
 from src.api.binance_client import BinanceClient
-from src.api.http_client import HTTPClientError, get_http_client
 from src.core.order_manager import OrderManagerMixin
 from src.core.risk_guard import RiskGuardMixin
 from src.core.state_manager import StateManagerMixin
@@ -47,28 +45,39 @@ logger = setup_logging()
 
 
 class TelegramNotifier:
-    """Sendet Benachrichtigungen via Telegram"""
+    """Thin wrapper that delegates to the TelegramService singleton.
+
+    Keeps the same ``send(message, urgent=False)`` API used by GridBot
+    and HybridOrchestrator so callers don't need to change.
+    """
 
     def __init__(self):
-        self.token = os.getenv("TELEGRAM_BOT_TOKEN")
-        self.chat_id = os.getenv("TELEGRAM_CHAT_ID")
-        self.enabled = bool(self.token and self.chat_id)
+        self._service = None
+
+    def _get_service(self):
+        if self._service is None:
+            try:
+                from src.notifications.telegram_service import get_telegram
+
+                self._service = get_telegram()
+            except Exception:
+                pass
+        return self._service
+
+    @property
+    def enabled(self) -> bool:
+        svc = self._get_service()
+        return svc.enabled if svc else False
 
     def send(self, message: str, urgent: bool = False):
         """Sendet eine Telegram-Nachricht"""
-        if not self.enabled:
+        svc = self._get_service()
+        if not svc:
             return
-
-        prefix = "🚨 URGENT: " if urgent else ""
-        try:
-            http = get_http_client()
-            http.post(
-                f"https://api.telegram.org/bot{self.token}/sendMessage",
-                json={"chat_id": self.chat_id, "text": f"{prefix}{message}", "parse_mode": "HTML"},
-                api_type="telegram",
-            )
-        except HTTPClientError as e:
-            logger.warning(f"Telegram notification failed: {e}")
+        if urgent:
+            svc.send_urgent(message, force=True)
+        else:
+            svc.send(message)
 
 
 class GridBot(RiskGuardMixin, OrderManagerMixin, StateManagerMixin):
@@ -105,6 +114,9 @@ class GridBot(RiskGuardMixin, OrderManagerMixin, StateManagerMixin):
 
         # Downtime-fill-recovery: queued follow-up actions from load_state()
         self._pending_followups: list[dict] = []
+
+        # Daily drawdown reset tracking
+        self._last_drawdown_reset_date: str = ""
 
         # Optional: Memory System
         self.memory = None
@@ -290,12 +302,24 @@ class GridBot(RiskGuardMixin, OrderManagerMixin, StateManagerMixin):
 
         if self.stop_loss_manager:
             portfolio_value = self.client.get_account_balance("USDT")
+
+            # Reset daily drawdown baseline at start of new day
+            today = datetime.now().strftime("%Y-%m-%d")
+            if today != self._last_drawdown_reset_date and portfolio_value > 0:
+                self.stop_loss_manager.reset_daily(portfolio_value)
+                self._last_drawdown_reset_date = today
+                logger.info(f"Daily drawdown reset: baseline ${portfolio_value:.2f}")
+
             should_stop, reason = self.stop_loss_manager.check_portfolio_drawdown(portfolio_value)
             if should_stop:
                 self._emergency_stop(reason)
                 return False
 
         self.consecutive_errors = 0
+
+        # Heartbeat for Docker health check
+        Path("data/heartbeat").touch()
+
         return True
 
     def run(self):

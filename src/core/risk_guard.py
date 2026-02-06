@@ -126,21 +126,29 @@ class RiskGuardMixin:
             return
 
         try:
+            from src.risk.stop_loss_executor import execute_stop_loss_sell
+
             triggered = self.stop_loss_manager.update_all(prices={self.symbol: current_price})
 
             for stop in triggered:
                 logger.warning(f"STOP-LOSS TRIGGERED: {stop.symbol} @ {current_price}")
                 self.telegram.send(
-                    f"🛑 STOP-LOSS TRIGGERED\n"
+                    f"STOP-LOSS TRIGGERED\n"
                     f"Symbol: {stop.symbol}\n"
                     f"Preis: {current_price:.2f}\n"
                     f"Menge: {stop.quantity}",
-                    urgent=True,
                 )
 
-                result = self.client.place_market_sell(stop.symbol, stop.quantity)
+                result = execute_stop_loss_sell(
+                    self.client,
+                    stop.symbol,
+                    stop.quantity,
+                    telegram=self.telegram,
+                )
                 if result["success"]:
-                    logger.info(f"Stop-Loss Market-Sell ausgeführt: {stop.quantity} {stop.symbol}")
+                    stop.confirm_trigger()
+                    self.stop_loss_manager.notify_and_persist_trigger(stop)
+                    logger.info(f"Stop-Loss sell confirmed: {stop.quantity} {stop.symbol}")
                     fee_usd = current_price * stop.quantity * float(TAKER_FEE_RATE)
                     self._save_trade_to_memory(
                         {"type": "SELL"},
@@ -149,13 +157,8 @@ class RiskGuardMixin:
                         fee_usd,
                     )
                 else:
-                    logger.error(f"Stop-Loss Market-Sell fehlgeschlagen: {result.get('error')}")
-                    self.telegram.send(
-                        f"⚠️ Stop-Loss SELL fehlgeschlagen!\n"
-                        f"Symbol: {stop.symbol}\n"
-                        f"Error: {result.get('error')}",
-                        urgent=True,
-                    )
+                    stop.reactivate()
+                    logger.critical(f"Stop-Loss sell FAILED, re-activated stop for {stop.symbol}")
 
         except Exception as e:
             logger.warning(f"Stop-Loss Check Fehler: {e}")

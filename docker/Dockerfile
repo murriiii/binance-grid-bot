@@ -20,14 +20,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY src/ ./src/
 COPY config/ ./config/
 COPY main.py .
+COPY main_hybrid.py .
 COPY run_backtest.py .
 COPY check_sentiment.py .
 
 # Create directories
 RUN mkdir -p logs data/cache
-
-# Health check endpoint
-EXPOSE 8080
 
 # Default command
 CMD ["python", "main.py"]

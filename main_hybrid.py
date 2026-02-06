@@ -11,6 +11,7 @@ Start with: python main_hybrid.py
 
 import logging
 import os
+import signal
 import sys
 
 from dotenv import load_dotenv
@@ -72,6 +73,9 @@ def main():
         logger.warning("No initial allocations - using fallback symbol")
         fallback_symbol = os.getenv("TRADING_PAIR", "BTCUSDT")
         orchestrator.add_symbol(fallback_symbol, config.total_investment * 0.85)
+
+    # Handle SIGTERM for graceful Docker shutdown
+    signal.signal(signal.SIGTERM, lambda _s, _f: orchestrator.stop())
 
     # Start the main loop
     orchestrator.run()

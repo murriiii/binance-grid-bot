@@ -97,19 +97,31 @@ class StopLossOrder:
                     self.current_stop_price, self.entry_price
                 )  # Break-Even
 
-        # Check ob Stop getriggert
+        # Check ob Stop getriggert — does NOT deactivate, caller must confirm
         if current_price <= self.current_stop_price:
-            self.trigger(current_price)
+            self.triggered_price = current_price
+            self.triggered_at = datetime.now()
             return True
 
         return False
 
-    def trigger(self, trigger_price: float):
-        """Markiert Stop als getriggert"""
+    def confirm_trigger(self):
+        """Call ONLY after successful market sell to deactivate the stop."""
         self.is_active = False
-        self.triggered_at = datetime.now()
+        if self.triggered_price is not None:
+            self.result_pnl_pct = (self.triggered_price - self.entry_price) / self.entry_price * 100
+
+    def reactivate(self):
+        """Re-enable stop if market sell failed."""
+        self.is_active = True
+        self.triggered_price = None
+        self.triggered_at = None
+
+    def trigger(self, trigger_price: float):
+        """Legacy: marks stop as triggered AND deactivated in one step."""
         self.triggered_price = trigger_price
-        self.result_pnl_pct = (trigger_price - self.entry_price) / self.entry_price * 100
+        self.triggered_at = datetime.now()
+        self.confirm_trigger()
 
     def to_dict(self) -> dict:
         return {
@@ -199,9 +211,12 @@ class StopLossManager:
 
                 if stop.update(price, atr):
                     triggered.append(stop)
-                    self._on_stop_triggered(stop)
 
         return triggered
+
+    def notify_and_persist_trigger(self, stop: StopLossOrder):
+        """Call after confirm_trigger() to send notifications and update DB."""
+        self._on_stop_triggered(stop)
 
     def _on_stop_triggered(self, stop: StopLossOrder):
         """Callback wenn ein Stop getriggert wird"""

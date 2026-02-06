@@ -180,7 +180,7 @@ def task_learn_patterns():
         from src.data.memory import TradingMemory
 
         memory = TradingMemory()
-        if memory.conn:
+        if memory.db:
             memory.learn_and_update_patterns()
             logger.info("Pattern learning completed")
 

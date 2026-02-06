@@ -5,10 +5,13 @@ Registriert alle periodischen Tasks und führt sie aus.
 """
 
 import logging
+import signal
 import sys
 import time
 
 import schedule
+
+_shutdown = False
 
 sys.path.insert(0, "/app")
 
@@ -50,6 +53,7 @@ from src.tasks.reporting_tasks import (
 from src.tasks.system_tasks import (
     task_check_stops,
     task_macro_check,
+    task_reset_daily_drawdown,
     task_system_health_check,
     task_update_outcomes,
 )
@@ -107,6 +111,9 @@ def main():
 
     # System Health Check alle 6 Stunden
     schedule.every(6).hours.do(task_system_health_check)
+
+    # Daily Drawdown Reset um Mitternacht
+    schedule.every().day.at("00:00").do(task_reset_daily_drawdown)
 
     # ═══════════════════════════════════════════════════════════════
     # ANALYSIS JOBS
@@ -166,13 +173,22 @@ def main():
     for job in schedule.get_jobs():
         logger.info(f"  - {job}")
 
+    def _handle_sigterm(_signum, _frame):
+        global _shutdown
+        _shutdown = True
+        logger.info("SIGTERM received, shutting down scheduler...")
+
+    signal.signal(signal.SIGTERM, _handle_sigterm)
+
     # Run loop
-    while True:
+    while not _shutdown:
         try:
             schedule.run_pending()
         except Exception as e:
             logger.error(f"Scheduler Error: {e}")
         time.sleep(60)
+
+    logger.info("Scheduler stopped.")
 
 
 if __name__ == "__main__":

@@ -265,7 +265,9 @@ class TestCashMode:
 
 
 class TestMarketSell:
-    def test_market_sell_position(self, orchestrator, mock_client):
+    @patch("src.risk.stop_loss_executor.execute_stop_loss_sell")
+    def test_market_sell_position(self, mock_executor, orchestrator, mock_client):
+        mock_executor.return_value = {"success": True, "order": {}}
         state = orchestrator.symbols["BTCUSDT"]
         state.hold_quantity = 0.001
         state.hold_entry_price = 50000.0
@@ -273,22 +275,24 @@ class TestMarketSell:
 
         orchestrator._market_sell_position(state)
 
-        mock_client.place_market_sell.assert_called_once_with("BTCUSDT", 0.001)
+        mock_executor.assert_called_once()
         assert state.hold_quantity == 0.0
         assert state.hold_stop_id is None
         assert state.cash_exit_started is None
 
-    def test_market_sell_handles_failure(self, orchestrator, mock_client):
-        mock_client.place_market_sell.return_value = {
+    @patch("src.risk.stop_loss_executor.execute_stop_loss_sell")
+    def test_market_sell_handles_failure(self, mock_executor, orchestrator, mock_client):
+        mock_executor.return_value = {
             "success": False,
+            "order": None,
             "error": "insufficient qty",
         }
         state = orchestrator.symbols["BTCUSDT"]
         state.hold_quantity = 0.001
 
         orchestrator._market_sell_position(state)
-        # Should still reset state
-        assert state.hold_quantity == 0.0
+        # On failure, state should NOT be reset (will retry next tick)
+        assert state.hold_quantity == 0.001
 
 
 # ------------------------------------------------------------------
@@ -487,7 +491,9 @@ class TestStopLossUpdates:
         assert "BTCUSDT" in prices
         assert "ETHUSDT" in prices
 
-    def test_update_stop_losses_handles_trigger(self, orchestrator, mock_client):
+    @patch("src.risk.stop_loss_executor.execute_stop_loss_sell")
+    def test_update_stop_losses_handles_trigger(self, mock_executor, orchestrator, mock_client):
+        mock_executor.return_value = {"success": True, "order": {}}
         mock_stop = MagicMock()
         mock_stop.symbol = "BTCUSDT"
         mock_stop.triggered_price = 45000.0
@@ -496,7 +502,8 @@ class TestStopLossUpdates:
 
         orchestrator._update_stop_losses()
 
-        mock_client.place_market_sell.assert_called_once_with("BTCUSDT", 0.001)
+        mock_executor.assert_called_once()
+        mock_stop.confirm_trigger.assert_called_once()
         assert orchestrator.symbols["BTCUSDT"].hold_quantity == 0.0
 
     def test_update_stop_losses_skips_zero_price(self, orchestrator, mock_client):
