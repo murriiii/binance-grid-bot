@@ -62,6 +62,7 @@ class TradingTelegramBot:
             "🤖 *Trading Bot aktiv!*\n\n"
             "*Befehle:*\n"
             "/status - Portfolio Status\n"
+            "/report - Cohort-Zwischenbericht\n"
             "/market - Markt-Analyse\n"
             "/ask <frage> - AI Frage\n"
             "/stops - Aktive Stop-Loss\n"
@@ -77,6 +78,7 @@ class TradingTelegramBot:
 
 *Portfolio:*
 /status - Aktueller Portfolio-Status
+/report - Cohort-Zwischenbericht (live)
 /positions - Offene Positionen
 /performance - Performance-Übersicht
 /stops - Aktive Stop-Loss Orders
@@ -432,6 +434,31 @@ _Das Playbook wird bei jedem AI-Call als Kontext verwendet._
             await update.message.reply_text(f"❌ Fehler: {e}")
 
     # ═══════════════════════════════════════════════════════════════
+    # REPORT COMMAND (Cohort-Zwischenbericht)
+    # ═══════════════════════════════════════════════════════════════
+
+    async def cmd_report(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Generiert Cohort-Zwischenbericht on-demand."""
+        await update.message.reply_text("📊 Generiere Cohort-Bericht...")
+
+        try:
+            from src.tasks.reporting_tasks import _build_cohort_status
+
+            report = _build_cohort_status()
+
+            if not report:
+                await update.message.reply_text(
+                    "⚠️ Keine Cohort-Daten gefunden.\nSind State-Files vorhanden?"
+                )
+                return
+
+            await update.message.reply_text(report, parse_mode="HTML")
+
+        except Exception as e:
+            logger.error(f"Report error: {e}")
+            await update.message.reply_text(f"❌ Fehler: {e}")
+
+    # ═══════════════════════════════════════════════════════════════
     # CALLBACK HANDLERS (Button Clicks)
     # ═══════════════════════════════════════════════════════════════
 
@@ -571,6 +598,9 @@ def main():
     app.add_handler(CommandHandler("ask", bot.cmd_ask))
     app.add_handler(CommandHandler("stops", bot.cmd_stops))
     app.add_handler(CommandHandler("ta", bot.cmd_ta))
+
+    # Report Command
+    app.add_handler(CommandHandler("report", bot.cmd_report))
 
     # Playbook Commands
     app.add_handler(CommandHandler("playbook", bot.cmd_playbook))
