@@ -69,6 +69,12 @@ class TestHybridConfig:
         is_valid, _errors = config.validate()
         assert not is_valid
 
+    def test_validate_min_confidence_out_of_range(self):
+        config = HybridConfig(min_confidence=1.5)
+        is_valid, errors = config.validate()
+        assert not is_valid
+        assert any("min_confidence" in e for e in errors)
+
     def test_validate_invalid_preset(self):
         config = HybridConfig(portfolio_constraints_preset="unknown")
         is_valid, _errors = config.validate()

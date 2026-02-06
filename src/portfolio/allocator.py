@@ -141,6 +141,7 @@ class PortfolioAllocator(SingletonMixin):
         current_portfolio: dict[str, dict] | None = None,
         cohort_id: str | None = None,
         regime: str | None = None,
+        min_confidence: float = 0.2,
     ) -> AllocationResult:
         """
         Berechnet die optimale Kapitalverteilung.
@@ -188,7 +189,7 @@ class PortfolioAllocator(SingletonMixin):
             for o in opportunities
             if o.symbol not in self._current_portfolio
             and o.total_score >= 0.3
-            and o.confidence >= 0.2
+            and o.confidence >= min_confidence
         ]
 
         if not filtered_opps:

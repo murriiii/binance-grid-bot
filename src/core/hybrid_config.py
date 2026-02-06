@@ -38,6 +38,9 @@ class HybridConfig:
     min_position_usd: float = 10.0
     total_investment: float = 400.0
 
+    # Coin selection
+    min_confidence: float = 0.3
+
     # Constraints preset
     portfolio_constraints_preset: str = "small"
 
@@ -75,6 +78,9 @@ class HybridConfig:
                 f"min_position_usd must be at least 5 (Binance minimum), got {self.min_position_usd}"
             )
 
+        if not 0.0 <= self.min_confidence <= 1.0:
+            errors.append(f"min_confidence must be between 0.0 and 1.0, got {self.min_confidence}")
+
         if self.portfolio_constraints_preset not in (
             "small",
             "conservative",
@@ -109,6 +115,7 @@ class HybridConfig:
             min_regime_duration_days=int(os.getenv("HYBRID_MIN_REGIME_DURATION_DAYS", 2)),
             mode_cooldown_hours=int(os.getenv("HYBRID_MODE_COOLDOWN_HOURS", 24)),
             hold_trailing_stop_pct=float(os.getenv("HYBRID_HOLD_TRAILING_STOP_PCT", 7.0)),
+            min_confidence=cohort.config.min_confidence,
             grid_range_percent=cohort.config.grid_range_pct,
             num_grids=2,  # $100 budget → 2 grids to keep per-grid above $5 min_notional
             cash_exit_timeout_hours=float(os.getenv("HYBRID_CASH_EXIT_TIMEOUT_HOURS", 2.0)),
@@ -152,5 +159,6 @@ class HybridConfig:
             "max_symbols": self.max_symbols,
             "min_position_usd": self.min_position_usd,
             "total_investment": self.total_investment,
+            "min_confidence": self.min_confidence,
             "portfolio_constraints_preset": self.portfolio_constraints_preset,
         }

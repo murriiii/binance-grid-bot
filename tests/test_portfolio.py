@@ -326,6 +326,47 @@ class TestPortfolioAllocator:
             assert "too small" in result.rejected["LOWSCORE"].lower()
 
     @patch("src.portfolio.allocator.psycopg2")
+    def test_min_confidence_filters_low_confidence(self, mock_psycopg2):
+        """Test that min_confidence parameter filters low-confidence coins."""
+        mock_psycopg2.connect.return_value = MagicMock()
+
+        allocator = PortfolioAllocator()
+
+        opportunities = [
+            Opportunity(
+                symbol="BTCUSDT",
+                category="LARGE_CAP",
+                total_score=0.8,
+                confidence=0.8,  # high confidence
+                risk_level=OpportunityRisk.LOW,
+            ),
+            Opportunity(
+                symbol="LOWCONF",
+                category="MID_CAP",
+                total_score=0.6,
+                confidence=0.4,  # below conservative threshold
+                risk_level=OpportunityRisk.MEDIUM,
+            ),
+        ]
+
+        # With high min_confidence, LOWCONF should be filtered out
+        result = allocator.calculate_allocation(
+            opportunities=opportunities,
+            available_capital=1000.0,
+            min_confidence=0.7,
+        )
+        assert "BTCUSDT" in result.allocations
+        assert "LOWCONF" not in result.allocations
+
+        # With low min_confidence, both should be allocated
+        result2 = allocator.calculate_allocation(
+            opportunities=opportunities,
+            available_capital=1000.0,
+            min_confidence=0.2,
+        )
+        assert "BTCUSDT" in result2.allocations
+
+    @patch("src.portfolio.allocator.psycopg2")
     def test_get_risk_multiplier(self, mock_psycopg2):
         """Test Risk Multiplier für Position Sizing."""
         mock_psycopg2.connect.return_value = MagicMock()

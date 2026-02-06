@@ -129,7 +129,7 @@ def _build_cohort_status() -> str:
     except Exception:
         client = None
 
-    # Load cohort info from DB for starting capital
+    # Load cohort info + realized P&L from DB
     cohort_info = {}
     conn = get_db_connection()
     if conn:
@@ -138,11 +138,28 @@ def _build_cohort_status() -> str:
 
             with conn.cursor(cursor_factory=RDC) as cur:
                 cur.execute(
-                    "SELECT name, starting_capital, current_capital, config "
+                    "SELECT id, name, starting_capital, current_capital, config "
                     "FROM cohorts WHERE is_active = true"
                 )
                 for row in cur.fetchall():
                     cohort_info[row["name"]] = row
+
+                # Realized P&L per cohort from trade_pairs
+                for name, info in cohort_info.items():
+                    try:
+                        cur.execute(
+                            "SELECT COALESCE(SUM(net_pnl), 0) as realized_pnl, "
+                            "COUNT(*) as trade_count "
+                            "FROM trade_pairs "
+                            "WHERE cohort_id = %s AND status = 'closed'",
+                            (info["id"],),
+                        )
+                        pnl_row = cur.fetchone()
+                        info["realized_pnl"] = float(pnl_row["realized_pnl"])
+                        info["trade_count"] = pnl_row["trade_count"]
+                    except Exception:
+                        info["realized_pnl"] = 0.0
+                        info["trade_count"] = 0
         except Exception as e:
             logger.debug(f"Cohort info query failed: {e}")
         finally:
@@ -196,13 +213,28 @@ def _build_cohort_status() -> str:
             cash_reserve = total_investment - total_allocated
             alloc_pct = total_allocated / total_investment * 100 if total_investment else 0
 
+            # P&L from DB
+            realized_pnl = db_info.get("realized_pnl", 0.0) if db_info else 0.0
+            trade_count = db_info.get("trade_count", 0) if db_info else 0
+            current_value = total_investment + realized_pnl
+            if starting > 0 and realized_pnl != 0:
+                pnl_pct = realized_pnl / starting * 100
+                pnl_str = f"${realized_pnl:+.2f} ({pnl_pct:+.1f}%) | {trade_count} Trades"
+            elif trade_count > 0:
+                pnl_str = f"$0.00 | {trade_count} Trades"
+            else:
+                pnl_str = "noch keine Trades"
+
             mode = state.get("current_mode", "?")
-            lines.append(f"\n<b>{cohort_name.title()}</b> (${total_investment:.0f})")
+            lines.append(
+                f"\n<b>{cohort_name.title()}</b> (${starting:.0f} -> ${current_value:.2f})"
+            )
             lines.append(f"  Grid: {grid_pct}% | Risk: {risk} | Mode: {mode}")
             lines.append(
                 f"  Investiert: ${total_allocated:.2f} ({alloc_pct:.0f}%) "
                 f"| Cash: ${cash_reserve:.2f}"
             )
+            lines.append(f"  P&L: {pnl_str}")
             lines.extend(symbol_lines)
 
         except Exception as e:

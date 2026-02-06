@@ -119,7 +119,7 @@ class TestHybridConfigFromCohort:
         from src.core.cohort_manager import Cohort, CohortConfig
         from src.core.hybrid_config import HybridConfig
 
-        config = CohortConfig(grid_range_pct=2.0, risk_tolerance="low")
+        config = CohortConfig(grid_range_pct=2.0, min_confidence=0.7, risk_tolerance="low")
         cohort = Cohort(
             id="1",
             name="conservative",
@@ -131,6 +131,7 @@ class TestHybridConfigFromCohort:
 
         hc = HybridConfig.from_cohort(cohort)
         assert hc.grid_range_percent == 2.0
+        assert hc.min_confidence == 0.7
         assert hc.total_investment == 100
         assert hc.max_symbols == 2
         assert hc.portfolio_constraints_preset == "small"
@@ -139,7 +140,7 @@ class TestHybridConfigFromCohort:
         from src.core.cohort_manager import Cohort, CohortConfig
         from src.core.hybrid_config import HybridConfig
 
-        config = CohortConfig(grid_range_pct=8.0, risk_tolerance="high")
+        config = CohortConfig(grid_range_pct=8.0, min_confidence=0.3, risk_tolerance="high")
         cohort = Cohort(
             id="2",
             name="aggressive",
@@ -151,6 +152,7 @@ class TestHybridConfigFromCohort:
 
         hc = HybridConfig.from_cohort(cohort)
         assert hc.grid_range_percent == 8.0
+        assert hc.min_confidence == 0.3
         assert hc.total_investment == 95
         assert hc.portfolio_constraints_preset == "small"
 

@@ -717,6 +717,7 @@ class HybridOrchestrator:
                 current_portfolio=current_portfolio,
                 cohort_id=self.cohort_id,
                 regime=regime,
+                min_confidence=self.config.min_confidence,
             )
 
             if not result.allocations:
