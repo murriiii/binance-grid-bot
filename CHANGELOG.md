@@ -1,3 +1,9 @@
+## v1.8.3 (2026-02-06)
+
+### Fix
+
+- resolve mypy errors and raise test coverage to 60%
+
 ## v1.8.2 (2026-02-06)
 
 ### Fix
