@@ -26,8 +26,12 @@ class RiskGuardMixin:
         """
         order_value = quantity * price
 
-        # 1. Portfolio drawdown check
-        if self.stop_loss_manager and self.stop_loss_manager.portfolio_stopped:
+        # 1. Portfolio drawdown check (skip in hybrid mode — see bot.py)
+        if (
+            self.stop_loss_manager
+            and self.stop_loss_manager.portfolio_stopped
+            and not self.config.get("skip_portfolio_drawdown")
+        ):
             return False, "Portfolio drawdown limit reached - all trading halted"
 
         # 2. CVaR position sizing check

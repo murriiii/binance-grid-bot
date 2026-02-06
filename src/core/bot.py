@@ -314,7 +314,10 @@ class GridBot(RiskGuardMixin, OrderManagerMixin, StateManagerMixin):
                 self._emergency_stop("Price unavailable for 3 consecutive ticks")
                 return False
 
-        if self.stop_loss_manager:
+        # Portfolio drawdown check — skip in hybrid/cohort mode where
+        # multiple bots share one account (each bot would see the others'
+        # locked USDT as a "loss"). HybridOrchestrator has its own stop-losses.
+        if self.stop_loss_manager and not self.config.get("skip_portfolio_drawdown"):
             portfolio_value = self.client.get_account_balance("USDT")
 
             # Reset daily drawdown baseline at start of new day

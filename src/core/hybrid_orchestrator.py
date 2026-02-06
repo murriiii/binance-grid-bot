@@ -469,6 +469,7 @@ class HybridOrchestrator:
             "grid_range_percent": self.config.grid_range_percent,
             "testnet": self.client.testnet,
             "state_file": state_file,
+            "skip_portfolio_drawdown": True,
         }
         try:
             bot = GridBot(bot_config, client=self.client)
