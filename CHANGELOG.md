@@ -1,3 +1,9 @@
+## v1.14.5 (2026-02-06)
+
+### Fix
+
+- disable portfolio drawdown check in hybrid/cohort mode
+
 ## v1.14.4 (2026-02-06)
 
 ### Fix
