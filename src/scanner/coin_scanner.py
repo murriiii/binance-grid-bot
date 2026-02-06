@@ -14,6 +14,7 @@ from datetime import datetime, timedelta
 from dotenv import load_dotenv
 
 from src.scanner.opportunity import Opportunity, OpportunityDirection, OpportunityRisk
+from src.utils.singleton import SingletonMixin
 
 load_dotenv()
 
@@ -28,7 +29,7 @@ except ImportError:
     POSTGRES_AVAILABLE = False
 
 
-class CoinScanner:
+class CoinScanner(SingletonMixin):
     """
     Scannt Watchlist nach Trading-Opportunities.
 
@@ -44,8 +45,6 @@ class CoinScanner:
         opportunities = scanner.scan_opportunities()
         top_5 = scanner.get_top_opportunities(5)
     """
-
-    _instance: CoinScanner | None = None
 
     # Default Score-Gewichte
     DEFAULT_WEIGHTS = {
@@ -71,20 +70,11 @@ class CoinScanner:
         self._weights = self.DEFAULT_WEIGHTS.copy()
         self.connect()
 
-    @classmethod
-    def get_instance(cls) -> CoinScanner:
-        """Singleton-Instanz."""
-        if cls._instance is None:
-            cls._instance = cls()
-        return cls._instance
-
-    @classmethod
-    def reset_instance(cls) -> None:
-        """Reset für Tests."""
-        if cls._instance is not None:
-            if cls._instance.conn:
-                cls._instance.conn.close()
-            cls._instance = None
+    def close(self):
+        """Called by SingletonMixin.reset_instance()."""
+        if self.conn:
+            self.conn.close()
+            self.conn = None
 
     def connect(self) -> bool:
         """Verbindet zur PostgreSQL Datenbank."""
