@@ -1,6 +1,6 @@
 [project]
 name = "binance-grid-bot"
-version = "1.13.0"
+version = "1.14.0"
 description = "AI-Enhanced Cryptocurrency Grid Trading Bot"
 readme = "README.md"
 license = { text = "MIT" }
@@ -243,7 +243,7 @@ fail_under = 60
 # ═══════════════════════════════════════════════════════════════
 [tool.commitizen]
 name = "cz_conventional_commits"
-version = "1.13.0"
+version = "1.14.0"
 version_files = [
     "pyproject.toml:version",
     "src/__init__.py:__version__",

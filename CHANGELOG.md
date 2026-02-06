@@ -1,3 +1,9 @@
+## v1.14.0 (2026-02-06)
+
+### Feat
+
+- add 2 small-cap cohorts, emoji dashboard report, MEME category
+
 ## v1.13.0 (2026-02-06)
 
 ### Feat
