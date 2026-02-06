@@ -112,6 +112,175 @@ class TestCohort:
         assert cohort.should_trade(0.9, 50) is False
 
 
+class TestHybridConfigFromCohort:
+    """Tests for HybridConfig.from_cohort()."""
+
+    def test_from_cohort_maps_fields(self):
+        from src.core.cohort_manager import Cohort, CohortConfig
+        from src.core.hybrid_config import HybridConfig
+
+        config = CohortConfig(grid_range_pct=2.0, risk_tolerance="low")
+        cohort = Cohort(
+            id="1",
+            name="conservative",
+            description="test",
+            config=config,
+            starting_capital=100,
+            current_capital=100,
+        )
+
+        hc = HybridConfig.from_cohort(cohort)
+        assert hc.grid_range_percent == 2.0
+        assert hc.total_investment == 100
+        assert hc.max_symbols == 2
+        assert hc.portfolio_constraints_preset == "small"
+
+    def test_from_cohort_aggressive(self):
+        from src.core.cohort_manager import Cohort, CohortConfig
+        from src.core.hybrid_config import HybridConfig
+
+        config = CohortConfig(grid_range_pct=8.0, risk_tolerance="high")
+        cohort = Cohort(
+            id="2",
+            name="aggressive",
+            description="test",
+            config=config,
+            starting_capital=100,
+            current_capital=95,
+        )
+
+        hc = HybridConfig.from_cohort(cohort)
+        assert hc.grid_range_percent == 8.0
+        assert hc.total_investment == 95
+        assert hc.portfolio_constraints_preset == "small"
+
+    def test_from_cohort_validates(self):
+        from src.core.cohort_manager import Cohort, CohortConfig
+        from src.core.hybrid_config import HybridConfig
+
+        config = CohortConfig(grid_range_pct=5.0, risk_tolerance="medium")
+        cohort = Cohort(
+            id="3",
+            name="balanced",
+            description="test",
+            config=config,
+            starting_capital=100,
+            current_capital=100,
+        )
+
+        hc = HybridConfig.from_cohort(cohort)
+        valid, errors = hc.validate()
+        assert valid, errors
+
+
+class TestCohortOrchestrator:
+    """Tests for CohortOrchestrator."""
+
+    def test_initialize_no_cohorts(self, reset_new_singletons):
+        from unittest.mock import MagicMock, patch
+
+        from src.core.cohort_orchestrator import CohortOrchestrator
+
+        mock_cm = MagicMock()
+        mock_cm.get_active_cohorts.return_value = []
+
+        with patch(
+            "src.core.cohort_orchestrator.CohortManager.get_instance",
+            return_value=mock_cm,
+        ):
+            co = CohortOrchestrator(client=MagicMock())
+            assert co.initialize() is False
+            assert len(co.orchestrators) == 0
+
+    def test_initialize_with_cohorts(self, reset_new_singletons):
+        from unittest.mock import MagicMock, patch
+
+        from src.core.cohort_manager import Cohort, CohortConfig
+        from src.core.cohort_orchestrator import CohortOrchestrator
+
+        cohorts = [
+            Cohort(
+                id="1",
+                name="conservative",
+                description="test",
+                config=CohortConfig(grid_range_pct=2.0, risk_tolerance="low"),
+                starting_capital=100,
+                current_capital=100,
+            ),
+            Cohort(
+                id="2",
+                name="aggressive",
+                description="test",
+                config=CohortConfig(grid_range_pct=8.0, risk_tolerance="high"),
+                starting_capital=100,
+                current_capital=100,
+            ),
+        ]
+
+        mock_cm = MagicMock()
+        mock_cm.get_active_cohorts.return_value = cohorts
+
+        with (
+            patch(
+                "src.core.cohort_orchestrator.CohortManager.get_instance",
+                return_value=mock_cm,
+            ),
+            patch("src.core.hybrid_orchestrator.TelegramNotifier"),
+            patch("src.core.hybrid_orchestrator.StopLossManager"),
+        ):
+            co = CohortOrchestrator(client=MagicMock())
+            assert co.initialize() is True
+            assert len(co.orchestrators) == 2
+            assert "conservative" in co.orchestrators
+            assert "aggressive" in co.orchestrators
+
+    def test_tick_calls_all_orchestrators(self, reset_new_singletons):
+        from unittest.mock import MagicMock
+
+        from src.core.cohort_orchestrator import CohortOrchestrator
+
+        co = CohortOrchestrator(client=MagicMock())
+        mock_orch1 = MagicMock()
+        mock_orch2 = MagicMock()
+        co.orchestrators = {"a": mock_orch1, "b": mock_orch2}
+
+        co.tick()
+
+        mock_orch1.tick.assert_called_once()
+        mock_orch2.tick.assert_called_once()
+
+    def test_stop_stops_all(self, reset_new_singletons):
+        from unittest.mock import MagicMock
+
+        from src.core.cohort_orchestrator import CohortOrchestrator
+
+        co = CohortOrchestrator(client=MagicMock())
+        mock_orch = MagicMock()
+        co.orchestrators = {"a": mock_orch}
+        co.running = True
+
+        co.stop()
+
+        assert co.running is False
+        mock_orch.stop.assert_called_once()
+
+    def test_get_all_status(self, reset_new_singletons):
+        from unittest.mock import MagicMock
+
+        from src.core.cohort_orchestrator import CohortOrchestrator
+
+        co = CohortOrchestrator(client=MagicMock())
+        mock_orch = MagicMock()
+        mock_orch.get_status.return_value = {"mode": "GRID", "symbols": {}}
+        co.orchestrators = {"conservative": mock_orch}
+        co.cohort_configs = {"conservative": {"id": "1"}}
+
+        status = co.get_all_status()
+        assert "conservative" in status
+        assert status["conservative"]["mode"] == "GRID"
+        assert status["conservative"]["cohort_config"]["id"] == "1"
+
+
 class TestCohortManager:
     """Tests für Cohort Manager"""
 

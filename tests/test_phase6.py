@@ -20,104 +20,65 @@ class TestMainHybrid:
 
         assert hasattr(main_hybrid, "main")
 
-    @patch("main_hybrid.HybridOrchestrator")
+    @patch("main_hybrid.CohortOrchestrator")
     @patch("main_hybrid.BinanceClient")
-    @patch("main_hybrid.HybridConfig")
-    def test_main_creates_orchestrator(self, mock_config_cls, mock_client_cls, mock_orch_cls):
-        """main() creates an orchestrator and calls run()."""
+    def test_main_creates_cohort_orchestrator(self, mock_client_cls, mock_co_cls):
+        """main() creates a CohortOrchestrator and calls run()."""
         import main_hybrid
-
-        mock_config = MagicMock()
-        mock_config.initial_mode = "GRID"
-        mock_config.enable_mode_switching = False
-        mock_config.total_investment = 400.0
-        mock_config.max_symbols = 8
-        mock_config.validate.return_value = (True, [])
-        mock_config_cls.from_env.return_value = mock_config
 
         mock_client = MagicMock()
         mock_client_cls.return_value = mock_client
 
-        mock_orch = MagicMock()
-        mock_orch.scan_and_allocate.return_value = MagicMock(allocations={"BTCUSDT": 340.0})
-        mock_orch_cls.return_value = mock_orch
+        mock_co = MagicMock()
+        mock_co.initialize.return_value = True
+        mock_co.initial_allocation.return_value = 4
+        mock_co.orchestrators = {"a": MagicMock(), "b": MagicMock()}
+        mock_co.cohort_configs = {
+            "a": {"current_capital": 100, "grid_range_pct": 5, "risk_tolerance": "medium"},
+        }
+        mock_co_cls.return_value = mock_co
 
         with patch("main_hybrid.load_dotenv"):
             main_hybrid.main()
 
-        mock_orch_cls.assert_called_once_with(config=mock_config, client=mock_client)
-        mock_orch.scan_and_allocate.assert_called_once()
-        mock_orch.run.assert_called_once()
+        mock_co.initialize.assert_called_once()
+        mock_co.initial_allocation.assert_called_once()
+        mock_co.run.assert_called_once()
 
-    @patch("main_hybrid.HybridOrchestrator")
+    @patch("main_hybrid.CohortOrchestrator")
     @patch("main_hybrid.BinanceClient")
-    @patch("main_hybrid.HybridConfig")
-    def test_main_fallback_symbol_when_no_allocations(
-        self, mock_config_cls, mock_client_cls, mock_orch_cls
-    ):
-        """main() adds fallback symbol when scan returns nothing."""
+    def test_main_exits_when_no_cohorts_initialized(self, mock_client_cls, mock_co_cls):
+        """main() exits when no cohorts could be initialized."""
         import main_hybrid
 
-        mock_config = MagicMock()
-        mock_config.initial_mode = "GRID"
-        mock_config.enable_mode_switching = False
-        mock_config.total_investment = 400.0
-        mock_config.max_symbols = 8
-        mock_config.validate.return_value = (True, [])
-        mock_config_cls.from_env.return_value = mock_config
-
-        mock_orch = MagicMock()
-        mock_orch.scan_and_allocate.return_value = None
-        mock_orch_cls.return_value = mock_orch
-
-        with (
-            patch("main_hybrid.load_dotenv"),
-            patch.dict("os.environ", {"TRADING_PAIR": "ETHUSDT"}),
-        ):
-            main_hybrid.main()
-
-        mock_orch.add_symbol.assert_called_once_with("ETHUSDT", 400.0 * 0.85)
-        mock_orch.run.assert_called_once()
-
-    @patch("main_hybrid.HybridConfig")
-    def test_main_exits_on_invalid_config(self, mock_config_cls):
-        """main() exits when config is invalid."""
-        import main_hybrid
-
-        mock_config = MagicMock()
-        mock_config.validate.return_value = (False, ["total_investment must be at least 10"])
-        mock_config_cls.from_env.return_value = mock_config
+        mock_co = MagicMock()
+        mock_co.initialize.return_value = False
+        mock_co_cls.return_value = mock_co
 
         with patch("main_hybrid.load_dotenv"), pytest.raises(SystemExit) as exc_info:
             main_hybrid.main()
 
         assert exc_info.value.code == 1
 
-    @patch("main_hybrid.HybridOrchestrator")
+    @patch("main_hybrid.CohortOrchestrator")
     @patch("main_hybrid.BinanceClient")
-    @patch("main_hybrid.HybridConfig")
-    def test_main_fallback_on_empty_allocations(
-        self, mock_config_cls, mock_client_cls, mock_orch_cls
-    ):
-        """main() adds fallback when allocations dict is empty."""
+    def test_main_exits_when_no_allocations(self, mock_client_cls, mock_co_cls):
+        """main() exits when no cohorts get allocations."""
         import main_hybrid
 
-        mock_config = MagicMock()
-        mock_config.initial_mode = "GRID"
-        mock_config.enable_mode_switching = False
-        mock_config.total_investment = 400.0
-        mock_config.max_symbols = 8
-        mock_config.validate.return_value = (True, [])
-        mock_config_cls.from_env.return_value = mock_config
+        mock_co = MagicMock()
+        mock_co.initialize.return_value = True
+        mock_co.initial_allocation.return_value = 0
+        mock_co.orchestrators = {"a": MagicMock()}
+        mock_co.cohort_configs = {
+            "a": {"current_capital": 100, "grid_range_pct": 5, "risk_tolerance": "medium"},
+        }
+        mock_co_cls.return_value = mock_co
 
-        mock_orch = MagicMock()
-        mock_orch.scan_and_allocate.return_value = MagicMock(allocations={})
-        mock_orch_cls.return_value = mock_orch
-
-        with patch("main_hybrid.load_dotenv"):
+        with patch("main_hybrid.load_dotenv"), pytest.raises(SystemExit) as exc_info:
             main_hybrid.main()
 
-        mock_orch.add_symbol.assert_called_once()
+        assert exc_info.value.code == 1
 
 
 # ═══════════════════════════════════════════════════════════════

@@ -4,6 +4,10 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from src.core.cohort_manager import Cohort
 
 
 @dataclass
@@ -83,6 +87,36 @@ class HybridConfig:
             )
 
         return len(errors) == 0, errors
+
+    @classmethod
+    def from_cohort(cls, cohort: Cohort) -> HybridConfig:
+        """Create a HybridConfig from a Cohort's settings.
+
+        Maps CohortConfig fields to HybridConfig equivalents,
+        falling back to env vars for fields not in CohortConfig.
+        """
+        # All $100 cohorts use "small" preset — conservative/aggressive constraint
+        # presets have per-coin limits (8%/15%) that produce positions below
+        # Binance's $10 minimum after Kelly adjustment.  Risk differentiation
+        # comes from grid_range_pct and min_confidence instead.
+        preset = "small"
+
+        return cls(
+            initial_mode=os.getenv("HYBRID_INITIAL_MODE", "GRID"),
+            enable_mode_switching=os.getenv("HYBRID_ENABLE_MODE_SWITCHING", "false").lower()
+            == "true",
+            min_regime_probability=float(os.getenv("HYBRID_MIN_REGIME_PROBABILITY", 0.75)),
+            min_regime_duration_days=int(os.getenv("HYBRID_MIN_REGIME_DURATION_DAYS", 2)),
+            mode_cooldown_hours=int(os.getenv("HYBRID_MODE_COOLDOWN_HOURS", 24)),
+            hold_trailing_stop_pct=float(os.getenv("HYBRID_HOLD_TRAILING_STOP_PCT", 7.0)),
+            grid_range_percent=cohort.config.grid_range_pct,
+            num_grids=2,  # $100 budget → 2 grids to keep per-grid above $5 min_notional
+            cash_exit_timeout_hours=float(os.getenv("HYBRID_CASH_EXIT_TIMEOUT_HOURS", 2.0)),
+            max_symbols=2,  # $100 budget → max 2 coins
+            min_position_usd=float(os.getenv("HYBRID_MIN_POSITION_USD", 10.0)),
+            total_investment=cohort.current_capital,
+            portfolio_constraints_preset=preset,
+        )
 
     @classmethod
     def from_env(cls) -> HybridConfig:

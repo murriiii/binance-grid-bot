@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """
-Hybrid Trading Bot - Regime-Adaptive Multi-Coin System
+Hybrid Trading Bot - Cohort-Based Multi-Strategy System
 
-Entry point for the hybrid orchestrator that switches between
-HOLD (bull), GRID (sideways), and CASH (bear) modes based on
-market regime detection.
+Runs 4 independent cohorts (conservative, balanced, aggressive, baseline),
+each with its own HybridOrchestrator, capital allocation, and coin selection.
 
 Start with: python main_hybrid.py
 """
@@ -19,25 +18,14 @@ from dotenv import load_dotenv
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from src.api.binance_client import BinanceClient
+from src.core.cohort_orchestrator import CohortOrchestrator
 from src.core.config import validate_environment
-from src.core.hybrid_config import HybridConfig
-from src.core.hybrid_orchestrator import HybridOrchestrator
 
 logger = logging.getLogger("trading_bot")
 
 
 def main():
     load_dotenv()
-
-    # Load config from environment
-    config = HybridConfig.from_env()
-    valid, errors = config.validate()
-
-    if not valid:
-        print("Configuration errors:")
-        for err in errors:
-            print(f"  - {err}")
-        sys.exit(1)
 
     env_ok, warnings = validate_environment()
     for w in warnings:
@@ -46,18 +34,6 @@ def main():
         sys.exit(1)
 
     testnet = os.getenv("BINANCE_TESTNET", "true").lower() == "true"
-
-    print(f"""
-    ╔═══════════════════════════════════════════════╗
-    ║       HYBRID TRADING BOT                      ║
-    ╠═══════════════════════════════════════════════╣
-    ║  Mode:       {config.initial_mode:<30} ║
-    ║  Switching:  {str(config.enable_mode_switching):<30} ║
-    ║  Investment: ${config.total_investment:<29} ║
-    ║  Max Coins:  {config.max_symbols:<30} ║
-    ║  Testnet:    {str(testnet):<30} ║
-    ╚═══════════════════════════════════════════════╝
-    """)
 
     if not testnet:
         print("LIVE MODUS - ECHTES GELD!")
@@ -69,17 +45,39 @@ def main():
     # Create shared Binance client
     client = BinanceClient(testnet=testnet)
 
-    # Create orchestrator
-    orchestrator = HybridOrchestrator(config=config, client=client)
+    # Create cohort orchestrator
+    orchestrator = CohortOrchestrator(client=client)
 
-    # Initial scan and allocation
-    logger.info("Running initial scan and allocation...")
-    result = orchestrator.scan_and_allocate()
+    if not orchestrator.initialize():
+        logger.critical("No cohorts could be initialized. Aborting.")
+        sys.exit(1)
 
-    if not result or not result.allocations:
-        logger.warning("No initial allocations - using fallback symbol")
-        fallback_symbol = os.getenv("TRADING_PAIR", "BTCUSDT")
-        orchestrator.add_symbol(fallback_symbol, config.total_investment * 0.85)
+    # Print startup banner
+    print(f"""
+    ╔═══════════════════════════════════════════════╗
+    ║       COHORT TRADING SYSTEM                   ║
+    ╠═══════════════════════════════════════════════╣
+    ║  Testnet:    {str(testnet):<30} ║
+    ║  Cohorts:    {len(orchestrator.orchestrators):<30} ║""")
+
+    for name, info in orchestrator.cohort_configs.items():
+        cap = info["current_capital"]
+        grid = info["grid_range_pct"]
+        risk = info["risk_tolerance"]
+        print(f"    ║  {name:<12} ${cap:<6.0f} grid={grid}% risk={risk:<12} ║")
+
+    print("""    ╚═══════════════════════════════════════════════╝
+    """)
+
+    # Initial scan and allocation for all cohorts
+    logger.info("Running initial scan and allocation for all cohorts...")
+    allocated = orchestrator.initial_allocation()
+
+    if allocated == 0:
+        logger.critical("No cohorts got allocations - CoinScanner/DB not working. Aborting.")
+        sys.exit(1)
+
+    logger.info(f"{allocated}/{len(orchestrator.orchestrators)} cohorts allocated")
 
     # Handle SIGTERM for graceful Docker shutdown
     signal.signal(signal.SIGTERM, lambda _s, _f: orchestrator.stop())

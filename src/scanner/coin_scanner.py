@@ -7,6 +7,7 @@ basierend auf technischen und fundamentalen Signalen.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 from datetime import datetime, timedelta
@@ -83,13 +84,17 @@ class CoinScanner(SingletonMixin):
             return False
 
         try:
-            self.conn = psycopg2.connect(
-                host=os.getenv("POSTGRES_HOST", "localhost"),
-                port=os.getenv("POSTGRES_PORT", 5432),
-                database=os.getenv("POSTGRES_DB", "trading_bot"),
-                user=os.getenv("POSTGRES_USER", "trading"),
-                password=os.getenv("POSTGRES_PASSWORD", ""),
-            )
+            database_url = os.getenv("DATABASE_URL")
+            if database_url:
+                self.conn = psycopg2.connect(database_url)
+            else:
+                self.conn = psycopg2.connect(
+                    host=os.getenv("POSTGRES_HOST", "localhost"),
+                    port=os.getenv("POSTGRES_PORT", 5432),
+                    database=os.getenv("POSTGRES_DB", "trading_bot"),
+                    user=os.getenv("POSTGRES_USER", "trading"),
+                    password=os.getenv("POSTGRES_PASSWORD", ""),
+                )
             logger.info("CoinScanner: PostgreSQL verbunden")
             return True
         except Exception as e:
@@ -521,17 +526,16 @@ class CoinScanner(SingletonMixin):
                     cur.execute(
                         """
                         INSERT INTO opportunities (
-                            symbol, category, direction, total_score, confidence,
+                            symbol, direction, total_score, confidence,
                             technical_score, volume_score, sentiment_score,
                             whale_score, momentum_score, signals, risk_level,
-                            current_price, volume_24h
+                            price_at_detection, volume_24h
                         ) VALUES (
-                            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
                         )
                         """,
                         (
                             opp.symbol,
-                            opp.category,
                             opp.direction.value,
                             opp.total_score,
                             opp.confidence,
@@ -540,7 +544,7 @@ class CoinScanner(SingletonMixin):
                             opp.sentiment_score,
                             opp.whale_score,
                             opp.momentum_score,
-                            opp.signals,
+                            json.dumps(opp.signals),
                             opp.risk_level.value,
                             float(opp.current_price) if opp.current_price else None,
                             float(opp.volume_24h) if opp.volume_24h else None,

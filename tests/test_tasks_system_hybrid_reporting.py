@@ -238,7 +238,7 @@ class TestTaskSystemHealthCheck:
 class TestTaskModeEvaluation:
     @patch("src.tasks.hybrid_tasks.get_db_connection")
     @patch("src.notifications.telegram_service.get_telegram")
-    @patch("src.core.mode_manager.ModeManager.get_instance")
+    @patch("src.core.mode_manager.ModeManager")
     @patch("src.core.hybrid_config.HybridConfig.from_env")
     @patch("src.analysis.regime_detection.RegimeDetector.get_instance")
     def test_happy_path(self, mock_det_cls, mock_hcfg, mock_mm_cls, mock_tg, mock_db):

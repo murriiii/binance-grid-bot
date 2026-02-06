@@ -393,13 +393,17 @@ _Das Playbook wird bei jedem AI-Call als Kontext verwendet._
         try:
             import psycopg2
 
-            conn = psycopg2.connect(
-                host=os.getenv("POSTGRES_HOST", "localhost"),
-                port=os.getenv("POSTGRES_PORT", 5432),
-                database=os.getenv("POSTGRES_DB", "trading_bot"),
-                user=os.getenv("POSTGRES_USER", "trading"),
-                password=os.getenv("POSTGRES_PASSWORD", ""),
-            )
+            database_url = os.getenv("DATABASE_URL")
+            if database_url:
+                conn = psycopg2.connect(database_url)
+            else:
+                conn = psycopg2.connect(
+                    host=os.getenv("POSTGRES_HOST", "localhost"),
+                    port=os.getenv("POSTGRES_PORT", 5432),
+                    database=os.getenv("POSTGRES_DB", "trading_bot"),
+                    user=os.getenv("POSTGRES_USER", "trading"),
+                    password=os.getenv("POSTGRES_PASSWORD", ""),
+                )
 
             from src.data.playbook import TradingPlaybook
 

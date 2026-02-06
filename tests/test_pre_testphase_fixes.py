@@ -349,7 +349,6 @@ class TestModeManagerLockExpiry:
         from src.core.hybrid_config import HybridConfig
         from src.core.mode_manager import ModeManager
 
-        ModeManager.reset_instance()
         config = HybridConfig()
         config.enable_mode_switching = True
         config.min_regime_probability = 0.75

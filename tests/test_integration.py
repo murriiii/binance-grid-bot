@@ -10,7 +10,6 @@ import pytest
 
 from src.core.hybrid_config import HybridConfig
 from src.core.hybrid_orchestrator import HybridOrchestrator
-from src.core.mode_manager import ModeManager
 from src.core.trading_mode import TradingMode
 
 
@@ -66,12 +65,6 @@ def mock_client():
     }
     client.cancel_order.return_value = True
     return client
-
-
-@pytest.fixture(autouse=True)
-def reset_mode_manager():
-    yield
-    ModeManager.reset_instance()
 
 
 @pytest.fixture

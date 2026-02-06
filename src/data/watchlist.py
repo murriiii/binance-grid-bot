@@ -114,13 +114,17 @@ class WatchlistManager(SingletonMixin):
             return False
 
         try:
-            self.conn = psycopg2.connect(
-                host=os.getenv("POSTGRES_HOST", "localhost"),
-                port=os.getenv("POSTGRES_PORT", 5432),
-                database=os.getenv("POSTGRES_DB", "trading_bot"),
-                user=os.getenv("POSTGRES_USER", "trading"),
-                password=os.getenv("POSTGRES_PASSWORD", ""),
-            )
+            database_url = os.getenv("DATABASE_URL")
+            if database_url:
+                self.conn = psycopg2.connect(database_url)
+            else:
+                self.conn = psycopg2.connect(
+                    host=os.getenv("POSTGRES_HOST", "localhost"),
+                    port=os.getenv("POSTGRES_PORT", 5432),
+                    database=os.getenv("POSTGRES_DB", "trading_bot"),
+                    user=os.getenv("POSTGRES_USER", "trading"),
+                    password=os.getenv("POSTGRES_PASSWORD", ""),
+                )
             logger.info("WatchlistManager: PostgreSQL verbunden")
             return True
         except Exception as e:
@@ -143,7 +147,7 @@ class WatchlistManager(SingletonMixin):
                         default_grid_range_pct, min_volume_24h_usd,
                         is_active, is_tradeable,
                         total_trades, win_rate, avg_return_pct, sharpe_ratio,
-                        last_price, last_volume_24h, updated_at
+                        last_price, volume_24h AS last_volume_24h, updated_at
                     FROM watchlist
                     WHERE is_active = TRUE
                     ORDER BY tier ASC, category ASC, symbol ASC

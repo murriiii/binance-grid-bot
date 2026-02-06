@@ -98,6 +98,124 @@ def generate_performance_chart():
         logger.error(f"Chart Generation Error: {e}")
 
 
+def _build_cohort_status() -> str:
+    """Build per-cohort status section for the daily summary.
+
+    Reads all hybrid_state_{cohort}.json files and shows per-cohort
+    performance with coins, orders, and P&L.
+    """
+    import json
+    from pathlib import Path
+
+    config_dir = Path("config")
+    if not config_dir.exists():
+        return ""
+
+    # Find all cohort state files
+    state_files = sorted(config_dir.glob("hybrid_state_*.json"))
+    if not state_files:
+        # Fallback: check for single hybrid_state.json
+        single = config_dir / "hybrid_state.json"
+        if single.exists():
+            state_files = [single]
+        else:
+            return ""
+
+    try:
+        from src.api.binance_client import BinanceClient
+
+        testnet = os.getenv("BINANCE_TESTNET", "true").lower() == "true"
+        client = BinanceClient(testnet=testnet)
+    except Exception:
+        client = None
+
+    # Load cohort info from DB for starting capital
+    cohort_info = {}
+    conn = get_db_connection()
+    if conn:
+        try:
+            from psycopg2.extras import RealDictCursor as RDC
+
+            with conn.cursor(cursor_factory=RDC) as cur:
+                cur.execute(
+                    "SELECT name, starting_capital, current_capital, config "
+                    "FROM cohorts WHERE is_active = true"
+                )
+                for row in cur.fetchall():
+                    cohort_info[row["name"]] = row
+        except Exception as e:
+            logger.debug(f"Cohort info query failed: {e}")
+        finally:
+            conn.close()
+
+    lines = ["\n<b>Cohort Status:</b>"]
+
+    for sf in state_files:
+        try:
+            with open(sf) as f:
+                state = json.load(f)
+
+            # Extract cohort name from filename
+            fname = sf.stem  # e.g. "hybrid_state_conservative"
+            cohort_name = fname.replace("hybrid_state_", "") if "_" in fname else "default"
+
+            db_info = cohort_info.get(cohort_name, {})
+            starting = db_info.get("starting_capital", 100) if db_info else 100
+            config_data = db_info.get("config", {}) if db_info else {}
+            grid_pct = config_data.get("grid_range_pct", "?") if config_data else "?"
+            risk = config_data.get("risk_tolerance", "?") if config_data else "?"
+
+            # Calculate current value from symbols
+            total_value = 0.0
+            symbol_lines = []
+            for sym, sdata in state.get("symbols", {}).items():
+                alloc = sdata.get("allocation_usd", 0)
+                value = alloc  # fallback
+
+                if client:
+                    try:
+                        price = client.get_current_price(sym)
+                        base = sym.replace("USDT", "")
+                        balance = client.get_account_balance(base)
+                        if price and balance:
+                            value = balance * price
+
+                        orders = client.client.get_open_orders(symbol=sym)
+                        n_buy = sum(1 for o in orders if o["side"] == "BUY")
+                        n_sell = sum(1 for o in orders if o["side"] == "SELL")
+                        order_info = f"{n_buy}B/{n_sell}S"
+                        price_str = f"${price:,.2f}" if price else "N/A"
+                    except Exception:
+                        order_info = "?"
+                        price_str = "N/A"
+                else:
+                    order_info = "?"
+                    price_str = "N/A"
+
+                total_value += value
+                val_str = f"${value:.2f}" if value > 0 else "-"
+                symbol_lines.append(f"  {sym}: {price_str} | {val_str} | {order_info}")
+
+            # P&L calculation
+            if total_value > 0 and starting > 0:
+                pnl_pct = (total_value - starting) / starting * 100
+                pnl_str = f"{pnl_pct:+.1f}%"
+            else:
+                pnl_str = "N/A"
+
+            mode = state.get("current_mode", "?")
+            lines.append(
+                f"\n<b>{cohort_name.title()}</b> (${starting:.0f} -> ${total_value:.2f}, {pnl_str})"
+            )
+            lines.append(f"  Grid: {grid_pct}% | Risk: {risk} | Mode: {mode}")
+            lines.extend(symbol_lines)
+
+        except Exception as e:
+            logger.debug(f"Failed to read {sf}: {e}")
+
+    return "\n".join(lines) if len(lines) > 1 else ""
+
+
 def task_daily_summary():
     """Tägliche Portfolio-Zusammenfassung um 20:00."""
     from src.data.market_data import get_market_data
@@ -108,7 +226,7 @@ def task_daily_summary():
     conn = get_db_connection()
     if not conn:
         telegram = get_telegram()
-        telegram.send("⚠️ Daily Summary: DB nicht erreichbar")
+        telegram.send("Daily Summary: DB nicht erreichbar")
         return
 
     try:
@@ -147,6 +265,11 @@ def task_daily_summary():
             win_rate=win_rate,
             fear_greed=fear_greed.value,
         )
+
+        # Per-cohort details
+        cohort_status = _build_cohort_status()
+        if cohort_status:
+            telegram.send(cohort_status, disable_notification=True)
 
         data_sources_report = format_data_sources_report()
         if data_sources_report:

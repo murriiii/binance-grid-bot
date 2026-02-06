@@ -2,8 +2,6 @@
 
 from datetime import datetime, timedelta
 
-import pytest
-
 from src.core.hybrid_config import HybridConfig
 from src.core.mode_manager import (
     EMERGENCY_BEAR_PROBABILITY,
@@ -20,32 +18,7 @@ from src.portfolio.constraints import (
 )
 
 
-class TestModeManagerSingleton:
-    @pytest.fixture(autouse=True)
-    def reset(self):
-        ModeManager.reset_instance()
-        yield
-        ModeManager.reset_instance()
-
-    def test_singleton(self):
-        m1 = ModeManager.get_instance()
-        m2 = ModeManager.get_instance()
-        assert m1 is m2
-
-    def test_reset_instance(self):
-        m1 = ModeManager.get_instance()
-        ModeManager.reset_instance()
-        m2 = ModeManager.get_instance()
-        assert m1 is not m2
-
-
 class TestModeManagerInit:
-    @pytest.fixture(autouse=True)
-    def reset(self):
-        ModeManager.reset_instance()
-        yield
-        ModeManager.reset_instance()
-
     def test_default_mode_is_grid(self):
         mm = ModeManager()
         assert mm.get_current_mode().current_mode is TradingMode.GRID
@@ -55,10 +28,18 @@ class TestModeManagerInit:
         mm = ModeManager(config)
         assert mm.get_current_mode().current_mode is TradingMode.HOLD
 
-    def test_config_from_instance(self):
+    def test_config_from_constructor(self):
         config = HybridConfig(total_investment=800)
-        mm = ModeManager.get_instance(config)
+        mm = ModeManager(config)
         assert mm.config.total_investment == 800
+
+    def test_separate_instances_are_independent(self):
+        m1 = ModeManager()
+        m2 = ModeManager()
+        assert m1 is not m2
+        m1.request_switch(TradingMode.HOLD, "test")
+        assert m1.get_current_mode().current_mode is TradingMode.HOLD
+        assert m2.get_current_mode().current_mode is TradingMode.GRID
 
 
 class TestRegimeModeMapping:
@@ -73,12 +54,6 @@ class TestRegimeModeMapping:
 
 
 class TestEvaluateMode:
-    @pytest.fixture(autouse=True)
-    def reset(self):
-        ModeManager.reset_instance()
-        yield
-        ModeManager.reset_instance()
-
     def test_none_regime_keeps_current(self):
         mm = ModeManager()
         mode, reason = mm.evaluate_mode(regime=None)
@@ -160,12 +135,6 @@ class TestEvaluateMode:
 
 
 class TestRequestSwitch:
-    @pytest.fixture(autouse=True)
-    def reset(self):
-        ModeManager.reset_instance()
-        yield
-        ModeManager.reset_instance()
-
     def test_switch_success(self):
         mm = ModeManager(HybridConfig(mode_cooldown_hours=0))
         result = mm.request_switch(TradingMode.HOLD, "BULL detected")
@@ -195,12 +164,6 @@ class TestRequestSwitch:
 
 
 class TestCooldown:
-    @pytest.fixture(autouse=True)
-    def reset(self):
-        ModeManager.reset_instance()
-        yield
-        ModeManager.reset_instance()
-
     def test_cooldown_blocks_switch(self):
         mm = ModeManager(HybridConfig(mode_cooldown_hours=24))
         # First switch succeeds
@@ -241,12 +204,6 @@ class TestCooldown:
 
 
 class TestSafetyLock:
-    @pytest.fixture(autouse=True)
-    def reset(self):
-        ModeManager.reset_instance()
-        yield
-        ModeManager.reset_instance()
-
     def test_too_many_transitions_locks_to_grid(self):
         mm = ModeManager(HybridConfig(mode_cooldown_hours=0))
 
@@ -273,37 +230,33 @@ class TestSafetyLock:
 
 
 class TestConstraintsForMode:
-    @pytest.fixture(autouse=True)
-    def reset(self):
-        ModeManager.reset_instance()
-        yield
-        ModeManager.reset_instance()
-
     def test_small_portfolio_preset(self):
         mm = ModeManager(HybridConfig(portfolio_constraints_preset="small"))
         constraints = mm.get_constraints_for_mode()
         assert constraints is SMALL_PORTFOLIO_CONSTRAINTS
 
-    def test_non_small_uses_mode_mapping(self):
+    def test_preset_takes_priority_over_mode(self):
         mm = ModeManager(HybridConfig(portfolio_constraints_preset="balanced"))
-        assert mm.get_constraints_for_mode(TradingMode.HOLD) is AGGRESSIVE_CONSTRAINTS
+        # Preset always takes priority over mode-based mapping
+        assert mm.get_constraints_for_mode(TradingMode.HOLD) is BALANCED_CONSTRAINTS
         assert mm.get_constraints_for_mode(TradingMode.GRID) is BALANCED_CONSTRAINTS
-        assert mm.get_constraints_for_mode(TradingMode.CASH) is CONSERVATIVE_CONSTRAINTS
+        assert mm.get_constraints_for_mode(TradingMode.CASH) is BALANCED_CONSTRAINTS
 
-    def test_default_uses_current_mode(self):
-        mm = ModeManager(HybridConfig(portfolio_constraints_preset="balanced"))
-        # Default mode is GRID
-        constraints = mm.get_constraints_for_mode()
-        assert constraints is BALANCED_CONSTRAINTS
+    def test_all_presets_return_correct_constraints(self):
+        mm_c = ModeManager(HybridConfig(portfolio_constraints_preset="conservative"))
+        assert mm_c.get_constraints_for_mode() is CONSERVATIVE_CONSTRAINTS
+
+        mm_a = ModeManager(HybridConfig(portfolio_constraints_preset="aggressive"))
+        assert mm_a.get_constraints_for_mode() is AGGRESSIVE_CONSTRAINTS
+
+    def test_unknown_preset_falls_back_to_mode_mapping(self):
+        mm = ModeManager(HybridConfig(portfolio_constraints_preset="unknown"))
+        # Unknown preset -> falls through to mode-based mapping (GRID -> BALANCED)
+        assert mm.get_constraints_for_mode() is BALANCED_CONSTRAINTS
+        assert mm.get_constraints_for_mode(TradingMode.HOLD) is AGGRESSIVE_CONSTRAINTS
 
 
 class TestUpdateRegimeInfo:
-    @pytest.fixture(autouse=True)
-    def reset(self):
-        ModeManager.reset_instance()
-        yield
-        ModeManager.reset_instance()
-
     def test_update_regime_info(self):
         mm = ModeManager()
         mm.update_regime_info("BULL", 0.82)
@@ -315,26 +268,20 @@ class TestUpdateRegimeInfo:
 class TestModeManagerIntegration:
     """Full workflow tests."""
 
-    @pytest.fixture(autouse=True)
-    def reset(self):
-        ModeManager.reset_instance()
-        yield
-        ModeManager.reset_instance()
-
     def test_full_lifecycle_grid_to_hold_to_cash(self):
-        """GRID → HOLD → CASH lifecycle."""
+        """GRID -> HOLD -> CASH lifecycle."""
         mm = ModeManager(HybridConfig(mode_cooldown_hours=0))
 
         # Start in GRID
         assert mm.get_current_mode().current_mode is TradingMode.GRID
 
-        # BULL detected → HOLD
+        # BULL detected -> HOLD
         mode, reason = mm.evaluate_mode("BULL", 0.85, 3)
         assert mode is TradingMode.HOLD
         mm.request_switch(mode, reason)
         assert mm.get_current_mode().current_mode is TradingMode.HOLD
 
-        # BEAR detected → CASH (emergency)
+        # BEAR detected -> CASH (emergency)
         mode, reason = mm.evaluate_mode("BEAR", 0.90, 0)
         assert mode is TradingMode.CASH
         assert "Emergency" in reason

@@ -32,6 +32,8 @@ services:
       # Trading Config
       - TRADING_PAIR=${TRADING_PAIR:-BTCUSDT}
       - INVESTMENT_AMOUNT=${INVESTMENT_AMOUNT:-10}
+      # Notifications
+      - LEARNING_MODE=${LEARNING_MODE:-false}
     volumes:
       - bot_logs:/app/logs
       - bot_data:/app/data
@@ -82,12 +84,14 @@ services:
       - HYBRID_INITIAL_MODE=${HYBRID_INITIAL_MODE:-GRID}
       - HYBRID_ENABLE_MODE_SWITCHING=${HYBRID_ENABLE_MODE_SWITCHING:-false}
       - HYBRID_TOTAL_INVESTMENT=${HYBRID_TOTAL_INVESTMENT:-400}
-      - HYBRID_MAX_SYMBOLS=${HYBRID_MAX_SYMBOLS:-8}
+      - HYBRID_MAX_SYMBOLS=${HYBRID_MAX_SYMBOLS:-4}
       - HYBRID_MIN_POSITION_USD=${HYBRID_MIN_POSITION_USD:-10}
       - HYBRID_CONSTRAINTS_PRESET=${HYBRID_CONSTRAINTS_PRESET:-small}
       # Grid passthrough
       - GRID_RANGE_PERCENT=${GRID_RANGE_PERCENT:-5}
       - NUM_GRIDS=${NUM_GRIDS:-3}
+      # Notifications
+      - LEARNING_MODE=${LEARNING_MODE:-false}
     volumes:
       - bot_logs:/app/logs
       - bot_data:/app/data

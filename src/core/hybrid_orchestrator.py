@@ -87,11 +87,15 @@ class HybridOrchestrator:
         self,
         config: HybridConfig,
         client: BinanceClient | None = None,
+        cohort_id: str | None = None,
+        cohort_name: str | None = None,
     ):
         self.config = config
         self.client = client or BinanceClient(testnet=True)
-        self.mode_manager = ModeManager.get_instance(config)
+        self.mode_manager = ModeManager(config)
         self.telegram = TelegramNotifier()
+        self.cohort_id = cohort_id
+        self.cohort_name = cohort_name
 
         # Init StopLossManager with DB persistence if available
         db_manager = None
@@ -114,7 +118,8 @@ class HybridOrchestrator:
         # State persistence
         config_dir = Path("config")
         config_dir.mkdir(exist_ok=True)
-        self.state_file = config_dir / "hybrid_state.json"
+        state_name = f"hybrid_state_{cohort_name}.json" if cohort_name else "hybrid_state.json"
+        self.state_file = config_dir / state_name
 
     # ------------------------------------------------------------------
     # Public API
@@ -453,13 +458,17 @@ class HybridOrchestrator:
 
     def _create_grid_bot(self, state: SymbolState) -> GridBot | None:
         """Create and initialize a GridBot for a symbol."""
+        if self.cohort_name:
+            state_file = f"grid_state_{state.symbol}_{self.cohort_name}.json"
+        else:
+            state_file = f"grid_state_{state.symbol}.json"
         bot_config = {
             "symbol": state.symbol,
             "investment": state.allocation_usd,
             "num_grids": self.config.num_grids,
             "grid_range_percent": self.config.grid_range_percent,
             "testnet": self.client.testnet,
-            "state_file": f"grid_state_{state.symbol}.json",
+            "state_file": state_file,
         }
         try:
             bot = GridBot(bot_config, client=self.client)
@@ -706,6 +715,7 @@ class HybridOrchestrator:
                 opportunities=opportunities,
                 available_capital=self.config.total_investment,
                 current_portfolio=current_portfolio,
+                cohort_id=self.cohort_id,
                 regime=regime,
             )
 

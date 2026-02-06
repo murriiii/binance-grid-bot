@@ -6,7 +6,7 @@ Ein regime-adaptiver Krypto-Trading-Bot mit Hybrid-System (HOLD/GRID/CASH), Mult
 [![Version: 1.8.2](https://img.shields.io/badge/version-1.8.2-green.svg)](https://github.com/murriiii/binance-grid-bot/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
-[![Tests: 888 passed](https://img.shields.io/badge/tests-888%20passed-brightgreen.svg)]()
+[![Tests: 895 passed](https://img.shields.io/badge/tests-895%20passed-brightgreen.svg)]()
 [![Coverage: 60%](https://img.shields.io/badge/coverage-60%25-yellowgreen.svg)]()
 
 ## Features
@@ -22,7 +22,7 @@ Ein regime-adaptiver Krypto-Trading-Bot mit Hybrid-System (HOLD/GRID/CASH), Mult
 - **Grid Trading Strategy** - Automatisches Kaufen/Verkaufen in definierten Preisbändern
 - **Decimal Precision** - Alle Preis-/Mengenberechnungen nutzen `Decimal` statt `float` (keine Binance-Rejections durch Rundungsfehler)
 - **Fee-Aware Trading** - Binance Taker-Fees (0.1%) werden bei Sell-Quantities automatisch abgezogen
-- **Multi-Coin Trading** - Handel ueber 5-8 Coins mit intelligenter Kapitalverteilung
+- **Multi-Coin Trading** - Handel ueber 2-8 Coins pro Cohort mit intelligenter Kapitalverteilung
 - **Dynamic Grid Strategy** - ATR-basierte Grid-Abstände, asymmetrische Grids basierend auf Trend
 - **AI-Enhanced Decisions** - DeepSeek-Integration für intelligentere Entscheidungen
 - **Trading Playbook** - Selbstlernendes "Erfahrungsgedächtnis" das aus Trades lernt
@@ -35,7 +35,7 @@ Ein regime-adaptiver Krypto-Trading-Bot mit Hybrid-System (HOLD/GRID/CASH), Mult
 - **Per-Coin Learning** - Optimale Settings pro Coin automatisch erlernen
 
 ### Learning & Optimization
-- **Cohort System** - Parallele Strategie-Varianten (Konservativ, Balanced, Aggressiv, Baseline)
+- **Cohort System** - 4 parallele HybridOrchestrator-Instanzen (Konservativ, Balanced, Aggressiv, Baseline) mit je $100 eigenem Kapital
 - **Cycle Management** - Wöchentliche Trading-Zyklen mit vollständiger Performance-Analyse
 - **Bayesian Weight Learning** - Adaptive Signal-Gewichtung via Dirichlet-Distribution
 - **A/B Testing Framework** - Statistische Signifikanz-Tests (Welch t-Test, Mann-Whitney U)
@@ -81,7 +81,7 @@ Ein regime-adaptiver Krypto-Trading-Bot mit Hybrid-System (HOLD/GRID/CASH), Mult
 - **Comprehensive Logging** - JSON-strukturierte Logs fuer langfristige Analyse
 - **Weekly Analysis Export** - Automatische Reports fuer Claude Code Optimierung
 - **Telegram Notifications** - Echtzeit-Alerts und taegliche Reports (TelegramNotifier delegiert an TelegramService Singleton)
-- **SingletonMixin Pattern** - Alle Services (DatabaseManager, HTTPClient, WatchlistManager, CoinScanner, TelegramService, MarketDataProvider, ModeManager etc.) nutzen `SingletonMixin` mit automatischem `close()` Lifecycle und `reset_instance()`
+- **SingletonMixin Pattern** - Alle Services (DatabaseManager, HTTPClient, WatchlistManager, CoinScanner, TelegramService, MarketDataProvider etc.) nutzen `SingletonMixin` mit automatischem `close()` Lifecycle und `reset_instance()`. ModeManager ist kein Singleton (jeder Cohort-Orchestrator hat eine eigene Instanz).
 - **Atomic State Writes** - Temp-File + Rename Pattern fuer korruptionsfreie State-Persistenz (DecimalEncoder, Temp-File Cleanup bei Fehlern)
 
 ## Architektur
@@ -92,18 +92,24 @@ Ein regime-adaptiver Krypto-Trading-Bot mit Hybrid-System (HOLD/GRID/CASH), Mult
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                              │
 │  ┌──────────────┐    ┌──────────────────┐    ┌──────────────┐               │
-│  │   Telegram   │◄───│   Hybrid         │───►│   Binance    │               │
+│  │   Telegram   │◄───│    Cohort        │───►│   Binance    │               │
 │  │   Service    │    │   Orchestrator   │    │   Client     │               │
-│  └──────────────┘    └────────┬─────────┘    └──────────────┘               │
-│                               │                                              │
-│                    ┌──────────┼──────────┐                                   │
-│                    │          │          │                                   │
-│                    ▼          ▼          ▼                                   │
-│              ┌──────────┐ ┌──────┐ ┌──────────┐                             │
-│              │   HOLD   │ │ GRID │ │   CASH   │                             │
-│              │   Mode   │ │ Mode │ │   Mode   │                             │
-│              │ (BULL)   │ │(SIDE)│ │  (BEAR)  │                             │
-│              └──────────┘ └──┬───┘ └──────────┘                             │
+│  └──────────────┘    └────────┬─────────┘    │  (shared)    │               │
+│                               │               └──────────────┘               │
+│              ┌────────────────┼────────────────┐                             │
+│              │                │                │                             │
+│              ▼                ▼                ▼                             │
+│      ┌──────────────┐ ┌──────────────┐ ┌──────────────┐  ...               │
+│      │ Hybrid Orch. │ │ Hybrid Orch. │ │ Hybrid Orch. │                    │
+│      │ conservative │ │   balanced   │ │  aggressive  │                    │
+│      │   ($100)     │ │   ($100)     │ │   ($100)     │                    │
+│      └──────┬───────┘ └──────┬───────┘ └──────┬───────┘                    │
+│             │                │                │                             │
+│             ▼                ▼                ▼                             │
+│       ┌──────────┐    ┌──────────┐    ┌──────────┐                         │
+│       │ HOLD/GRID│    │ HOLD/GRID│    │ HOLD/GRID│                         │
+│       │ /CASH    │    │ /CASH    │    │ /CASH    │                         │
+│       └──────────┘    └──────────┘    └──────────┘                         │
 │                              │                                               │
 │                    ┌─────────┴─────────┐                                    │
 │                    │                   │                                    │
@@ -111,7 +117,7 @@ Ein regime-adaptiver Krypto-Trading-Bot mit Hybrid-System (HOLD/GRID/CASH), Mult
 │              ┌──────────┐       ┌──────────────┐                            │
 │              │   Mode   │       │   GridBot    │                            │
 │              │  Manager │       │   (tick)     │                            │
-│              │(Hysteres)│       └──────────────┘                            │
+│              │(per orch)│       └──────────────┘                            │
 │              └──────────┘                                                    │
 │                    │                                                         │
 │      ┌─────────────┼─────────────┐                                          │
@@ -161,39 +167,50 @@ Ein regime-adaptiver Krypto-Trading-Bot mit Hybrid-System (HOLD/GRID/CASH), Mult
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-## Cohort System - Paralleles Lernen
+## Cohort System - 4 Parallele Bots
 
-Das **Cohort System** ermöglicht paralleles Testen verschiedener Strategien:
+Das **Cohort System** betreibt 4 unabhaengige `HybridOrchestrator`-Instanzen parallel, jede mit eigener Strategie und eigenem Kapital. Alle teilen sich ein Binance-Testnet-Konto; das Kapital-Tracking ist virtuell pro Cohort.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    PARALLEL COHORTS                              │
+│                    CohortOrchestrator                            │
+│              (verwaltet 4 HybridOrchestrator)                   │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                  │
-│  Cohort A: KONSERVATIV        Cohort B: BALANCED                │
-│  ├─ $1000 Kapital             ├─ $1000 Kapital                  │
-│  ├─ Enge Grids (2%)           ├─ Standard Grids (5%)            │
-│  ├─ Hohe Confidence (>0.7)    ├─ Medium Confidence (>0.5)       │
-│  └─ Nur bei F&G < 40          └─ Playbook-gesteuert             │
+│  Conservative                  Balanced                         │
+│  ├─ $100 Kapital               ├─ $100 Kapital                  │
+│  ├─ Enge Grids (2%)            ├─ Standard Grids (5%)           │
+│  ├─ Hohe Confidence (>0.7)     ├─ Medium Confidence (>0.5)      │
+│  ├─ Risk: low                  ├─ Risk: medium                  │
+│  └─ Max 2 Coins                └─ Max 2 Coins                   │
 │                                                                  │
-│  Cohort C: AGGRESSIV          Cohort D: BASELINE                │
-│  ├─ $1000 Kapital             ├─ $1000 Kapital                  │
-│  ├─ Weite Grids (8%)          ├─ Keine Änderungen               │
-│  ├─ Niedrige Confidence ok    ├─ Woche 1 Strategie              │
-│  └─ Auch bei F&G > 60         └─ Kontrolle zum Vergleich        │
+│  Aggressive                    Baseline                         │
+│  ├─ $100 Kapital               ├─ $100 Kapital                  │
+│  ├─ Weite Grids (8%)           ├─ Standard Grids (5%)           │
+│  ├─ Niedrige Confidence (>0.3) ├─ Frozen (keine Anpassungen)    │
+│  ├─ Risk: high                 ├─ Risk: medium                  │
+│  └─ Max 2 Coins                └─ Kontrollgruppe                │
 │                                                                  │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
+### Architektur
+
+- **`CohortOrchestrator`** (`src/core/cohort_orchestrator.py`) laedt Cohorts aus DB via `CohortManager`, erstellt pro Cohort eine `HybridConfig.from_cohort()` und einen eigenen `HybridOrchestrator`
+- **Isolierte State-Files**: `hybrid_state_{cohort}.json` + `grid_state_{symbol}_{cohort}.json`
+- **Shared BinanceClient**: Alle Cohorts nutzen denselben Testnet-Client
+- **ModeManager**: Kein Singleton — jeder Orchestrator hat eigene Instanz
+- **SMALL_PORTFOLIO_CONSTRAINTS**: Alle $100-Cohorts nutzen das "small" Preset (tier_limits 40/30/20%, max 40% pro Coin), da andere Presets bei $100 zu kleine Positionen erzeugen
+
 ### Vorteile
 - 4x mehr Daten pro Woche
 - Direkter A/B/C/D Vergleich
-- Baseline zeigt ob Änderungen wirklich helfen
+- Baseline zeigt ob Aenderungen wirklich helfen
 - Schnellere statistische Signifikanz
 
 ### Cycle Management
 
-Jede Cohort durchläuft wöchentliche Zyklen:
+Jede Cohort durchlaeuft woechentliche Zyklen:
 - **Sonntag 00:00**: Neuer Zyklus startet mit frischem Kapital
 - **Samstag 23:59**: Zyklus endet, Metriken werden berechnet
 - **Automatisch**: Sharpe, Sortino, Kelly, VaR, CVaR pro Zyklus
@@ -262,8 +279,8 @@ cd docker && docker compose up -d
 # Hybrid-System
 HYBRID_INITIAL_MODE=GRID
 HYBRID_ENABLE_MODE_SWITCHING=false     # Erstmal nur Multi-Coin GRID testen
-HYBRID_TOTAL_INVESTMENT=400
-HYBRID_MAX_SYMBOLS=8
+HYBRID_TOTAL_INVESTMENT=400         # Wird von Cohort-System ueberschrieben ($100/Cohort)
+HYBRID_MAX_SYMBOLS=8                # Wird von from_cohort() auf 2 pro Cohort gesetzt
 HYBRID_MIN_POSITION_USD=10
 HYBRID_HOLD_TRAILING_STOP_PCT=7.0
 HYBRID_MODE_COOLDOWN_HOURS=24
@@ -433,11 +450,12 @@ binance-grid-bot/
 │   │   ├── risk_guard.py       # RiskGuardMixin (Risk-Validierung)
 │   │   ├── config.py           # Zentrale Konfiguration mit Validierung
 │   │   ├── hybrid_orchestrator.py # Hybrid-System Orchestrator
-│   │   ├── hybrid_config.py    # Hybrid-System Konfiguration
-│   │   ├── mode_manager.py     # Mode-Management mit Hysteresis
+│   │   ├── hybrid_config.py    # Hybrid-System Konfiguration (from_cohort())
+│   │   ├── mode_manager.py     # Mode-Management mit Hysteresis (kein Singleton)
 │   │   ├── trading_mode.py     # TradingMode Enum, ModeState
 │   │   ├── logging_system.py   # Strukturiertes Logging
-│   │   ├── cohort_manager.py   # Parallele Strategie-Varianten
+│   │   ├── cohort_manager.py   # Cohort-Definitionen & DB-Zugriff
+│   │   ├── cohort_orchestrator.py # Top-Level: 4 HybridOrchestrator parallel
 │   │   └── cycle_manager.py    # Woechentliche Zyklen
 │   ├── api/
 │   │   ├── binance_client.py   # Binance API Wrapper
@@ -510,7 +528,9 @@ binance-grid-bot/
 │   ├── telegram_bot_handler.py # Telegram Command Handler
 │   └── init.sql                # Database Schema (erweitert)
 ├── config/
-│   ├── bot_state.json          # Persistenter Bot-State
+│   ├── bot_state.json          # Persistenter Bot-State (Single-Coin)
+│   ├── hybrid_state_{cohort}.json  # Per-Cohort Orchestrator State
+│   ├── grid_state_{sym}_{cohort}.json # Per-Cohort Grid Bot State
 │   ├── TRADING_PLAYBOOK.md     # Aktuelles Playbook
 │   └── playbook_history/       # Playbook-Versionen
 ├── logs/                       # Strukturierte Logs (gitignored)
@@ -840,7 +860,7 @@ mypy src/
 ### Tests
 
 ```bash
-# Alle Tests ausfuehren (888 Tests)
+# Alle Tests ausfuehren (895 Tests)
 pytest tests/ -v
 
 # Mit Coverage (Minimum: 60%)
@@ -862,7 +882,7 @@ pytest tests/test_grid_strategy.py -v
 | Risk | 49-94% | CVaR, Stop-Loss, Risk Guard |
 | API | 20-76% | Binance Client, HTTP Client |
 | Scanner/Portfolio | 43-97% | CoinScanner, Allocator |
-| **Gesamt** | **60%** | **888 Tests** |
+| **Gesamt** | **60%** | **895 Tests** |
 
 ### Pre-commit Hooks
 
@@ -881,7 +901,7 @@ Die GitHub Actions Pipeline:
 
 1. **Lint & Format**: Ruff checks (0 errors)
 2. **Type Check**: MyPy strict mode (0 errors)
-3. **Tests**: 888 Tests mit Coverage >= 60%
+3. **Tests**: 895 Tests mit Coverage >= 60%
 4. **Auto-Release**: Bei Version-Bump in pyproject.toml wird automatisch ein GitHub Release erstellt
 
 ## Conventional Commits

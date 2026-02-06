@@ -101,13 +101,17 @@ class PortfolioAllocator(SingletonMixin):
             return False
 
         try:
-            self.conn = psycopg2.connect(
-                host=os.getenv("POSTGRES_HOST", "localhost"),
-                port=os.getenv("POSTGRES_PORT", 5432),
-                database=os.getenv("POSTGRES_DB", "trading_bot"),
-                user=os.getenv("POSTGRES_USER", "trading"),
-                password=os.getenv("POSTGRES_PASSWORD", ""),
-            )
+            database_url = os.getenv("DATABASE_URL")
+            if database_url:
+                self.conn = psycopg2.connect(database_url)
+            else:
+                self.conn = psycopg2.connect(
+                    host=os.getenv("POSTGRES_HOST", "localhost"),
+                    port=os.getenv("POSTGRES_PORT", 5432),
+                    database=os.getenv("POSTGRES_DB", "trading_bot"),
+                    user=os.getenv("POSTGRES_USER", "trading"),
+                    password=os.getenv("POSTGRES_PASSWORD", ""),
+                )
             logger.info("PortfolioAllocator: PostgreSQL verbunden")
             return True
         except Exception as e:
@@ -178,12 +182,13 @@ class PortfolioAllocator(SingletonMixin):
             return result
 
         # Filtere bereits gehaltene Positionen und Low-Score Opportunities
+        # Thresholds match CoinScanner minimum (total_score > 0.3)
         filtered_opps = [
             o
             for o in opportunities
             if o.symbol not in self._current_portfolio
-            and o.total_score >= 0.4
-            and o.confidence >= 0.3
+            and o.total_score >= 0.3
+            and o.confidence >= 0.2
         ]
 
         if not filtered_opps:

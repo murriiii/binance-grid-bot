@@ -30,7 +30,7 @@ def task_mode_evaluation():
         from src.core.mode_manager import ModeManager
 
         hybrid_config = HybridConfig.from_env()
-        manager = ModeManager.get_instance(hybrid_config)
+        manager = ModeManager(hybrid_config)
 
         manager.update_regime_info(
             regime_state.current_regime.value, regime_state.regime_probability
@@ -128,7 +128,7 @@ Reason: {reason}
 
 @task_locked
 def task_hybrid_rebalance():
-    """Checks portfolio allocation drift for the hybrid system. Runs every 6 hours."""
+    """Checks portfolio allocation drift for all cohorts. Runs every 6 hours."""
     from src.core.logging_system import get_logger
     from src.data.market_data import get_market_data
     from src.notifications.telegram_service import get_telegram
@@ -139,62 +139,72 @@ def task_hybrid_rebalance():
         import json
         from pathlib import Path
 
-        state_file = Path("/app/config/hybrid_state.json")
-        if not state_file.exists():
-            logger.info("Hybrid rebalance: no state file, orchestrator not active")
-            return
-
-        with open(state_file) as f:
-            state = json.load(f)
-
-        symbols = state.get("symbols", {})
-        if not symbols:
-            logger.info("Hybrid rebalance: no active symbols")
-            return
+        config_dir = Path("/app/config")
+        state_files = sorted(config_dir.glob("hybrid_state_*.json"))
+        if not state_files:
+            # Fallback to single state file
+            single = config_dir / "hybrid_state.json"
+            if single.exists():
+                state_files = [single]
+            else:
+                logger.info("Hybrid rebalance: no state files, orchestrator not active")
+                return
 
         market_data = get_market_data()
+        all_drift = []
 
-        drift_report = []
-        for symbol, sdata in symbols.items():
-            allocation = sdata.get("allocation_usd", 0)
-            if allocation <= 0:
-                continue
-
+        for sf in state_files:
             try:
-                price = market_data.get_price(symbol)
-                if not price or price <= 0:
-                    continue
+                with open(sf) as f:
+                    state = json.load(f)
 
-                hold_qty = sdata.get("hold_quantity", 0)
-                current_value = hold_qty * price if hold_qty > 0 else allocation
+                cohort_name = sf.stem.replace("hybrid_state_", "")
+                symbols = state.get("symbols", {})
 
-                drift_pct = abs(current_value - allocation) / allocation * 100
-                if drift_pct > 5.0:
-                    drift_report.append(
-                        {
-                            "symbol": symbol,
-                            "target": allocation,
-                            "current": current_value,
-                            "drift_pct": drift_pct,
-                        }
-                    )
-            except Exception:
-                continue
+                for symbol, sdata in symbols.items():
+                    allocation = sdata.get("allocation_usd", 0)
+                    if allocation <= 0:
+                        continue
 
-        if drift_report:
+                    try:
+                        price = market_data.get_price(symbol)
+                        if not price or price <= 0:
+                            continue
+
+                        hold_qty = sdata.get("hold_quantity", 0)
+                        current_value = hold_qty * price if hold_qty > 0 else allocation
+
+                        drift_pct = abs(current_value - allocation) / allocation * 100
+                        if drift_pct > 5.0:
+                            all_drift.append(
+                                {
+                                    "cohort": cohort_name,
+                                    "symbol": symbol,
+                                    "target": allocation,
+                                    "current": current_value,
+                                    "drift_pct": drift_pct,
+                                }
+                            )
+                    except Exception:
+                        continue
+            except Exception as e:
+                logger.debug(f"Rebalance: failed to read {sf}: {e}")
+
+        if all_drift:
             report_lines = []
-            for d in drift_report[:5]:
+            for d in all_drift[:10]:
                 direction = "over" if d["current"] > d["target"] else "under"
                 report_lines.append(
-                    f"  {d['symbol']}: ${d['current']:.2f} vs ${d['target']:.2f} "
+                    f"  [{d['cohort']}] {d['symbol']}: "
+                    f"${d['current']:.2f} vs ${d['target']:.2f} "
                     f"({direction}, {d['drift_pct']:.1f}% drift)"
                 )
 
-            logger.info(f"Hybrid rebalance: {len(drift_report)} symbols drifted")
+            logger.info(f"Hybrid rebalance: {len(all_drift)} symbols drifted")
             telegram = get_telegram()
             telegram.send(
                 f"<b>REBALANCE CHECK</b>\n\n"
-                f"{len(drift_report)} Symbols mit >5% Drift:\n\n"
+                f"{len(all_drift)} Symbols mit >5% Drift:\n\n"
                 + "\n".join(report_lines)
                 + "\n\n<i>Orchestrator rebalanciert automatisch.</i>"
             )

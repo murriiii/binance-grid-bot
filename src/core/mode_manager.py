@@ -23,7 +23,6 @@ from src.portfolio.constraints import (
     SMALL_PORTFOLIO_CONSTRAINTS,
     AllocationConstraints,
 )
-from src.utils.singleton import SingletonMixin
 
 logger = logging.getLogger("trading_bot")
 
@@ -48,8 +47,12 @@ EMERGENCY_BEAR_PROBABILITY = 0.85
 MAX_TRANSITIONS_48H = 2
 
 
-class ModeManager(SingletonMixin):
-    """Manages trading mode with hysteresis-based transitions."""
+class ModeManager:
+    """Manages trading mode with hysteresis-based transitions.
+
+    Not a singleton — each HybridOrchestrator (one per cohort) owns
+    its own ModeManager instance.
+    """
 
     def __init__(self, config: HybridConfig | None = None):
         self.config = config or HybridConfig()
@@ -66,10 +69,18 @@ class ModeManager(SingletonMixin):
     def get_constraints_for_mode(self, mode: TradingMode | None = None) -> AllocationConstraints:
         """Return constraints appropriate for the given mode.
 
-        Uses SMALL_PORTFOLIO_CONSTRAINTS when configured, otherwise mode-based.
+        Checks portfolio_constraints_preset first (explicit preset takes
+        priority), then falls back to mode-based mapping.
         """
-        if self.config.portfolio_constraints_preset == "small":
-            return SMALL_PORTFOLIO_CONSTRAINTS
+        preset_map = {
+            "small": SMALL_PORTFOLIO_CONSTRAINTS,
+            "conservative": CONSERVATIVE_CONSTRAINTS,
+            "balanced": BALANCED_CONSTRAINTS,
+            "aggressive": AGGRESSIVE_CONSTRAINTS,
+        }
+        preset = preset_map.get(self.config.portfolio_constraints_preset)
+        if preset:
+            return preset
 
         target = mode or self._state.current_mode
         return MODE_CONSTRAINTS_MAP.get(target, BALANCED_CONSTRAINTS)
