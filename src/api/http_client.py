@@ -315,6 +315,11 @@ class HTTPClient:
             "success_rate": (self.stats["successes"] / max(self.stats["requests"], 1)) * 100,
         }
 
+    def close(self):
+        """Close the underlying HTTP session."""
+        if self.session:
+            self.session.close()
+
 
 # Singleton-Instanz für globale Nutzung
 _client_instance: HTTPClient | None = None
@@ -326,3 +331,11 @@ def get_http_client() -> HTTPClient:
     if _client_instance is None:
         _client_instance = HTTPClient()
     return _client_instance
+
+
+def reset_http_client():
+    """Reset the global HTTPClient instance, closing its session."""
+    global _client_instance
+    if _client_instance is not None:
+        _client_instance.close()
+        _client_instance = None

@@ -199,7 +199,7 @@ All stop-loss market sells go through `execute_stop_loss_sell()` in `src/risk/st
 
 **Two-phase stop-loss lifecycle** in `src/risk/stop_loss.py`:
 - `StopLossOrder.update(price)` → detects trigger condition, returns `True` but keeps stop active
-- `StopLossOrder.confirm_trigger(price)` → deactivates after successful sell
+- `StopLossOrder.confirm_trigger()` → deactivates after successful sell
 - `StopLossOrder.reactivate()` → re-enables if sell failed
 
 Callers (`RiskGuardMixin._check_stop_losses()`, `HybridOrchestrator._update_stop_losses()`, `task_check_stops()`) follow this pattern:
@@ -207,7 +207,7 @@ Callers (`RiskGuardMixin._check_stop_losses()`, `HybridOrchestrator._update_stop
 if stop.update(current_price):
     result = execute_stop_loss_sell(client, symbol, stop.quantity, telegram)
     if result["success"]:
-        stop.confirm_trigger(current_price)
+        stop.confirm_trigger()
     else:
         stop.reactivate()
 ```

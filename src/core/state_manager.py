@@ -3,10 +3,20 @@
 import json
 import logging
 from datetime import datetime
+from decimal import Decimal
 
 from src.strategies.grid_strategy import TAKER_FEE_RATE
 
 logger = logging.getLogger("trading_bot")
+
+
+class _DecimalEncoder(json.JSONEncoder):
+    """JSON encoder that converts Decimal objects to float at serialization boundary."""
+
+    def default(self, obj):
+        if isinstance(obj, Decimal):
+            return float(obj)
+        return super().default(obj)
 
 
 class StateManagerMixin:
@@ -37,11 +47,17 @@ class StateManagerMixin:
 
             temp_file = self.state_file.with_suffix(".tmp")
             with open(temp_file, "w") as f:
-                json.dump(state, f, indent=2)
+                json.dump(state, f, indent=2, cls=_DecimalEncoder)
             temp_file.replace(self.state_file)
 
         except Exception as e:
             logger.exception(f"Fehler beim Speichern des States: {e}")
+            temp_file = self.state_file.with_suffix(".tmp")
+            if temp_file.exists():
+                try:
+                    temp_file.unlink()
+                except OSError:
+                    pass
 
     def load_state(self) -> bool:
         """Lädt und validiert vorherigen State - mit Binance-Verifizierung"""

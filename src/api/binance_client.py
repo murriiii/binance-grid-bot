@@ -39,6 +39,7 @@ class RateLimiter:
 
     def acquire(self):
         """Wartet wenn nötig, um Rate Limit einzuhalten"""
+        sleep_time = 0
         with self.lock:
             now = time.time()
 
@@ -46,13 +47,16 @@ class RateLimiter:
             while self.requests and self.requests[0] < now - self.window:
                 self.requests.popleft()
 
-            # Wenn Limit erreicht, warte
+            # Wenn Limit erreicht, berechne Wartezeit
             if len(self.requests) >= self.max_requests:
                 sleep_time = self.requests[0] + self.window - now
-                if sleep_time > 0:
-                    logger.warning(f"Rate limit erreicht, warte {sleep_time:.1f}s")
-                    time.sleep(sleep_time)
 
+        # Sleep außerhalb des Locks, damit andere Threads nicht blockiert werden
+        if sleep_time > 0:
+            logger.warning(f"Rate limit erreicht, warte {sleep_time:.1f}s")
+            time.sleep(sleep_time)
+
+        with self.lock:
             self.requests.append(time.time())
 
     def get_usage(self) -> tuple:
@@ -77,12 +81,21 @@ class BinanceClient:
         if testnet:
             self.api_key = os.getenv("BINANCE_TESTNET_API_KEY")
             self.api_secret = os.getenv("BINANCE_TESTNET_API_SECRET")
-            self.client = Client(self.api_key, self.api_secret, testnet=True)
+            self.client = Client(
+                self.api_key,
+                self.api_secret,
+                testnet=True,
+                requests_params={"timeout": 10},
+            )
             logger.info("Binance Client initialisiert (TESTNET)")
         else:
             self.api_key = os.getenv("BINANCE_API_KEY")
             self.api_secret = os.getenv("BINANCE_API_SECRET")
-            self.client = Client(self.api_key, self.api_secret)
+            self.client = Client(
+                self.api_key,
+                self.api_secret,
+                requests_params={"timeout": 10},
+            )
             logger.info("Binance Client initialisiert (LIVE)")
 
     def _rate_limited_call(self, func, *args, **kwargs):
@@ -110,7 +123,7 @@ class BinanceClient:
                     )
                     time.sleep(wait_time)
                 # Server Fehler (5xx) - kurz warten und retry
-                elif str(e.code).startswith("5"):
+                elif e.status_code and 500 <= e.status_code < 600:
                     wait_time = 5 * (attempt + 1)
                     logger.warning(
                         f"Server error, warte {wait_time}s (Versuch {attempt + 1}/{retries})"

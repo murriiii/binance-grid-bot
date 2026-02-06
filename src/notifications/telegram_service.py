@@ -249,23 +249,21 @@ Fear & Greed Index: <code>{value}</code> ({classification})
             return False
 
         try:
-            import requests
-
-            files = {"photo": ("chart.png", io.BytesIO(photo_bytes), "image/png")}
             data = {"chat_id": self.chat_id}
             if caption:
                 data["caption"] = caption
                 data["parse_mode"] = "HTML"
 
-            response = requests.post(
+            files = {"photo": ("chart.png", io.BytesIO(photo_bytes), "image/png")}
+            self.http.post(
                 f"https://api.telegram.org/bot{self.token}/sendPhoto",
                 data=data,
                 files=files,
-                timeout=30,
+                api_type="telegram",
             )
-            return response.status_code == 200
+            return True
 
-        except Exception as e:
+        except HTTPClientError as e:
             logger.error(f"Telegram photo error: {e}")
             return False
 

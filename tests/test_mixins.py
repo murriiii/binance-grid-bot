@@ -1,6 +1,7 @@
 """Unit tests for GridBot mixins: RiskGuardMixin, OrderManagerMixin, StateManagerMixin."""
 
 import json
+from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -178,6 +179,15 @@ class TestOrderManagerMixin:
 
         assert len(bot.active_orders) > 0
         bot.client.place_limit_buy.assert_called()
+
+    def test_place_initial_orders_zero_price(self, bot_with_strategy):
+        """place_initial_orders() aborts when price is 0."""
+        bot = bot_with_strategy
+        bot.client.get_current_price.return_value = 0.0
+        bot.place_initial_orders()
+
+        assert len(bot.active_orders) == 0
+        bot.client.place_limit_buy.assert_not_called()
 
     def test_place_initial_orders_skips_small_notional(self, bot_with_strategy):
         bot = bot_with_strategy
@@ -408,3 +418,37 @@ class TestStateManagerMixin:
 
         result = bot.load_state()
         assert result is False
+
+    def test_save_state_with_decimal_prices(self, bot_with_strategy, tmp_path):
+        """save_state() handles Decimal objects from GridStrategy without crashing."""
+        bot = bot_with_strategy
+        bot.state_file = tmp_path / "test_state.json"
+
+        bot.active_orders = {
+            100: {
+                "type": "BUY",
+                "price": Decimal("48750.00000"),
+                "quantity": Decimal("0.00102"),
+                "created_at": "2024-01-01T00:00:00",
+            }
+        }
+
+        bot.save_state()
+
+        assert bot.state_file.exists()
+        with open(bot.state_file) as f:
+            state = json.load(f)
+        assert "100" in state["active_orders"]
+        assert isinstance(state["active_orders"]["100"]["price"], float)
+
+    def test_save_state_cleans_temp_on_error(self, bot_with_strategy, tmp_path):
+        """save_state() removes temp file if serialization fails."""
+        bot = bot_with_strategy
+        bot.state_file = tmp_path / "test_state.json"
+
+        # Use an object that is not JSON-serializable even with DecimalEncoder
+        bot.active_orders = {100: {"price": object()}}
+
+        bot.save_state()
+
+        assert not (tmp_path / "test_state.tmp").exists()

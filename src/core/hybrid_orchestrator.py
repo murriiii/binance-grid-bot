@@ -44,6 +44,7 @@ class SymbolState:
         self.hold_stop_id: str | None = None
         self.allocation_usd: float = 0.0
         self.cash_exit_started: datetime | None = None
+        self.grid_init_failures: int = 0
 
     def to_dict(self) -> dict:
         return {
@@ -89,7 +90,7 @@ class HybridOrchestrator:
     ):
         self.config = config
         self.client = client or BinanceClient(testnet=True)
-        self.mode_manager = ModeManager(config)
+        self.mode_manager = ModeManager.get_instance(config)
         self.telegram = TelegramNotifier()
 
         # Init StopLossManager with DB persistence if available
@@ -264,6 +265,15 @@ class HybridOrchestrator:
         if not price or price <= 0:
             return
 
+        # Check if sufficient USDT balance
+        usdt_balance = self.client.get_account_balance("USDT")
+        if usdt_balance < state.allocation_usd:
+            logger.debug(
+                f"HOLD: insufficient USDT for {state.symbol} "
+                f"(have ${usdt_balance:.2f}, need ${state.allocation_usd:.2f})"
+            )
+            return
+
         # Market buy with allocated capital
         result = self.client.place_market_buy(state.symbol, state.allocation_usd)
         if not result["success"]:
@@ -305,9 +315,16 @@ class HybridOrchestrator:
     def _execute_grid(self, state: SymbolState) -> None:
         """GRID mode: delegate to GridBot.tick()."""
         if state.grid_bot is None:
+            if state.grid_init_failures >= 3:
+                return  # Stop retrying after 3 failures
             state.grid_bot = self._create_grid_bot(state)
             if state.grid_bot is None:
+                state.grid_init_failures += 1
+                logger.warning(
+                    f"GRID: init failed for {state.symbol} ({state.grid_init_failures}/3)"
+                )
                 return
+            state.grid_init_failures = 0
 
         state.grid_bot.tick()
 
@@ -619,6 +636,14 @@ class HybridOrchestrator:
                     and state.hold_quantity > 0
                     and state.hold_entry_price > 0
                 ):
+                    # Check if a stop already exists for this symbol
+                    existing = any(
+                        s.symbol == symbol and s.is_active
+                        for s in self.stop_loss_manager.stops.values()
+                    )
+                    if existing:
+                        logger.info(f"Orchestrator: stop already exists for {symbol}, skipping")
+                        continue
                     trailing_pct = getattr(self.config, "hold_trailing_stop_pct", 7.0)
                     stop = self.stop_loss_manager.create_stop(
                         symbol=symbol,
@@ -687,6 +712,16 @@ class HybridOrchestrator:
             if not result.allocations:
                 logger.info("Orchestrator: allocator returned no allocations")
                 return result
+
+            # Validate allocation sum doesn't exceed total investment
+            total = sum(result.allocations.values())
+            if total > self.config.total_investment * 1.01:  # 1% tolerance
+                logger.warning(
+                    f"Orchestrator: allocations sum ${total:.2f} exceeds "
+                    f"total investment ${self.config.total_investment:.2f}, scaling down"
+                )
+                scale = self.config.total_investment / total
+                result.allocations = {s: a * scale for s, a in result.allocations.items()}
 
             # Apply allocations: add new symbols, update existing
             for symbol, amount in result.allocations.items():

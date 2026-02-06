@@ -113,6 +113,7 @@ class GridBot(RiskGuardMixin, OrderManagerMixin, StateManagerMixin):
 
         # Circuit breaker: track last known price
         self._last_known_price: float = 0.0
+        self._consecutive_price_failures: int = 0
 
         # Downtime-fill-recovery: queued follow-up actions from load_state()
         self._pending_followups: list[dict] = []
@@ -293,6 +294,8 @@ class GridBot(RiskGuardMixin, OrderManagerMixin, StateManagerMixin):
 
         current_price = self.client.get_current_price(self.symbol)
         if current_price:
+            self._consecutive_price_failures = 0
+
             if self._check_circuit_breaker(current_price):
                 return False
 
@@ -304,6 +307,12 @@ class GridBot(RiskGuardMixin, OrderManagerMixin, StateManagerMixin):
                 f"{self.symbol}: {current_price:.2f} | "
                 f"Orders: {len(self.active_orders)}"
             )
+        else:
+            self._consecutive_price_failures += 1
+            logger.warning(f"Price unavailable ({self._consecutive_price_failures} consecutive)")
+            if self._consecutive_price_failures >= 3:
+                self._emergency_stop("Price unavailable for 3 consecutive ticks")
+                return False
 
         if self.stop_loss_manager:
             portfolio_value = self.client.get_account_balance("USDT")
@@ -376,6 +385,7 @@ class GridBot(RiskGuardMixin, OrderManagerMixin, StateManagerMixin):
             self.save_state()
 
         self.running = False
+        self.save_state()
         self.telegram.send("🛑 Trading Bot gestoppt")
         logger.info("Bot gestoppt")
 

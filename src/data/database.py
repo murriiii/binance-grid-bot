@@ -130,19 +130,24 @@ class DatabaseManager:
         if not self._pool:
             return None
 
+        conn = None
         try:
             conn = self._pool.getconn()
             # Teste ob Connection noch gültig
-            conn.cursor().execute("SELECT 1")
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1")
             return conn
         except Exception as e:
             logger.warning(f"DatabaseManager: Connection ungültig, reconnecting: {e}")
-            # Versuche neu zu verbinden
+            if conn is not None:
+                try:
+                    self._pool.putconn(conn, close=True)
+                except Exception:
+                    pass
             try:
-                self._pool.putconn(conn, close=True)
+                return self._pool.getconn()
             except Exception:
-                pass
-            return self._pool.getconn()
+                return None
 
     def return_connection(self, conn: connection) -> None:
         """Gibt eine Connection zurück an den Pool."""

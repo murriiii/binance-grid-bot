@@ -25,6 +25,9 @@ class OrderManagerMixin:
         """Platziert die initialen Grid-Orders"""
         try:
             current_price = self.client.get_current_price(self.symbol)
+            if not current_price or current_price <= 0:
+                logger.error(f"Cannot place initial orders: invalid price ({current_price})")
+                return
             orders = self.strategy.get_initial_orders(current_price)
 
             placed_count = 0
@@ -177,6 +180,9 @@ class OrderManagerMixin:
                         )
                         if not allowed:
                             logger.warning(f"Follow-up SELL blocked by risk check: {reason}")
+                            self.telegram.send(
+                                f"Follow-up SELL blocked\nSymbol: {self.symbol}\nReason: {reason}"
+                            )
                         else:
                             result = self.client.place_limit_sell(
                                 self.symbol, action["quantity"], action["price"]
@@ -203,6 +209,9 @@ class OrderManagerMixin:
                         )
                         if not allowed:
                             logger.warning(f"Follow-up BUY blocked by risk check: {reason}")
+                            self.telegram.send(
+                                f"Follow-up BUY blocked\nSymbol: {self.symbol}\nReason: {reason}"
+                            )
                         else:
                             result = self.client.place_limit_buy(
                                 self.symbol, action["quantity"], action["price"]

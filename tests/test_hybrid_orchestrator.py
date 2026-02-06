@@ -7,6 +7,7 @@ import pytest
 
 from src.core.hybrid_config import HybridConfig
 from src.core.hybrid_orchestrator import HybridOrchestrator, SymbolState
+from src.core.mode_manager import ModeManager
 from src.core.trading_mode import TradingMode
 
 
@@ -59,6 +60,7 @@ def mock_client():
 
 @pytest.fixture
 def orchestrator(config, mock_client):
+    ModeManager.reset_instance()
     with (
         patch("src.core.hybrid_orchestrator.TelegramNotifier"),
         patch("src.core.hybrid_orchestrator.StopLossManager"),
@@ -66,7 +68,8 @@ def orchestrator(config, mock_client):
         orch = HybridOrchestrator(config, client=mock_client)
         orch.add_symbol("BTCUSDT", 50.0)
         orch.add_symbol("ETHUSDT", 50.0)
-        return orch
+        yield orch
+    ModeManager.reset_instance()
 
 
 # ------------------------------------------------------------------

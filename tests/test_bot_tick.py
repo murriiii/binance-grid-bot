@@ -71,6 +71,34 @@ class TestTick:
         bot.tick()
         bot._check_stop_losses.assert_not_called()
 
+    def test_tick_stops_after_consecutive_price_failures(self, bot):
+        """tick() triggers emergency stop after 3 consecutive price failures."""
+        bot.client.get_current_price.return_value = 0.0
+        bot.telegram = MagicMock()
+
+        # First two failures: continues
+        assert bot.tick() is True
+        assert bot.tick() is True
+        # Third failure: emergency stop
+        assert bot.tick() is False
+
+    def test_tick_resets_price_failure_counter_on_success(self, bot):
+        """tick() resets consecutive price failure counter when price returns."""
+        bot.client.get_current_price.return_value = 0.0
+        bot.telegram = MagicMock()
+
+        bot.tick()  # failure 1
+        bot.tick()  # failure 2
+
+        # Price returns
+        bot.client.get_current_price.return_value = 50000.0
+        bot.tick()
+        assert bot._consecutive_price_failures == 0
+
+        # Failures start counting from 0 again
+        bot.client.get_current_price.return_value = 0.0
+        assert bot.tick() is True  # failure 1 again, not 3
+
 
 class TestExternalClient:
     def test_external_client_used_when_provided(self, bot_config):

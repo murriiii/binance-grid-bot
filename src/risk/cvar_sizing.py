@@ -248,7 +248,8 @@ class CVaRPositionSizer(SingletonMixin):
         # 7. Kombiniere mit Kelly (wenn aktiviert)
         if use_kelly and kelly_size > 0:
             # Nehme das Minimum von CVaR und Kelly (konservativ)
-            recommended = min(confidence_adjusted, kelly_size)
+            adjusted_kelly = kelly_size * confidence_multiplier
+            recommended = min(confidence_adjusted, adjusted_kelly)
         else:
             recommended = confidence_adjusted
 

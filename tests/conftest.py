@@ -43,9 +43,9 @@ def reset_singletons():
     config_module._config = None
 
     # Reset HTTP client singleton
-    import src.api.http_client as http_module
+    from src.api.http_client import reset_http_client
 
-    http_module._client_instance = None
+    reset_http_client()
 
     # Reset Telegram singleton
     import src.notifications.telegram_service as telegram_module
@@ -61,7 +61,7 @@ def reset_singletons():
 
     # Cleanup after test
     config_module._config = None
-    http_module._client_instance = None
+    reset_http_client()
     telegram_module.TelegramService._instance = None
     market_module.MarketDataProvider._instance = None
 
