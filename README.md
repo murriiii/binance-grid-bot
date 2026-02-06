@@ -3,10 +3,10 @@
 Ein regime-adaptiver Krypto-Trading-Bot mit Hybrid-System (HOLD/GRID/CASH), Multi-Coin Trading, AI-Enhancement, Memory-System und selbstlernendem Trading Playbook.
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![Version: 1.14.6](https://img.shields.io/badge/version-1.14.6-green.svg)](https://github.com/murriiii/binance-grid-bot/releases)
+[![Version: 1.14.9](https://img.shields.io/badge/version-1.14.9-green.svg)](https://github.com/murriiii/binance-grid-bot/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
-[![Tests: 922 passed](https://img.shields.io/badge/tests-922%20passed-brightgreen.svg)]()
+[![Tests: 942 passed](https://img.shields.io/badge/tests-942%20passed-brightgreen.svg)]()
 [![Coverage: 60%](https://img.shields.io/badge/coverage-60%25-yellowgreen.svg)]()
 
 ## Features
@@ -23,7 +23,7 @@ Ein regime-adaptiver Krypto-Trading-Bot mit Hybrid-System (HOLD/GRID/CASH), Mult
 - **Decimal Precision** - Alle Preis-/Mengenberechnungen nutzen `Decimal` statt `float` (keine Binance-Rejections durch Rundungsfehler)
 - **Fee-Aware Trading** - Binance Taker-Fees (0.1%) werden bei Sell-Quantities automatisch abgezogen
 - **Multi-Coin Trading** - Handel ueber 2-3 Coins pro Cohort mit intelligenter Kapitalverteilung
-- **Dynamic Grid Strategy** - ATR-basierte Grid-Abstände, asymmetrische Grids basierend auf Trend
+- **Dynamic Grid Strategy** - ATR-basierte Grid-Ranges pro Symbol (Range-Bridge: DynamicGridStrategy berechnet Range, GridStrategy behält Decimal-Precision), auto Grid-Rebuild bei Preis-Drift (30 Min Check)
 - **AI-Enhanced Decisions** - DeepSeek-Integration für intelligentere Entscheidungen
 - **Trading Playbook** - Selbstlernendes "Erfahrungsgedächtnis" das aus Trades lernt
 - **Memory System** - PostgreSQL-basiertes RAG-System für historische Muster
@@ -58,6 +58,8 @@ Ein regime-adaptiver Krypto-Trading-Bot mit Hybrid-System (HOLD/GRID/CASH), Mult
 - **Follow-Up Retry** - Fehlgeschlagene Folge-Orders werden mit exponentiellem Backoff (2/5/15/30/60 Min) bis zu 5x wiederholt, kein Telegram-Spam
 - **Kelly Criterion** - Optimale Positionsgroessen-Berechnung
 - **Sharpe/Sortino Ratio** - Risiko-adjustierte Performance-Metriken
+- **Signal Breakdown** - 9-Signal Composite (F&G, RSI, MACD, Trend, Volume, Whale, Sentiment, Macro, AI) pro Trade-Fill in DB
+- **Metrics Snapshots** - Taegliche Sharpe/CVaR/Kelly Snapshots in `calculation_snapshots` Tabelle
 
 ### Data Sources
 - **Fear & Greed Integration** - Sentiment-basierte Trading-Signale
@@ -87,6 +89,7 @@ Ein regime-adaptiver Krypto-Trading-Bot mit Hybrid-System (HOLD/GRID/CASH), Mult
 - **Telegram Notifications** - Echtzeit-Alerts und taegliche Reports (TelegramNotifier delegiert an TelegramService Singleton)
 - **SingletonMixin Pattern** - Alle Services (DatabaseManager, HTTPClient, WatchlistManager, CoinScanner, TelegramService, MarketDataProvider etc.) nutzen `SingletonMixin` mit automatischem `close()` Lifecycle und `reset_instance()`. ModeManager ist kein Singleton (jeder Cohort-Orchestrator hat eine eigene Instanz).
 - **Atomic State Writes** - Temp-File + Rename Pattern fuer korruptionsfreie State-Persistenz (DecimalEncoder, Temp-File Cleanup bei Fehlern)
+- **SchedulerConfig** - Scheduler-Zeitpunkte und Intervalle konfigurierbar via `SchedulerConfig` (`get_config().scheduler`) statt Hardcoded-Werte
 
 ## Architektur
 
@@ -889,7 +892,7 @@ mypy src/
 ### Tests
 
 ```bash
-# Alle Tests ausfuehren (922 Tests)
+# Alle Tests ausfuehren (942 Tests)
 pytest tests/ -v
 
 # Mit Coverage (Minimum: 60%)
@@ -912,7 +915,7 @@ pytest tests/test_grid_strategy.py -v
 | API | 20-76% | Binance Client, HTTP Client |
 | Scanner/Portfolio | 43-97% | CoinScanner, Allocator |
 | Monitoring | 100% | Order Reconciliation, Grid Health |
-| **Gesamt** | **60%** | **922 Tests** |
+| **Gesamt** | **60%** | **942 Tests** |
 
 ### Pre-commit Hooks
 
@@ -931,7 +934,7 @@ Die GitHub Actions Pipeline:
 
 1. **Lint & Format**: Ruff checks (0 errors)
 2. **Type Check**: MyPy strict mode (0 errors)
-3. **Tests**: 922 Tests mit Coverage >= 60%
+3. **Tests**: 942 Tests mit Coverage >= 60%
 4. **Auto-Release**: Bei Version-Bump in pyproject.toml wird automatisch ein GitHub Release erstellt
 
 ## Conventional Commits

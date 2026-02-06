@@ -59,15 +59,24 @@ cd docker && docker compose --profile hybrid up -d
 main_hybrid.py
      │
      ▼
-HybridOrchestrator ──── ModeManager (hysteresis)
+CohortOrchestrator ──── CohortManager (DB-backed)
      │                       │
-     ├── HOLD mode ──────── RegimeDetector (HMM)
-     ├── GRID mode ──────── GridBot.tick() per symbol
-     └── CASH mode ──────── Cancel orders, sell positions
-     │
-     ├── CoinScanner ────── Opportunity scoring
-     ├── PortfolioAllocator  Kelly-based allocation
-     └── BinanceClient ──── Shared across all symbols
+     ├── HybridOrchestrator [conservative]  ──┐
+     ├── HybridOrchestrator [balanced]        │── unique coins per cohort
+     ├── HybridOrchestrator [growth]          │── shared BinanceClient
+     ├── HybridOrchestrator [aggressive]      │
+     ├── HybridOrchestrator [defi_explorer]   │
+     └── HybridOrchestrator [meme_hunter]  ───┘
+              │
+              ├── ModeManager ── RegimeDetector (HMM)
+              ├── HOLD mode ─── Market-buy, trailing stop
+              ├── GRID mode ─── GridBot.tick() per symbol
+              └── CASH mode ─── Cancel orders, sell positions
+              │
+              ├── DynamicGridStrategy ── ATR-based range per symbol
+              ├── CoinScanner ── Opportunity scoring
+              ├── PortfolioAllocator ── Kelly-based allocation
+              └── SignalAnalyzer ── 9-signal composite per trade fill
 ```
 
 ### GridBot Mixin Decomposition
@@ -130,6 +139,21 @@ HYBRID_INITIAL_MODE, HYBRID_ENABLE_MODE_SWITCHING, HYBRID_TOTAL_INVESTMENT,
 HYBRID_MAX_SYMBOLS, HYBRID_MIN_POSITION_USD, HYBRID_HOLD_TRAILING_STOP_PCT,
 HYBRID_MODE_COOLDOWN_HOURS, HYBRID_MIN_REGIME_PROBABILITY, HYBRID_MIN_REGIME_DURATION_DAYS
 ```
+
+### Cohort System (A/B Testing)
+
+`CohortOrchestrator` (`src/core/cohort_orchestrator.py`) manages 4-6 parallel `HybridOrchestrator` instances, each with independent strategy parameters and capital.
+
+**CohortManager** (`src/core/cohort_manager.py`, SingletonMixin) loads active cohorts from the `cohorts` DB table. Each cohort has a `CohortConfig` dataclass:
+- `grid_range_pct`, `min_confidence`, `risk_tolerance` (low/medium/high)
+- `allowed_categories` — restricts coin selection (e.g., meme_hunter only gets MEME coins)
+- `frozen` — baseline control group (no parameter changes)
+
+**Symbol exclusion**: `initial_allocation()` passes a `taken_symbols` set to each cohort's `scan_and_allocate()` so no two cohorts trade the same coin.
+
+**Config factory**: `HybridConfig.from_cohort(cohort)` creates per-cohort config with risk-appropriate defaults (grid count, trailing stop, max symbols). Dynamic grid range then overrides `grid_range_percent` per symbol at runtime via ATR.
+
+**Main loop**: `CohortOrchestrator.run()` calls `tick()` on all orchestrators every 30 seconds, with heartbeat touch for Docker health.
 
 ### Singleton Pattern
 
@@ -202,7 +226,17 @@ DynamicGridStrategy.calculate_dynamic_range(symbol, price, base_range, regime)
 
 **Fallback**: If OHLCV fetch fails, falls back to the static `HybridConfig.grid_range_percent`.
 
+### Integrated Analysis Features
+
+**SignalAnalyzer** (`src/analysis/signal_analyzer.py`, SingletonMixin) computes a 9-signal composite breakdown per trade fill: fear_greed, RSI, MACD, trend, volume, whale, sentiment, macro, AI. Stored in `signal_components` DB table. Called from `OrderManagerMixin._save_trade_to_memory()` after each fill.
+
+**MetricsCalculator** (`src/analysis/metrics_calculator.py`, SingletonMixin) computes Sharpe/Sortino/Calmar ratios, VaR/CVaR, Kelly fraction, win rate, and profit factor from trade return history. Snapshots stored in `calculation_snapshots` DB table. Called from `task_daily_summary()` in the scheduler.
+
+Both are non-critical — wrapped in try/except with graceful degradation on failure.
+
 ### Grid Strategy Logic
+
+**Decimal precision**: `GridStrategy` uses `Decimal` throughout for Binance API compliance. `_to_decimal()` helper safely converts float/int/str/Decimal, handling scientific notation (e.g., `'1e-05'`). `_DecimalEncoder` converts Decimals to floats at JSON serialization boundary. Never use `float()` for order quantities or prices.
 
 1. Calculate grid levels: `spacing = (upper - lower) / num_grids`
 2. Each level gets `investment_per_grid / price` quantity
@@ -302,6 +336,8 @@ DATABASE_URL, REDIS_URL
 
 Hybrid-specific config in `src/core/hybrid_config.py` with `HYBRID_*` prefix.
 
+Scheduler timing in `SchedulerConfig` (`src/core/config.py`): `daily_summary_time`, `weekly_rebalance_time`, `macro_check_time`, `market_snapshot_interval`, `stop_loss_check_interval`. All read by `docker/scheduler.py` via `get_config().scheduler`.
+
 ## Docker Services
 
 - `trading-bot` - Classic single-coin GridBot
@@ -323,6 +359,7 @@ Tests use fixtures from `tests/conftest.py`:
 - `sample_ohlcv_data` - 100 periods OHLCV data (numpy seed 42)
 - `sample_returns` - 100 days of return data
 - `sample_trade_history` - 8 trades with win/loss data
+- `sample_cohort_config` - CohortConfig template for cohort tests
 
 Mock external APIs at module level: `@patch("src.module.get_http_client")`
 
