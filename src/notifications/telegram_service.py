@@ -47,7 +47,11 @@ class TelegramService(SingletonMixin):
             logger.info("Telegram Learning Mode aktiv: nur Daily Summary wird gesendet")
 
     def send(
-        self, message: str, parse_mode: str = "HTML", disable_notification: bool = False
+        self,
+        message: str,
+        parse_mode: str = "HTML",
+        disable_notification: bool = False,
+        force: bool = False,
     ) -> bool:
         """
         Sendet eine Nachricht.
@@ -56,11 +60,16 @@ class TelegramService(SingletonMixin):
             message: Nachrichtentext (HTML oder Markdown)
             parse_mode: 'HTML' oder 'Markdown'
             disable_notification: True für stille Nachricht
+            force: True um auch in learning_mode zu senden
 
         Returns:
             True wenn erfolgreich
         """
         if not self.enabled:
+            return False
+
+        if self.learning_mode and not force:
+            logger.debug("Learning Mode: Nachricht übersprungen")
             return False
 
         # B4: Truncate messages exceeding Telegram's 4096 char limit
@@ -93,10 +102,7 @@ class TelegramService(SingletonMixin):
         Args:
             force: True um auch in learning_mode zu senden (z.B. kritische Errors)
         """
-        if self.learning_mode and not force:
-            logger.debug("Learning Mode: Urgent-Nachricht übersprungen")
-            return False
-        return self.send(f"🚨 <b>URGENT</b>\n\n{message}")
+        return self.send(f"🚨 <b>URGENT</b>\n\n{message}", force=force)
 
     def send_trade_alert(
         self,
@@ -106,11 +112,7 @@ class TelegramService(SingletonMixin):
         quantity: float,
         profit_loss: float | None = None,
     ) -> bool:
-        """Sendet eine formatierte Trade-Benachrichtigung"""
-        if self.learning_mode:
-            logger.debug(f"Learning Mode: Trade-Alert übersprungen ({trade_type} {symbol})")
-            return False
-
+        """Sendet eine formatierte Trade-Benachrichtigung."""
         emoji = "🟢" if trade_type == "BUY" else "🔴"
         pnl_text = f"\nP/L: {profit_loss:+.2f}%" if profit_loss is not None else ""
 
@@ -176,11 +178,7 @@ Menge: {quantity}
         from_owner: str,
         to_owner: str,
     ) -> bool:
-        """Sendet Whale-Alert"""
-        if self.learning_mode:
-            logger.debug(f"Learning Mode: Whale-Alert übersprungen ({symbol})")
-            return False
-
+        """Sendet Whale-Alert."""
         emoji = "🔴🐋" if direction == "BEARISH" else "🟢🐋" if direction == "BULLISH" else "🐋"
 
         message = f"""
@@ -196,11 +194,7 @@ Impact: <b>{direction}</b>
         return self.send(message)
 
     def send_macro_alert(self, events: list) -> bool:
-        """Sendet Makro-Event Warnung"""
-        if self.learning_mode:
-            logger.debug("Learning Mode: Macro-Alert übersprungen")
-            return False
-
+        """Sendet Makro-Event Warnung."""
         event_list = "\n".join([f"• {e['date']}: {e['name']}" for e in events[:5]])
 
         message = f"""
@@ -215,10 +209,7 @@ Wichtige Events in den nächsten 48h:
         return self.send(message)
 
     def send_sentiment_alert(self, value: int, classification: str) -> bool:
-        """Sendet Sentiment-Warnung bei Extremen"""
-        if self.learning_mode:
-            logger.debug("Learning Mode: Sentiment-Alert übersprungen")
-            return False
+        """Sendet Sentiment-Warnung bei Extremen."""
         if value <= 20:
             emoji = "🟢"
             title = "EXTREME FEAR ALERT"
@@ -240,7 +231,7 @@ Fear & Greed Index: <code>{value}</code> ({classification})
         return self.send(message)
 
     def send_photo(self, photo_bytes: bytes, caption: str | None = None) -> bool:
-        """Sendet ein Foto/Chart"""
+        """Sendet ein Foto/Chart."""
         if not self.enabled:
             return False
 
@@ -278,10 +269,10 @@ Fear & Greed Index: <code>{value}</code> ({classification})
             message += f"\n<i>Context: {context}</i>"
 
         # Errors immer senden, auch in Learning Mode
-        return self.send(message)
+        return self.send(message, force=True)
 
     def send_startup(self, mode: str, symbol: str, investment: float) -> bool:
-        """Sendet Startup-Nachricht - wird auch in Learning Mode gesendet"""
+        """Sendet Startup-Nachricht - wird auch in Learning Mode gesendet."""
         learning_hint = "\n\n<i>📚 Learning Mode aktiv</i>" if self.learning_mode else ""
         message = f"""
 🤖 <b>Trading Bot gestartet</b>
@@ -290,14 +281,14 @@ Mode: {mode}
 Symbol: {symbol}
 Investment: ${investment:.2f}{learning_hint}
 """
-        return self.send(message)
+        return self.send(message, force=True)
 
     def send_shutdown(self, reason: str = "") -> bool:
-        """Sendet Shutdown-Nachricht - wird auch in Learning Mode gesendet"""
+        """Sendet Shutdown-Nachricht - wird auch in Learning Mode gesendet."""
         message = "🛑 <b>Trading Bot gestoppt</b>"
         if reason:
             message += f"\n\nGrund: {reason}"
-        return self.send(message)
+        return self.send(message, force=True)
 
 
 # Convenience-Funktion für schnellen Zugriff

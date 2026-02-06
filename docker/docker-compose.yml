@@ -159,6 +159,8 @@ services:
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      # Notifications
+      - LEARNING_MODE=${LEARNING_MODE:-false}
     volumes:
       - bot_logs:/app/logs
     networks:
