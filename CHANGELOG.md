@@ -1,3 +1,9 @@
+## v1.14.3 (2026-02-06)
+
+### Fix
+
+- report uses grid state instead of account balance, suppress urgent spam
+
 ## v1.14.2 (2026-02-06)
 
 ### Fix
