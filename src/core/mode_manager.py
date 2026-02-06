@@ -58,6 +58,7 @@ class ModeManager(SingletonMixin):
         )
         self._transition_history: list[ModeTransitionEvent] = []
         self._locked_mode: TradingMode | None = None
+        self._lock_activated_at: datetime | None = None
 
     def get_current_mode(self) -> ModeState:
         return self._state
@@ -92,9 +93,18 @@ class ModeManager(SingletonMixin):
         if not self.config.enable_mode_switching:
             return self._state.current_mode, "Mode switching disabled"
 
-        # Safety lock: too many transitions
+        # Safety lock: too many transitions (auto-expires after 7 days)
         if self._locked_mode is not None:
-            return self._locked_mode, "Safety lock active (too many transitions)"
+            if self._lock_activated_at:
+                lock_age = (datetime.now() - self._lock_activated_at).days
+                if lock_age >= 7:
+                    logger.info("ModeManager: safety lock expired after 7 days")
+                    self._locked_mode = None
+                    self._lock_activated_at = None
+                else:
+                    return self._locked_mode, "Safety lock active (too many transitions)"
+            else:
+                return self._locked_mode, "Safety lock active (too many transitions)"
 
         # None/unknown regime → keep current mode
         if regime is None or regime == "TRANSITION":
@@ -147,6 +157,7 @@ class ModeManager(SingletonMixin):
         recent_count = self._count_recent_transitions(hours=48)
         if recent_count >= MAX_TRANSITIONS_48H:
             self._locked_mode = TradingMode.GRID
+            self._lock_activated_at = datetime.now()
             logger.warning(f"ModeManager: {recent_count} transitions in 48h - locking to GRID")
             if self._state.current_mode != TradingMode.GRID:
                 self._execute_switch(TradingMode.GRID, "Safety lock: too many transitions")

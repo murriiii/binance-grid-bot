@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from src.core.bot import GridBot
-from src.core.config import BotConfig
+from src.core.config import BotConfig, validate_environment
 
 
 def main():
@@ -27,6 +27,12 @@ def main():
         print("Config validation failed:")
         for err in errors:
             print(f"  - {err}")
+        sys.exit(1)
+
+    env_ok, warnings = validate_environment()
+    for w in warnings:
+        print(f"  WARNING: {w}")
+    if not env_ok:
         sys.exit(1)
 
     print(f"""

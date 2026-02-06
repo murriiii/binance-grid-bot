@@ -54,11 +54,15 @@ class StateManagerMixin:
 
             saved_config = state.get("config", {})
             if saved_config.get("symbol") != self.config.get("symbol"):
-                logger.warning("Symbol hat sich geändert - starte frisch")
+                logger.warning("Symbol hat sich geändert - cancele alte Orders und starte frisch")
+                self._cancel_orphaned_orders(saved_config.get("symbol"))
                 return False
 
             if saved_config.get("investment") != self.config.get("investment"):
-                logger.warning("Investment hat sich geändert - starte frisch")
+                logger.warning(
+                    "Investment hat sich geändert - cancele alte Orders und starte frisch"
+                )
+                self._cancel_orphaned_orders(self.config.get("symbol"))
                 return False
 
             loaded_orders = state.get("active_orders", {})
@@ -99,7 +103,8 @@ class StateManagerMixin:
                         self._save_trade_to_memory(order_info, filled_price, filled_qty, fee_usd)
 
                         if order_info.get("type") == "BUY" and self.stop_loss_manager:
-                            self._create_stop_loss(filled_price, filled_qty)
+                            fee_adjusted_qty = filled_qty * (1 - float(TAKER_FEE_RATE))
+                            self._create_stop_loss(filled_price, fee_adjusted_qty)
 
                         self._pending_followups.append(
                             {
@@ -129,7 +134,8 @@ class StateManagerMixin:
                         self._save_trade_to_memory(order_info, filled_price, executed_qty, fee_usd)
 
                         if order_info.get("type") == "BUY" and self.stop_loss_manager:
-                            self._create_stop_loss(filled_price, executed_qty)
+                            fee_adjusted_qty = executed_qty * (1 - float(TAKER_FEE_RATE))
+                            self._create_stop_loss(filled_price, fee_adjusted_qty)
 
                     elif status == "PARTIALLY_FILLED":
                         logger.info(f"Order {order_id} teilweise gefüllt ({executed_qty})")
@@ -149,6 +155,29 @@ class StateManagerMixin:
 
             return len(validated_orders) > 0
 
+        except json.JSONDecodeError as e:
+            logger.error(f"State-Datei korrupt (ungültiges JSON): {e} - starte frisch")
+            self.active_orders = {}
+            return False
+
         except Exception as e:
             logger.exception(f"Fehler beim Laden des States: {e}")
+            self.active_orders = {}
             return False
+
+    def _cancel_orphaned_orders(self, symbol: str | None) -> None:
+        """Cancel all open orders for a symbol to prevent orphaned orders."""
+        if not symbol:
+            return
+        try:
+            open_orders = self.client.get_open_orders(symbol)
+            if not open_orders:
+                return
+            for order in open_orders:
+                order_id = order.get("orderId")
+                if order_id:
+                    self.client.cancel_order(symbol, order_id)
+                    logger.info(f"Orphaned Order {order_id} für {symbol} gecancelt")
+            logger.info(f"{len(open_orders)} orphaned Orders für {symbol} gecancelt")
+        except Exception as e:
+            logger.warning(f"Fehler beim Canceln orphaned Orders für {symbol}: {e}")

@@ -22,6 +22,8 @@ services:
       - BINANCE_API_KEY=${BINANCE_API_KEY:-}
       - BINANCE_API_SECRET=${BINANCE_API_SECRET:-}
       - BINANCE_TESTNET=${BINANCE_TESTNET:-true}
+      - BINANCE_TESTNET_API_KEY=${BINANCE_TESTNET_API_KEY:-}
+      - BINANCE_TESTNET_API_SECRET=${BINANCE_TESTNET_API_SECRET:-}
       # Telegram
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
@@ -36,7 +38,6 @@ services:
       - hybrid_state:/app/config
     networks:
       - trading-internal
-      - proxy
     healthcheck:
       test: ["CMD", "python", "-c", "import os,time; assert time.time()-os.path.getmtime('data/heartbeat')<300"]
       interval: 60s
@@ -70,6 +71,8 @@ services:
       - BINANCE_API_KEY=${BINANCE_API_KEY:-}
       - BINANCE_API_SECRET=${BINANCE_API_SECRET:-}
       - BINANCE_TESTNET=${BINANCE_TESTNET:-true}
+      - BINANCE_TESTNET_API_KEY=${BINANCE_TESTNET_API_KEY:-}
+      - BINANCE_TESTNET_API_SECRET=${BINANCE_TESTNET_API_SECRET:-}
       # Telegram
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
@@ -91,7 +94,6 @@ services:
       - hybrid_state:/app/config
     networks:
       - trading-internal
-      - proxy
     healthcheck:
       test: ["CMD", "python", "-c", "import os,time; assert time.time()-os.path.getmtime('data/heartbeat')<300"]
       interval: 60s

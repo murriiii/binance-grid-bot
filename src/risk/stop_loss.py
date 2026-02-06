@@ -166,9 +166,16 @@ class StopLossManager:
         quantity: float,
         stop_type: StopType = StopType.TRAILING,
         stop_percentage: float = 5.0,
+        trailing_distance: float | None = None,
     ) -> StopLossOrder:
-        """Erstellt einen neuen Stop-Loss"""
+        """Erstellt einen neuen Stop-Loss.
+
+        For TRAILING stops, trailing_distance controls the trailing percentage.
+        If not provided, stop_percentage is used as the trailing distance.
+        """
         import uuid
+
+        effective_trailing = trailing_distance if trailing_distance is not None else stop_percentage
 
         stop = StopLossOrder(
             id=str(uuid.uuid4()),
@@ -177,6 +184,7 @@ class StopLossManager:
             quantity=quantity,
             stop_type=stop_type,
             stop_percentage=stop_percentage,
+            trailing_distance=effective_trailing,
         )
 
         with self.lock:

@@ -19,6 +19,7 @@ from dotenv import load_dotenv
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from src.api.binance_client import BinanceClient
+from src.core.config import validate_environment
 from src.core.hybrid_config import HybridConfig
 from src.core.hybrid_orchestrator import HybridOrchestrator
 
@@ -36,6 +37,12 @@ def main():
         print("Configuration errors:")
         for err in errors:
             print(f"  - {err}")
+        sys.exit(1)
+
+    env_ok, warnings = validate_environment()
+    for w in warnings:
+        print(f"  WARNING: {w}")
+    if not env_ok:
         sys.exit(1)
 
     testnet = os.getenv("BINANCE_TESTNET", "true").lower() == "true"

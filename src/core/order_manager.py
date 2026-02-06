@@ -1,12 +1,16 @@
 """Order lifecycle mixin for GridBot."""
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from src.api.http_client import HTTPClientError, get_http_client
 from src.strategies.grid_strategy import TAKER_FEE_RATE
 
 logger = logging.getLogger("trading_bot")
+
+# Follow-up retry config
+MAX_FOLLOWUP_RETRIES = 5
+FOLLOWUP_BACKOFF_MINUTES = [2, 5, 15, 30, 60]
 
 
 class OrderManagerMixin:
@@ -86,6 +90,11 @@ class OrderManagerMixin:
             open_order_ids = {o["orderId"] for o in open_orders}
 
             for order_id, order_info in list(self.active_orders.items()):
+                # Handle failed follow-up retries separately
+                if order_info.get("failed_followup"):
+                    self._retry_failed_followup(order_id, order_info)
+                    continue
+
                 if order_id not in open_order_ids:
                     order_status = self.client.get_order_status(self.symbol, order_id)
 
@@ -144,7 +153,8 @@ class OrderManagerMixin:
                     self._save_trade_to_memory(order_info, filled_price, filled_qty, fee_usd)
 
                     if order_info["type"] == "BUY" and self.stop_loss_manager:
-                        self._create_stop_loss(filled_price, filled_qty)
+                        fee_adjusted_qty = filled_qty * (1 - float(TAKER_FEE_RATE))
+                        self._create_stop_loss(filled_price, fee_adjusted_qty)
 
                     if order_info["type"] == "BUY":
                         action = self.strategy.on_buy_filled(filled_price)
@@ -216,9 +226,19 @@ class OrderManagerMixin:
                     if new_order_placed or action_type == "NONE":
                         del self.active_orders[order_id]
                     else:
-                        logger.warning(f"Folge-Order fehlgeschlagen, behalte alte Order {order_id}")
+                        retry_count = order_info.get("retry_count", 0)
+                        backoff_idx = min(retry_count, len(FOLLOWUP_BACKOFF_MINUTES) - 1)
+                        next_retry = datetime.now() + timedelta(
+                            minutes=FOLLOWUP_BACKOFF_MINUTES[backoff_idx]
+                        )
+                        logger.warning(
+                            f"Folge-Order fehlgeschlagen (Versuch {retry_count + 1}/"
+                            f"{MAX_FOLLOWUP_RETRIES}), nächster Retry: {next_retry:%H:%M}"
+                        )
                         self.active_orders[order_id]["failed_followup"] = True
                         self.active_orders[order_id]["intended_action"] = action
+                        self.active_orders[order_id]["retry_count"] = retry_count + 1
+                        self.active_orders[order_id]["next_retry_after"] = next_retry.isoformat()
 
         except Exception as e:
             logger.exception(f"Fehler in check_orders: {e}")
@@ -258,9 +278,78 @@ class OrderManagerMixin:
         self._save_trade_to_memory(order_info, filled_price, filled_qty, fee_usd)
 
         if order_info["type"] == "BUY" and self.stop_loss_manager:
-            self._create_stop_loss(filled_price, filled_qty)
+            fee_adjusted_qty = filled_qty * (1 - float(TAKER_FEE_RATE))
+            self._create_stop_loss(filled_price, fee_adjusted_qty)
 
         del self.active_orders[order_id]
+
+    def _retry_failed_followup(self, order_id: int, order_info: dict):
+        """Retry a failed follow-up order with exponential backoff."""
+        retry_count = order_info.get("retry_count", 0)
+        next_retry_str = order_info.get("next_retry_after")
+
+        # Check if max retries exceeded
+        if retry_count >= MAX_FOLLOWUP_RETRIES:
+            logger.critical(
+                f"Follow-up für Order {order_id} nach {retry_count} Versuchen aufgegeben"
+            )
+            self.telegram.send(
+                f"🚨 CRITICAL: Follow-up aufgegeben\n"
+                f"Order: {order_id}\n"
+                f"Typ: {order_info.get('type')}\n"
+                f"Preis: {order_info.get('price')}\n"
+                f"Versuche: {retry_count}/{MAX_FOLLOWUP_RETRIES}",
+                urgent=True,
+            )
+            del self.active_orders[order_id]
+            return
+
+        # Check backoff timer
+        if next_retry_str:
+            next_retry = datetime.fromisoformat(next_retry_str)
+            if datetime.now() < next_retry:
+                return  # Not yet time to retry
+
+        action = order_info.get("intended_action", {})
+        action_type = action.get("action", "NONE")
+        if action_type == "NONE":
+            del self.active_orders[order_id]
+            return
+
+        logger.info(
+            f"Retry Follow-up für Order {order_id} "
+            f"(Versuch {retry_count + 1}/{MAX_FOLLOWUP_RETRIES})"
+        )
+
+        result = {"success": False}
+        side = "SELL" if action_type == "PLACE_SELL" else "BUY"
+
+        allowed, reason = self._validate_order_risk(
+            side, float(action["quantity"]), float(action["price"])
+        )
+        if not allowed:
+            logger.warning(f"Follow-up retry blocked by risk check: {reason}")
+        elif action_type == "PLACE_SELL":
+            result = self.client.place_limit_sell(self.symbol, action["quantity"], action["price"])
+        elif action_type == "PLACE_BUY":
+            result = self.client.place_limit_buy(self.symbol, action["quantity"], action["price"])
+
+        if result["success"]:
+            new_order_id = result["order"]["orderId"]
+            self.active_orders[new_order_id] = {
+                "type": side,
+                "price": action["price"],
+                "quantity": action["quantity"],
+                "created_at": datetime.now().isoformat(),
+            }
+            del self.active_orders[order_id]
+            logger.info(f"Follow-up retry erfolgreich: {side} @ {action['price']}")
+        else:
+            backoff_idx = min(retry_count, len(FOLLOWUP_BACKOFF_MINUTES) - 1)
+            next_retry = datetime.now() + timedelta(minutes=FOLLOWUP_BACKOFF_MINUTES[backoff_idx])
+            self.active_orders[order_id]["retry_count"] = retry_count + 1
+            self.active_orders[order_id]["next_retry_after"] = next_retry.isoformat()
+            logger.warning(f"Follow-up retry fehlgeschlagen, nächster Versuch: {next_retry:%H:%M}")
 
     def _save_trade_to_memory(
         self, order_info: dict, price: float, quantity: float, fee_usd: float = 0.0

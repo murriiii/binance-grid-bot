@@ -64,6 +64,26 @@ def execute_stop_loss_sell(
             f"Stop-loss sell attempt {attempt + 1}/{MAX_RETRIES} failed for {symbol}: {last_error}"
         )
 
+        # Re-fetch balance on INSUFFICIENT_BALANCE and retry with actual balance
+        if "INSUFFICIENT" in str(last_error).upper() and attempt < MAX_RETRIES - 1:
+            try:
+                actual_balance = client.get_account_balance(base_asset)
+                if actual_balance > 0:
+                    sell_quantity = actual_balance
+                    # Re-round to step_size
+                    try:
+                        si = client.get_symbol_info(symbol)
+                        if si and si.get("step_size", 0) > 0:
+                            sell_quantity = sell_quantity - (sell_quantity % si["step_size"])
+                            sell_quantity = round(sell_quantity, 8)
+                    except Exception:
+                        pass
+                    logger.info(
+                        f"Adjusted sell quantity to actual balance: {sell_quantity} {base_asset}"
+                    )
+            except Exception as e:
+                logger.warning(f"Could not re-fetch balance for {base_asset}: {e}")
+
         if attempt < MAX_RETRIES - 1:
             time.sleep(RETRY_BACKOFF[attempt])
 

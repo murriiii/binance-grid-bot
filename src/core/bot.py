@@ -12,6 +12,7 @@ from src.core.order_manager import OrderManagerMixin
 from src.core.risk_guard import RiskGuardMixin
 from src.core.state_manager import StateManagerMixin
 from src.strategies.grid_strategy import GridStrategy
+from src.utils.heartbeat import touch_heartbeat
 
 
 # Logging Setup mit Rotation
@@ -97,10 +98,11 @@ class GridBot(RiskGuardMixin, OrderManagerMixin, StateManagerMixin):
         self.active_orders: dict[int, dict[str, Any]] = {}
         self.symbol_info: dict | None = None
 
-        # State file für Persistenz
+        # State file für Persistenz (Hybrid-Modus nutzt pro-Symbol State Files)
         config_dir = Path("config")
         config_dir.mkdir(exist_ok=True)
-        self.state_file = config_dir / "bot_state.json"
+        state_file_name = config.get("state_file", "bot_state.json")
+        self.state_file = config_dir / state_file_name
 
         # Telegram Notifier
         self.telegram = TelegramNotifier()
@@ -263,6 +265,9 @@ class GridBot(RiskGuardMixin, OrderManagerMixin, StateManagerMixin):
                 )
                 return False
 
+            # Initialize circuit breaker with current price
+            self._last_known_price = current_price
+
             self.telegram.send(
                 f"✅ Bot initialisiert\n"
                 f"Symbol: {self.symbol}\n"
@@ -318,7 +323,7 @@ class GridBot(RiskGuardMixin, OrderManagerMixin, StateManagerMixin):
         self.consecutive_errors = 0
 
         # Heartbeat for Docker health check
-        Path("data/heartbeat").touch()
+        touch_heartbeat()
 
         return True
 

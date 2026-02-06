@@ -42,11 +42,14 @@ Ein regime-adaptiver Krypto-Trading-Bot mit Hybrid-System (HOLD/GRID/CASH), Mult
 - **Risk Enforcement Pipeline** - Jede Order wird gegen CVaR-Limits, Allocation-Constraints und Portfolio-Drawdown geprüft
 - **Circuit Breaker** - Emergency-Stop bei >10% Flash-Crash zwischen Check-Zyklen
 - **CVaR Position Sizing** - Conditional Value at Risk basierte Positionsgrößen
-- **Stop-Loss Execution** - Retry-Logik (3 Versuche mit Backoff), Balance-Awareness (tatsaechliche Balance statt Soll-Menge), Step-Size-Rounding, Telegram-Alert bei totalem Fehlschlag
+- **Stop-Loss Execution** - Retry-Logik (3 Versuche mit Backoff), Balance-Awareness (tatsaechliche Balance statt Soll-Menge, automatisches Re-Fetch bei INSUFFICIENT_BALANCE), Step-Size-Rounding, Telegram-Alert bei totalem Fehlschlag
 - **Stop-Loss Lifecycle** - Zwei-Phasen-Trigger: `update()` erkennt Trigger, `confirm_trigger()` deaktiviert erst nach erfolgreichem Market-Sell, `reactivate()` bei Sell-Fehler
+- **Fee-Adjusted Stop-Loss** - Stop-Loss-Quantities werden um Taker-Fee (0.1%) reduziert, verhindert INSUFFICIENT_BALANCE bei Trigger
+- **Trailing Distance Fix** - TRAILING-Stops nutzen uebergebenen `stop_percentage` als Trailing-Abstand (HOLD=7%, GRID=5%)
 - **Daily Drawdown Reset** - Automatischer Reset der Drawdown-Baseline um Mitternacht (Scheduler-Task + in-tick Detection)
 - **Partial-Fill-Handling** - Teilweise gefuellte Orders werden korrekt verarbeitet statt verworfen
 - **Downtime-Fill-Recovery** - Bei Neustart werden waehrend der Downtime gefuellte Orders erkannt und Follow-ups platziert
+- **Follow-Up Retry** - Fehlgeschlagene Folge-Orders werden mit exponentiellem Backoff (2/5/15/30/60 Min) bis zu 5x wiederholt, kein Telegram-Spam
 - **Kelly Criterion** - Optimale Positionsgroessen-Berechnung
 - **Sharpe/Sortino Ratio** - Risiko-adjustierte Performance-Metriken
 
@@ -65,8 +68,12 @@ Ein regime-adaptiver Krypto-Trading-Bot mit Hybrid-System (HOLD/GRID/CASH), Mult
 
 ### Infrastructure
 - **Graceful Shutdown** - SIGTERM-Handling in allen Entry Points (main.py, main_hybrid.py, scheduler.py) fuer sauberes Docker stop/restart
-- **Heartbeat Health Checks** - Docker Health Checks via `data/heartbeat` Datei statt HTTP-Endpoint
-- **Config Validation** - `BotConfig.from_env()` mit `validate()` prueft alle Parameter vor dem Start (Investment, Grids, Range, Risk)
+- **Heartbeat Health Checks** - Docker Health Checks via `data/heartbeat` Datei statt HTTP-Endpoint (zentrales `touch_heartbeat()` Utility)
+- **Config Validation** - `BotConfig.from_env()` mit `validate()` prueft alle Parameter vor dem Start, `validate_environment()` prueft API-Keys und Abhaengigkeiten
+- **Per-Symbol State Files** - Jede GridBot-Instanz im Hybrid-Modus schreibt eigene `grid_state_{SYMBOL}.json` (kein Ueberschreiben bei Multi-Coin)
+- **State Corruption Recovery** - Korrupte JSON State-Files werden erkannt und sauber zurueckgesetzt statt Crash
+- **Orphan Order Cleanup** - Bei Config-Aenderung (Symbol/Investment) werden alte Orders bei Binance automatisch gecancelt
+- **Circuit Breaker Init** - `_last_known_price` wird bei `initialize()` gesetzt (kein falscher Trigger beim ersten Tick)
 - **Centralized DB Connections** - Alle Module nutzen DatabaseManager Connection Pool statt eigene Connections
 - **Comprehensive Logging** - JSON-strukturierte Logs fuer langfristige Analyse
 - **Weekly Analysis Export** - Automatische Reports fuer Claude Code Optimierung
@@ -221,7 +228,7 @@ Der ModeManager verhindert Flip-Flopping durch mehrere Schutzmechanismen:
 | Min. Regime-Wahrscheinlichkeit | 75% | Regime muss sicher erkannt sein |
 | Min. Regime-Dauer | 2 Tage | Kurzfristige Schwankungen ignorieren |
 | Cooldown nach Wechsel | 24h | Keine sofortige Rueckkehr |
-| Max. Transitions / 48h | 2 | Safety-Lock auf GRID bei Ueberschreitung |
+| Max. Transitions / 48h | 2 | Safety-Lock auf GRID bei Ueberschreitung (Auto-Reset nach 7 Tagen) |
 | Emergency Bear | 85% | Sofortiger CASH-Wechsel ohne Cooldown |
 
 ### Regime-zu-Mode Mapping
@@ -478,6 +485,7 @@ binance-grid-bot/
 │   │   └── ai_assistant.py     # AI Chat Integration
 │   ├── utils/
 │   │   ├── singleton.py        # SingletonMixin Basisklasse
+│   │   ├── heartbeat.py        # Docker Health-Check Heartbeat
 │   │   └── task_lock.py        # Thread-safe Task-Locking
 │   ├── tasks/                  # Domain-spezifische Scheduler Tasks
 │   │   ├── base.py             # Shared Infra (DB-Connection via Pool)
@@ -798,7 +806,7 @@ Bei Stop-Loss-Trigger durchlaeuft die Ausfuehrung:
 
 1. **Balance Check** - Tatsaechliche Balance via API abfragen, `min(intended, actual)` verkaufen
 2. **Step-Size Rounding** - Quantity auf Binance `step_size` runden
-3. **Retry Loop** - 3 Versuche mit Backoff (2s, 5s, 10s)
+3. **Retry Loop** - 3 Versuche mit Backoff (2s, 5s, 10s). Bei INSUFFICIENT_BALANCE: Balance erneut abfragen und mit reduzierter Menge wiederholen
 4. **Confirm/Reactivate** - Bei Erfolg: `confirm_trigger()` deaktiviert Stop. Bei Fehler: `reactivate()` haelt Stop aktiv fuer naechsten Tick
 5. **Critical Alert** - Bei totalem Fehlschlag: CRITICAL Log + Telegram "Manual sell needed"
 

@@ -23,6 +23,7 @@ from src.core.bot import GridBot, TelegramNotifier
 from src.core.mode_manager import ModeManager
 from src.core.trading_mode import TradingMode
 from src.risk.stop_loss import StopLossManager, StopType
+from src.utils.heartbeat import touch_heartbeat
 
 if TYPE_CHECKING:
     from src.core.hybrid_config import HybridConfig
@@ -165,7 +166,7 @@ class HybridOrchestrator:
         self.consecutive_errors = 0
 
         # Heartbeat for Docker health check
-        Path("data/heartbeat").touch()
+        touch_heartbeat()
 
         return True
 
@@ -441,6 +442,7 @@ class HybridOrchestrator:
             "num_grids": self.config.num_grids,
             "grid_range_percent": self.config.grid_range_percent,
             "testnet": self.client.testnet,
+            "state_file": f"grid_state_{state.symbol}.json",
         }
         try:
             bot = GridBot(bot_config, client=self.client)

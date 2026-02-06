@@ -20,9 +20,9 @@ pytest tests/test_grid_strategy.py::TestGridStrategy::test_initialization -v
 # Run with coverage
 pytest tests/ --cov=src --cov-report=term-missing
 
-# Lint and format
-ruff check src/ tests/ docker/scheduler.py main_hybrid.py
-ruff format src/ tests/ docker/scheduler.py main_hybrid.py
+# Lint and format (include both entry points)
+ruff check src/ tests/ docker/scheduler.py main.py main_hybrid.py
+ruff format src/ tests/ docker/scheduler.py main.py main_hybrid.py
 
 # Type checking
 mypy src/
@@ -31,10 +31,10 @@ mypy src/
 pre-commit run --all-files
 
 # Start Docker services (classic single-coin GridBot)
-cd docker && docker-compose up -d
+cd docker && docker compose up -d
 
 # Start Docker services (hybrid multi-coin system)
-cd docker && docker-compose --profile hybrid up -d
+cd docker && docker compose --profile hybrid up -d
 ```
 
 ## Code Conventions
@@ -127,7 +127,7 @@ HYBRID_MODE_COOLDOWN_HOURS, HYBRID_MIN_REGIME_PROBABILITY, HYBRID_MIN_REGIME_DUR
 
 ### Singleton Pattern
 
-New singletons should extend `SingletonMixin` from `src/utils/singleton.py`:
+New singletons must extend `SingletonMixin` from `src/utils/singleton.py`:
 
 ```python
 from src.utils.singleton import SingletonMixin
@@ -141,9 +141,9 @@ svc = MyService.get_instance()
 MyService.reset_instance()  # calls close() if defined
 ```
 
-`__init_subclass__` ensures each subclass gets its own `_instance`. 18+ services use this mixin.
+`__init_subclass__` ensures each subclass gets its own `_instance`. Tests use the `reset_new_singletons` fixture which recursively resets ALL `SingletonMixin` subclasses.
 
-**Legacy singletons** (not yet migrated to mixin): `get_config()`, `get_http_client()`, `DatabaseManager`, `WatchlistManager`, `CoinScanner`. These use module-level `_instance` variables with custom `get_*()` functions.
+**Legacy singletons** (not yet migrated): `get_config()`, `get_http_client()`, `DatabaseManager`, `WatchlistManager`, `CoinScanner`. These use module-level `_instance` variables with custom `get_*()` functions and are reset via the `reset_singletons` fixture.
 
 ### HTTP Client Pattern
 
@@ -177,6 +177,30 @@ with db.get_cursor() as cur:
 4. On BUY fill → place SELL at next higher level
 5. On SELL fill → place BUY at next lower level
 6. Fee handling: `TAKER_FEE_RATE` from `grid_strategy.py` applied to sell quantities
+
+### Stop-Loss Execution
+
+All stop-loss market sells go through `execute_stop_loss_sell()` in `src/risk/stop_loss_executor.py`:
+1. Queries actual balance to avoid selling more than held
+2. Rounds quantity to `step_size`
+3. Retries up to 3 times with backoff (2s, 5s, 10s)
+4. On total failure: CRITICAL log + Telegram alert ("Manual sell needed")
+5. Returns `{"success": bool, "order": dict|None, "error": str|None}`
+
+**Two-phase stop-loss lifecycle** in `src/risk/stop_loss.py`:
+- `StopLossOrder.update(price)` → detects trigger condition, returns `True` but keeps stop active
+- `StopLossOrder.confirm_trigger(price)` → deactivates after successful sell
+- `StopLossOrder.reactivate()` → re-enables if sell failed
+
+Callers (`RiskGuardMixin._check_stop_losses()`, `HybridOrchestrator._update_stop_losses()`, `task_check_stops()`) follow this pattern:
+```python
+if stop.update(current_price):
+    result = execute_stop_loss_sell(client, symbol, stop.quantity, telegram)
+    if result["success"]:
+        stop.confirm_trigger(current_price)
+    else:
+        stop.reactivate()
+```
 
 ### Multi-Coin Trading Pipeline
 
@@ -246,9 +270,12 @@ Hybrid-specific config in `src/core/hybrid_config.py` with `HYBRID_*` prefix.
 ## Testing Notes
 
 Tests use fixtures from `tests/conftest.py`:
-- `mock_env_vars` (autouse) - Sets test environment variables
+- `mock_env_vars` (autouse) - Sets all required env vars (BINANCE_TESTNET, TRADING_PAIR, etc.)
+- `bot` - Fully mocked GridBot (patches BinanceClient, TelegramNotifier, memory, stop-loss, risk modules)
+- `bot_config` - Minimal config dict: `{"symbol": "BTCUSDT", "investment": 100, "num_grids": 3, ...}`
+- `mock_binance` - MagicMock BinanceClient with sensible defaults (price 50000, balance 1000)
 - `reset_singletons` - Resets legacy singletons (config, http_client, telegram, market_data)
-- `reset_new_singletons` - Resets ALL `SingletonMixin` subclasses via reflection
+- `reset_new_singletons` - Resets ALL `SingletonMixin` subclasses via recursive `__subclasses__()` walk
 - `sample_ohlcv_data` - 100 periods OHLCV data (numpy seed 42)
 - `sample_returns` - 100 days of return data
 - `sample_trade_history` - 8 trades with win/loss data
@@ -259,3 +286,5 @@ Symbol info format for GridStrategy tests uses flat dict:
 ```python
 {"symbol": "BTCUSDT", "min_qty": 0.00001, "step_size": 0.00001, "min_notional": 5.00}
 ```
+
+**GridStrategy price matching**: Uses 0.1% tolerance when matching prices to grid levels. Tests that create orders at specific prices must use actual `bot.strategy.levels[N].price` values, not hardcoded numbers.

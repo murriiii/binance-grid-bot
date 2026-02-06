@@ -424,10 +424,11 @@ class TestPartialFillHandling:
         bot.stop_loss_manager = MagicMock()
         bot.check_orders()
 
-        # Stop loss should be created for the partial quantity
+        # Stop loss should be created for the fee-adjusted partial quantity
         bot.stop_loss_manager.create_stop.assert_called_once()
         call_kwargs = bot.stop_loss_manager.create_stop.call_args
-        assert call_kwargs.kwargs["quantity"] == 0.0005
+        expected_qty = 0.0005 * (1 - 0.001)  # Fee-adjusted
+        assert call_kwargs.kwargs["quantity"] == expected_qty
 
     def test_canceled_with_partial_fill_saves_trade(self, bot, mock_binance):
         """CANCELED with partial fill should save trade to memory"""
