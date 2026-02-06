@@ -1,3 +1,11 @@
+## v1.7.1 (2026-02-06)
+
+### Refactor
+
+- decompose GridBot into OrderManager, StateManager, RiskGuard
+- split scheduler.py into domain-specific task modules
+- extract SingletonMixin, consolidate test fixtures
+
 ## v1.7.0 (2026-02-06)
 
 ### Feat
