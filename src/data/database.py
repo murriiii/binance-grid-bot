@@ -14,6 +14,8 @@ from typing import TYPE_CHECKING
 
 from dotenv import load_dotenv
 
+from src.utils.singleton import SingletonMixin
+
 if TYPE_CHECKING:
     from psycopg2.extensions import connection
 
@@ -34,12 +36,12 @@ except ImportError:
     logger.warning("psycopg2 nicht installiert - pip install psycopg2-binary")
 
 
-class DatabaseManager:
+class DatabaseManager(SingletonMixin):
     """
     Zentrales Database Connection Management mit Connection Pooling.
 
     Features:
-    - Singleton Pattern
+    - Singleton Pattern (via SingletonMixin)
     - Connection Pooling (min 1, max 10 connections)
     - Context Manager für sichere Transaktionen
     - Automatisches Reconnect bei Verbindungsabbruch
@@ -62,26 +64,10 @@ class DatabaseManager:
             db.return_connection(conn)
     """
 
-    _instance: DatabaseManager | None = None
-
     def __init__(self):
         self._pool: ThreadedConnectionPool | None = None
         self._db_url: str | None = None
         self._init_pool()
-
-    @classmethod
-    def get_instance(cls) -> DatabaseManager:
-        """Singleton-Instanz."""
-        if cls._instance is None:
-            cls._instance = cls()
-        return cls._instance
-
-    @classmethod
-    def reset_instance(cls) -> None:
-        """Reset für Tests."""
-        if cls._instance is not None:
-            cls._instance.close_all()
-            cls._instance = None
 
     def _init_pool(self) -> bool:
         """Initialisiert den Connection Pool."""
@@ -265,6 +251,10 @@ class DatabaseManager:
         except Exception:
             pass
         return False
+
+    def close(self) -> None:
+        """Called by SingletonMixin.reset_instance()."""
+        self.close_all()
 
     def close_all(self) -> None:
         """Schließt alle Connections im Pool."""
