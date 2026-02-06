@@ -1,3 +1,9 @@
+## v1.10.3 (2026-02-06)
+
+### Fix
+
+- show correct cohort portfolio breakdown with cash reserve
+
 ## v1.10.2 (2026-02-06)
 
 ### Fix
