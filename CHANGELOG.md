@@ -1,3 +1,9 @@
+## v1.10.1 (2026-02-06)
+
+### Fix
+
+- mount hybrid_state volume in telegram-handler container
+
 ## v1.10.0 (2026-02-06)
 
 ### Feat
