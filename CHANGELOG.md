@@ -1,3 +1,9 @@
+## v1.7.0 (2026-02-06)
+
+### Feat
+
+- add regime-adaptive Hybrid Trading System (HOLD/GRID/CASH)
+
 ## v1.6.0 (2026-02-05)
 
 ### Feat
