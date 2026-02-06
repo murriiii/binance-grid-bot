@@ -11,15 +11,13 @@ logger = logging.getLogger("trading_bot")
 
 
 def _to_decimal(value: float | int | str | Decimal) -> Decimal:
-    """Convert to Decimal without float precision artifacts or scientific notation."""
+    """Convert to Decimal without float precision artifacts.
+
+    Uses str(value) which gives the shortest correct representation.
+    Decimal() handles scientific notation strings (e.g. '1e-05') natively.
+    """
     if isinstance(value, Decimal):
         return value
-    if isinstance(value, float):
-        # Fixed-point format avoids str(float) producing scientific notation (e.g. '1e-05')
-        s = f"{value:.18f}"
-        if "." in s:
-            s = s.rstrip("0").rstrip(".")
-        return Decimal(s)
     return Decimal(str(value))
 
 

@@ -234,6 +234,7 @@ Tasks are organized in domain-specific modules under `src/tasks/`, registered by
 | `market_tasks.py` | Market snapshots (hourly), sentiment checks (4h) |
 | `reporting_tasks.py` | Daily summary, playbook update (weekly), weekly export |
 | `system_tasks.py` | Stop-loss check (5min), health check (6h), macro events, outcome updates |
+| `monitoring_tasks.py` | Order reconciliation (30min), order timeout (1h), portfolio plausibility (2h), grid health (4h) |
 
 Shared infrastructure in `src/tasks/base.py` provides `get_db_connection()`. All tasks use `@task_locked` from `src/utils/task_lock.py` to prevent concurrent execution (non-blocking skip).
 
@@ -304,3 +305,33 @@ Symbol info format for GridStrategy tests uses flat dict:
 ```
 
 **GridStrategy price matching**: Uses 0.1% tolerance when matching prices to grid levels. Tests that create orders at specific prices must use actual `bot.strategy.levels[N].price` values, not hardcoded numbers.
+
+## Mandatory Documentation Maintenance
+
+Three documentation files MUST be kept up-to-date with every change. This is not optional.
+
+### LEARNING_PHASE.md — Learning Phase Tracking
+
+**When to update:** After any change that is specific to the testnet/learning phase, or any change that affects production migration.
+
+- Document temporary flags, workarounds, or test-specific settings
+- Mark each entry as "Temporary" or "Permanent" with reason
+- Update the production migration checklist when adding new temporary changes
+- Examples: enabling/disabling features via env vars, adjusting thresholds for testing, adding skip flags
+
+### CHANGELOG.md — Internal Change Log
+
+**When to update:** After every commit or logical change, add an entry.
+
+- Format: `## vX.Y.Z (YYYY-MM-DD)` with `### Feat`, `### Fix`, `### Refactor` subsections
+- Keep entries concise (one line per change)
+- Version is bumped automatically by commitizen on release
+
+### TODO.md — Development Roadmap
+
+**When to update:** After completing any phase/task listed in the file, or when identifying new work items.
+
+- Mark completed items with `[x]`
+- Add new phases or tasks as they emerge
+- Update the test count and status line when tests change significantly
+- Review periodically to identify tasks that can now be implemented

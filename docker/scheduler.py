@@ -39,6 +39,12 @@ from src.tasks.data_tasks import (
 )
 from src.tasks.hybrid_tasks import task_hybrid_rebalance, task_mode_evaluation
 from src.tasks.market_tasks import task_market_snapshot, task_sentiment_check
+from src.tasks.monitoring_tasks import (
+    task_grid_health_summary,
+    task_order_timeout_check,
+    task_portfolio_plausibility,
+    task_reconcile_orders,
+)
 from src.tasks.portfolio_tasks import (
     task_coin_performance_update,
     task_portfolio_rebalance,
@@ -168,6 +174,22 @@ def main():
 
     # Hybrid Rebalance Check every 6 hours
     schedule.every(6).hours.do(task_hybrid_rebalance)
+
+    # ═══════════════════════════════════════════════════════════════
+    # MONITORING JOBS
+    # ═══════════════════════════════════════════════════════════════
+
+    # Order reconciliation every 30 minutes
+    schedule.every(30).minutes.do(task_reconcile_orders)
+
+    # Order timeout check every hour
+    schedule.every().hour.at(":45").do(task_order_timeout_check)
+
+    # Portfolio plausibility every 2 hours
+    schedule.every(2).hours.do(task_portfolio_plausibility)
+
+    # Grid health summary every 4 hours
+    schedule.every(4).hours.do(task_grid_health_summary)
 
     logger.info("Scheduled jobs:")
     for job in schedule.get_jobs():

@@ -1,3 +1,16 @@
+## v1.14.6 (2026-02-06)
+
+### Fix
+
+- fix Decimal precision bug in _to_decimal causing order placement failures for low-price coins (FET, CRV, ARB, ADA)
+
+### Feat
+
+- add 4 monitoring tasks: order reconciliation, order timeout, portfolio plausibility, grid health summary
+- add LEARNING_PHASE.md documenting all testnet-specific configuration changes
+- scheduler now has Binance API keys, hybrid_state volume, and Redis access
+- CLAUDE.md: add mandatory documentation maintenance instructions for LEARNING_PHASE.md, CHANGELOG.md, TODO.md
+
 ## v1.14.5 (2026-02-06)
 
 ### Fix

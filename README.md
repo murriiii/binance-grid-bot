@@ -3,10 +3,10 @@
 Ein regime-adaptiver Krypto-Trading-Bot mit Hybrid-System (HOLD/GRID/CASH), Multi-Coin Trading, AI-Enhancement, Memory-System und selbstlernendem Trading Playbook.
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![Version: 1.12.0](https://img.shields.io/badge/version-1.12.0-green.svg)](https://github.com/murriiii/binance-grid-bot/releases)
+[![Version: 1.14.6](https://img.shields.io/badge/version-1.14.6-green.svg)](https://github.com/murriiii/binance-grid-bot/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
-[![Tests: 907 passed](https://img.shields.io/badge/tests-907%20passed-brightgreen.svg)]()
+[![Tests: 922 passed](https://img.shields.io/badge/tests-922%20passed-brightgreen.svg)]()
 [![Coverage: 60%](https://img.shields.io/badge/coverage-60%25-yellowgreen.svg)]()
 
 ## Features
@@ -476,7 +476,7 @@ binance-grid-bot/
 │   │   ├── trading_mode.py     # TradingMode Enum, ModeState
 │   │   ├── logging_system.py   # Strukturiertes Logging
 │   │   ├── cohort_manager.py   # Cohort-Definitionen & DB-Zugriff
-│   │   ├── cohort_orchestrator.py # Top-Level: 4 HybridOrchestrator parallel
+│   │   ├── cohort_orchestrator.py # Top-Level: 6 HybridOrchestrator parallel
 │   │   └── cycle_manager.py    # Woechentliche Zyklen
 │   ├── api/
 │   │   ├── binance_client.py   # Binance API Wrapper
@@ -540,7 +540,8 @@ binance-grid-bot/
 │   │   ├── hybrid_tasks.py     # Mode Eval, Rebalance
 │   │   ├── portfolio_tasks.py  # Watchlist, Scan, Allocation
 │   │   ├── cycle_tasks.py      # Cycle Mgmt, Weekly Rebalance
-│   │   └── reporting_tasks.py  # Summary, Export, Playbook
+│   │   ├── reporting_tasks.py  # Summary, Export, Playbook
+│   │   └── monitoring_tasks.py # Order Reconciliation, Grid Health
 │   └── backtest/
 │       └── engine.py           # Backtesting Engine
 ├── docker/
@@ -554,6 +555,7 @@ binance-grid-bot/
 │   ├── grid_state_{sym}_{cohort}.json # Per-Cohort Grid Bot State
 │   ├── TRADING_PLAYBOOK.md     # Aktuelles Playbook
 │   └── playbook_history/       # Playbook-Versionen
+├── LEARNING_PHASE.md           # Testnet-Konfiguration & Produktion-Migration
 ├── logs/                       # Strukturierte Logs (gitignored)
 ├── analysis_exports/           # Wöchentliche Exports (gitignored)
 ├── docs/
@@ -779,6 +781,11 @@ DATABASE_URL=postgresql://trading:password@localhost:5433/trading_bot
 | Outcome Update | 6h | Trade-Ergebnisse aktualisieren |
 | System Health | 6h | DB, API, Memory pruefen |
 | A/B Test Check | 23:00 | Statistische Signifikanz pruefen |
+| **Monitoring** | | |
+| Order Reconciliation | 30 Min | State-Files mit Binance-Orders vergleichen |
+| Order Timeout | Stuendlich | Stale Orders erkennen (>6h, >24h) |
+| Portfolio Plausibility | 2h | Allokations-Mathematik verifizieren |
+| Grid Health | 4h | BUY/SELL-Counts, failed follow-ups |
 | **Reports** | | |
 | Daily Summary | 20:00 | Portfolio-Report |
 | Weekly Export | Sa 23:00 | Analyse-Export erstellen |
@@ -882,7 +889,7 @@ mypy src/
 ### Tests
 
 ```bash
-# Alle Tests ausfuehren (907 Tests)
+# Alle Tests ausfuehren (922 Tests)
 pytest tests/ -v
 
 # Mit Coverage (Minimum: 60%)
@@ -904,7 +911,8 @@ pytest tests/test_grid_strategy.py -v
 | Risk | 49-94% | CVaR, Stop-Loss, Risk Guard |
 | API | 20-76% | Binance Client, HTTP Client |
 | Scanner/Portfolio | 43-97% | CoinScanner, Allocator |
-| **Gesamt** | **60%** | **907 Tests** |
+| Monitoring | 100% | Order Reconciliation, Grid Health |
+| **Gesamt** | **60%** | **922 Tests** |
 
 ### Pre-commit Hooks
 
@@ -923,7 +931,7 @@ Die GitHub Actions Pipeline:
 
 1. **Lint & Format**: Ruff checks (0 errors)
 2. **Type Check**: MyPy strict mode (0 errors)
-3. **Tests**: 907 Tests mit Coverage >= 60%
+3. **Tests**: 922 Tests mit Coverage >= 60%
 4. **Auto-Release**: Bei Version-Bump in pyproject.toml wird automatisch ein GitHub Release erstellt
 
 ## Conventional Commits
