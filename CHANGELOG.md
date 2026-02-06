@@ -1,3 +1,9 @@
+## v1.14.2 (2026-02-06)
+
+### Fix
+
+- enforce learning mode for all Telegram notifications
+
 ## v1.14.1 (2026-02-06)
 
 ### Fix
