@@ -142,6 +142,8 @@ class PortfolioAllocator(SingletonMixin):
         cohort_id: str | None = None,
         regime: str | None = None,
         min_confidence: float = 0.2,
+        allowed_categories: tuple[str, ...] | None = None,
+        max_positions: int = 0,
     ) -> AllocationResult:
         """
         Berechnet die optimale Kapitalverteilung.
@@ -190,11 +192,16 @@ class PortfolioAllocator(SingletonMixin):
             if o.symbol not in self._current_portfolio
             and o.total_score >= 0.3
             and o.confidence >= min_confidence
+            and (allowed_categories is None or o.category in allowed_categories)
         ]
 
         if not filtered_opps:
             logger.debug("PortfolioAllocator: Keine neuen Opportunities nach Filter")
             return result
+
+        # Limit to max_positions (top-scored) after filtering
+        if max_positions > 0:
+            filtered_opps = filtered_opps[:max_positions]
 
         # Berechne Score-gewichtete Allocation
         allocations = self._calculate_score_weighted_allocation(

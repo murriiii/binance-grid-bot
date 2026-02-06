@@ -698,8 +698,9 @@ class HybridOrchestrator:
                 logger.info("Orchestrator: no opportunities found")
                 return None
 
-            # Limit to max_symbols
-            opportunities = opportunities[: self.config.max_symbols]
+            # Pass extra opportunities so category/confidence filters in the
+            # allocator still have enough candidates after filtering.
+            opportunities = opportunities[: self.config.max_symbols * 5]
 
             allocator = PortfolioAllocator.get_instance()
             constraints = self.mode_manager.get_constraints_for_mode()
@@ -718,6 +719,8 @@ class HybridOrchestrator:
                 cohort_id=self.cohort_id,
                 regime=regime,
                 min_confidence=self.config.min_confidence,
+                allowed_categories=self.config.allowed_categories,
+                max_positions=self.config.max_symbols,
             )
 
             if not result.allocations:

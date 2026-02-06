@@ -367,6 +367,55 @@ class TestPortfolioAllocator:
         assert "BTCUSDT" in result2.allocations
 
     @patch("src.portfolio.allocator.psycopg2")
+    def test_allowed_categories_filters_coins(self, mock_psycopg2):
+        """Test that allowed_categories filters out wrong-category coins."""
+        mock_psycopg2.connect.return_value = MagicMock()
+
+        allocator = PortfolioAllocator()
+
+        opportunities = [
+            Opportunity(
+                symbol="BTCUSDT",
+                category="LARGE_CAP",
+                total_score=0.8,
+                confidence=0.8,
+                risk_level=OpportunityRisk.LOW,
+            ),
+            Opportunity(
+                symbol="OPUSDT",
+                category="L2",
+                total_score=0.7,
+                confidence=0.8,
+                risk_level=OpportunityRisk.MEDIUM,
+            ),
+            Opportunity(
+                symbol="AXSUSDT",
+                category="GAMING",
+                total_score=0.6,
+                confidence=0.8,
+                risk_level=OpportunityRisk.HIGH,
+            ),
+        ]
+
+        # Conservative: only LARGE_CAP
+        result = allocator.calculate_allocation(
+            opportunities=opportunities,
+            available_capital=1000.0,
+            allowed_categories=("LARGE_CAP",),
+        )
+        assert "BTCUSDT" in result.allocations
+        assert "OPUSDT" not in result.allocations
+        assert "AXSUSDT" not in result.allocations
+
+        # Aggressive: all categories
+        result2 = allocator.calculate_allocation(
+            opportunities=opportunities,
+            available_capital=1000.0,
+            allowed_categories=("LARGE_CAP", "L2", "GAMING"),
+        )
+        assert "BTCUSDT" in result2.allocations
+
+    @patch("src.portfolio.allocator.psycopg2")
     def test_get_risk_multiplier(self, mock_psycopg2):
         """Test Risk Multiplier für Position Sizing."""
         mock_psycopg2.connect.return_value = MagicMock()

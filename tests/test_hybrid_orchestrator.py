@@ -678,10 +678,12 @@ class TestScanAndAllocate:
 
             orchestrator.scan_and_allocate()
 
-            # Allocator should have received at most 2 opportunities
+            # Allocator receives max_symbols*5 candidates for pre-filtering;
+            # max_positions limits after category/confidence filter in allocator
             call_args = mock_allocator.calculate_allocation.call_args
             passed_opps = call_args[1].get("opportunities") or call_args[0][0]
-            assert len(passed_opps) <= 2
+            assert len(passed_opps) <= config.max_symbols * 5
+            assert call_args[1].get("max_positions") == 2
 
     def test_scan_and_allocate_handles_import_error(self, orchestrator):
         with patch.dict("sys.modules", {"src.scanner.coin_scanner": None}):

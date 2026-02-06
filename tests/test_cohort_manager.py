@@ -132,6 +132,7 @@ class TestHybridConfigFromCohort:
         hc = HybridConfig.from_cohort(cohort)
         assert hc.grid_range_percent == 2.0
         assert hc.min_confidence == 0.7
+        assert hc.allowed_categories == ("LARGE_CAP",)
         assert hc.total_investment == 100
         assert hc.max_symbols == 2
         assert hc.portfolio_constraints_preset == "small"
@@ -153,6 +154,14 @@ class TestHybridConfigFromCohort:
         hc = HybridConfig.from_cohort(cohort)
         assert hc.grid_range_percent == 8.0
         assert hc.min_confidence == 0.3
+        assert hc.allowed_categories == (
+            "LARGE_CAP",
+            "MID_CAP",
+            "L2",
+            "DEFI",
+            "AI",
+            "GAMING",
+        )
         assert hc.total_investment == 95
         assert hc.portfolio_constraints_preset == "small"
 

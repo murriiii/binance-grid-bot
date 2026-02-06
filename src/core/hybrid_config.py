@@ -40,6 +40,14 @@ class HybridConfig:
 
     # Coin selection
     min_confidence: float = 0.3
+    allowed_categories: tuple[str, ...] = (
+        "LARGE_CAP",
+        "MID_CAP",
+        "L2",
+        "DEFI",
+        "AI",
+        "GAMING",
+    )
 
     # Constraints preset
     portfolio_constraints_preset: str = "small"
@@ -103,9 +111,17 @@ class HybridConfig:
         """
         # All $100 cohorts use "small" preset — conservative/aggressive constraint
         # presets have per-coin limits (8%/15%) that produce positions below
-        # Binance's $10 minimum after Kelly adjustment.  Risk differentiation
-        # comes from grid_range_pct and min_confidence instead.
+        # Binance's $10 minimum after Kelly adjustment.
         preset = "small"
+
+        # Category filter by risk tolerance — the main coin differentiator
+        risk = cohort.config.risk_tolerance
+        if risk == "low":
+            categories = ("LARGE_CAP",)
+        elif risk == "high":
+            categories = ("LARGE_CAP", "MID_CAP", "L2", "DEFI", "AI", "GAMING")
+        else:
+            categories = ("LARGE_CAP", "MID_CAP", "L2")
 
         return cls(
             initial_mode=os.getenv("HYBRID_INITIAL_MODE", "GRID"),
@@ -116,6 +132,7 @@ class HybridConfig:
             mode_cooldown_hours=int(os.getenv("HYBRID_MODE_COOLDOWN_HOURS", 24)),
             hold_trailing_stop_pct=float(os.getenv("HYBRID_HOLD_TRAILING_STOP_PCT", 7.0)),
             min_confidence=cohort.config.min_confidence,
+            allowed_categories=categories,
             grid_range_percent=cohort.config.grid_range_pct,
             num_grids=2,  # $100 budget → 2 grids to keep per-grid above $5 min_notional
             cash_exit_timeout_hours=float(os.getenv("HYBRID_CASH_EXIT_TIMEOUT_HOURS", 2.0)),
@@ -160,5 +177,6 @@ class HybridConfig:
             "min_position_usd": self.min_position_usd,
             "total_investment": self.total_investment,
             "min_confidence": self.min_confidence,
+            "allowed_categories": list(self.allowed_categories),
             "portfolio_constraints_preset": self.portfolio_constraints_preset,
         }
