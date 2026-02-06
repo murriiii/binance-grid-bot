@@ -1,3 +1,15 @@
+## v1.8.1 (2026-02-06)
+
+### Fix
+
+- pre-testphase hardening — 13 issues across 6 phases
+
+## v1.8.0 (2026-02-06)
+
+### Fix
+
+- production readiness — stop-loss safety, SIGTERM, Docker infra, DB consolidation
+
 ## v1.7.1 (2026-02-06)
 
 ### Refactor
