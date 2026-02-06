@@ -345,14 +345,3 @@ class WhaleAlertTracker:
         except Exception as e:
             logger.error(f"DB Error: {e}")
             return False
-
-
-# Für Echtzeit-Tracking (später implementieren)
-class WhaleAlertWebSocket:
-    """
-    WebSocket-Verbindung für Echtzeit Whale Alerts.
-
-    TODO: Implementieren wenn kostenpflichtiger API-Zugang vorhanden
-    """
-
-    pass

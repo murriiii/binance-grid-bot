@@ -21,8 +21,8 @@ pytest tests/test_grid_strategy.py::TestGridStrategy::test_initialization -v
 pytest tests/ --cov=src --cov-report=term-missing
 
 # Lint and format
-ruff check src/ tests/ docker/
-ruff format src/ tests/ docker/
+ruff check src/ tests/ docker/scheduler.py main_hybrid.py
+ruff format src/ tests/ docker/scheduler.py main_hybrid.py
 
 # Type checking
 mypy src/
@@ -30,11 +30,11 @@ mypy src/
 # Pre-commit hooks (runs automatically on commit)
 pre-commit run --all-files
 
-# Start Docker services
+# Start Docker services (classic single-coin GridBot)
 cd docker && docker-compose up -d
 
-# View bot logs
-docker logs -f trading-bot
+# Start Docker services (hybrid multi-coin system)
+cd docker && docker-compose --profile hybrid up -d
 ```
 
 ## Code Conventions
@@ -46,20 +46,65 @@ docker logs -f trading-bot
 - **Commits**: Conventional commits enforced by commitizen (`feat:`, `fix:`, `bump:`, etc.)
 - **Test markers**: `@pytest.mark.slow`, `@pytest.mark.integration`
 - **Coverage**: 60% minimum (`fail_under = 60` in pyproject.toml)
+- **mypy**: Legacy modules have `ignore_errors = true` in pyproject.toml. New modules are strictly checked.
 
 ## Architecture Overview
 
-### Core Components
+### Two Entry Points
 
-The bot is built around a **GridBot** orchestrator (`src/core/bot.py`) that manages the trading lifecycle:
+The system has two operational modes:
+
+1. **`main.py`** - Classic single-coin GridBot (standalone)
+2. **`main_hybrid.py`** - Hybrid multi-coin system with regime-adaptive mode switching
 
 ```
-GridBot → GridStrategy → BinanceClient → Trade Execution
-    ↓                         ↓
-TradingMemory (PostgreSQL) ← Market Data ← External APIs
-    ↓
-DeepSeek AI (optional enhancement)
+main_hybrid.py
+     │
+     ▼
+HybridOrchestrator ──── ModeManager (hysteresis)
+     │                       │
+     ├── HOLD mode ──────── RegimeDetector (HMM)
+     ├── GRID mode ──────── GridBot.tick() per symbol
+     └── CASH mode ──────── Cancel orders, sell positions
+     │
+     ├── CoinScanner ────── Opportunity scoring
+     ├── PortfolioAllocator  Kelly-based allocation
+     └── BinanceClient ──── Shared across all symbols
 ```
+
+### Hybrid Trading System
+
+The HybridOrchestrator (`src/core/hybrid_orchestrator.py`) manages multi-coin trading across three regime-adaptive modes:
+
+| Mode | Regime | Behavior |
+|------|--------|----------|
+| HOLD | BULL | Market-buy allocations, 7% trailing stop, ride the trend |
+| GRID | SIDEWAYS | Grid trading via `GridBot.tick()` per symbol |
+| CASH | BEAR | Cancel orders, sell positions, preserve capital in USDT |
+
+**Mode switching** is controlled by `ModeManager` (`src/core/mode_manager.py`) with hysteresis protection:
+- Requires regime probability >= 75% AND duration >= 2 days before switching
+- 24h cooldown between mode switches
+- Safety lock: >2 transitions in 48h forces GRID mode
+- **Exception**: BEAR with probability >= 85% triggers immediate CASH (emergency capital protection)
+
+**Per-symbol state** is tracked via `SymbolState` dataclass (mode, grid bot instance, hold quantity, allocation, stop-loss IDs). State is persisted to `config/hybrid_state.json` with atomic writes (temp + rename).
+
+**6 transition paths**: GRID↔HOLD, GRID↔CASH, HOLD↔CASH. Each transition has specific cleanup logic (e.g., GRID→HOLD converts active orders to hold position; HOLD→CASH tightens trailing stop to 3%).
+
+**Config**: `HybridConfig` (`src/core/hybrid_config.py`) loaded from `HYBRID_*` env vars. Key settings:
+```
+HYBRID_INITIAL_MODE, HYBRID_ENABLE_MODE_SWITCHING, HYBRID_TOTAL_INVESTMENT,
+HYBRID_MAX_SYMBOLS, HYBRID_MIN_POSITION_USD, HYBRID_HOLD_TRAILING_STOP_PCT,
+HYBRID_MODE_COOLDOWN_HOURS, HYBRID_MIN_REGIME_PROBABILITY, HYBRID_MIN_REGIME_DURATION_DAYS
+```
+
+### GridBot with tick()
+
+`GridBot` (`src/core/bot.py`) exposes a `tick()` method extracted from the main loop. This allows:
+- **Standalone**: `GridBot.run()` calls `tick()` in a loop (classic mode via `main.py`)
+- **Orchestrated**: `HybridOrchestrator` calls `GridBot.tick()` per symbol in GRID mode
+- GridBot accepts an optional external `BinanceClient` to share connections across symbols
 
 ### Singleton Services
 
@@ -67,21 +112,18 @@ Critical shared resources use the singleton pattern with `get_instance()` and `r
 - `get_config()` - Global configuration from environment
 - `get_http_client()` - Centralized HTTP with retry/caching/file uploads
 - `DatabaseManager.get_instance()` - PostgreSQL connection pooling (1-10 connections)
-- `TelegramService.get_instance()` - Notification service
+- `TelegramService.get_instance()` - Notification service (4096 char message limit with truncation)
+- `ModeManager.get_instance()` - Regime-adaptive mode switching with hysteresis
 - `MarketDataProvider.get_instance()` - Price data with caching
 - `WatchlistManager.get_instance()` - Multi-coin universe management
 - `CoinScanner.get_instance()` - Opportunity detection across coins
-- `PortfolioAllocator.get_instance()` - Kelly-based capital allocation
-- `CohortManager.get_instance()` - Parallel strategy variants
-- `CycleManager.get_instance()` - Weekly trading cycles
-- `SignalAnalyzer.get_instance()` - Signal breakdown storage
-- `MetricsCalculator.get_instance()` - Risk metrics (Sharpe, Sortino, Kelly)
+- `PortfolioAllocator.get_instance()` - Kelly-based capital allocation (regime-aware)
 - `RegimeDetector.get_instance()` - HMM market regime detection
-- `BayesianWeightLearner.get_instance()` - Adaptive signal weights
-- `DivergenceDetector.get_instance()` - Technical divergences
-- `ABTestingFramework.get_instance()` - A/B testing with statistics
-- `CVaRPositionSizer.get_instance()` - Risk-based position sizing
-- `DynamicGridStrategy.get_instance()` - ATR-based grid spacing
+- `DynamicGridStrategy.get_instance()` - ATR-based grid spacing (cache with eviction policy, max 50 entries)
+- `CohortManager.get_instance()`, `CycleManager.get_instance()`, `SignalAnalyzer.get_instance()`,
+  `MetricsCalculator.get_instance()`, `BayesianWeightLearner.get_instance()`,
+  `DivergenceDetector.get_instance()`, `ABTestingFramework.get_instance()`,
+  `CVaRPositionSizer.get_instance()`
 
 ### HTTP Client Pattern
 
@@ -107,105 +149,32 @@ with db.get_cursor() as cur:
     rows = cur.fetchall()
 ```
 
-### Key Modules
-
-| Module | Purpose |
-|--------|---------|
-| `src/core/bot.py` | Main GridBot orchestrator with error recovery |
-| `src/core/config.py` | Dataclass configs loaded from env vars |
-| `src/core/cohort_manager.py` | Parallel strategy variants (conservative/balanced/aggressive/baseline) |
-| `src/core/cycle_manager.py` | Weekly trading cycles with performance tracking |
-| `src/api/http_client.py` | Centralized HTTP with retries, rate limits, file uploads |
-| `src/data/database.py` | PostgreSQL connection pooling (DatabaseManager) |
-| `src/data/watchlist.py` | Multi-coin universe (25+ coins, 6 categories) |
-| `src/scanner/coin_scanner.py` | Opportunity detection (technical, volume, sentiment scores) |
-| `src/portfolio/allocator.py` | Kelly-based allocation with constraints |
-| `src/strategies/grid_strategy.py` | Grid level calculation and order logic |
-| `src/strategies/dynamic_grid.py` | ATR-based grid spacing, asymmetric grids |
-| `src/data/memory.py` | PostgreSQL-based trading memory (RAG pattern) |
-| `src/data/playbook.py` | Self-learning Trading Playbook generator |
-| `src/analysis/signal_analyzer.py` | Signal breakdown persistence per trade |
-| `src/analysis/metrics_calculator.py` | Sharpe, Sortino, Kelly, VaR, CVaR |
-| `src/analysis/regime_detection.py` | HMM for BULL/BEAR/SIDEWAYS detection |
-| `src/analysis/bayesian_weights.py` | Dirichlet-based adaptive signal weights |
-| `src/analysis/divergence_detector.py` | RSI, MACD, Stochastic, MFI, OBV divergences |
-| `src/optimization/ab_testing.py` | Statistical A/B testing (Welch t-test, Mann-Whitney U) |
-| `src/risk/cvar_sizing.py` | CVaR-based position sizing |
-| `src/risk/stop_loss.py` | Stop-loss management (fixed, trailing, ATR) |
-| `src/strategies/ai_enhanced.py` | DeepSeek AI integration with fallbacks |
-
 ### Grid Strategy Logic
 
 1. Calculate grid levels: `spacing = (upper - lower) / num_grids`
 2. Each level gets `investment_per_grid / price` quantity
-3. Validate against Binance min_qty and min_notional
+3. Validate against Binance min_qty and min_notional (percentage-based price matching: 0.1% tolerance)
 4. On BUY fill → place SELL at next higher level
 5. On SELL fill → place BUY at next lower level
-
-### Cohort System
-
-Parallel strategy testing with 4 cohorts running simultaneously:
-- **Conservative**: Tight grids (2%), high confidence (>0.7), only F&G < 40
-- **Balanced**: Standard grids (5%), medium confidence (>0.5), playbook-driven
-- **Aggressive**: Wide grids (8%), low confidence ok, trades at F&G > 60
-- **Baseline**: No changes, week 1 strategy for comparison
-
-Each cohort has separate trades tracked via `cohort_id` in the database.
-
-### Cycle Management
-
-Weekly trading cycles (Sunday 00:00 - Saturday 23:59):
-- Fresh capital allocation per cycle
-- Full metrics calculated at cycle end (Sharpe, Sortino, Kelly, VaR, CVaR)
-- Cycle-to-cycle comparison for learning
 
 ### Multi-Coin Trading Pipeline
 
 1. **WatchlistManager** maintains coin universe (25+ coins in 6 categories: LARGE_CAP, MID_CAP, L2, DEFI, AI, GAMING)
 2. **CoinScanner** scores opportunities on 5 dimensions: technical (30%), volume (20%), sentiment (15%), whale (15%), momentum (20%)
-3. **PortfolioAllocator** distributes capital via Kelly Criterion with constraints (max 10% per coin, 30% per category, 20% cash reserve)
-4. Constraint presets: `CONSERVATIVE_CONSTRAINTS`, `BALANCED_CONSTRAINTS`, `AGGRESSIVE_CONSTRAINTS`
+3. **PortfolioAllocator** distributes capital via Kelly Criterion with regime-aware constraints
+4. Constraint presets: `CONSERVATIVE_CONSTRAINTS`, `BALANCED_CONSTRAINTS`, `AGGRESSIVE_CONSTRAINTS`, `SMALL_PORTFOLIO_CONSTRAINTS`
+5. ModeManager selects constraints based on current mode (HOLD→aggressive, GRID→balanced/small, CASH→conservative)
 
-### Data Flow
+### Task Locking
 
-Trades are stored with full context in PostgreSQL:
-- Entry conditions (fear_greed, btc_price, trend)
-- Decision signals (math_signal, ai_signal, confidence)
-- Signal components breakdown via `signal_components` table
-- Outcomes tracked at 1h, 24h, 7d intervals
+Scheduled tasks use `@task_locked` from `src/utils/task_lock.py` to prevent concurrent execution:
+```python
+from src.utils.task_lock import task_locked
 
-The Memory System (`TradingMemory`) retrieves similar historical trades for AI context generation.
-
-### Trading Playbook
-
-The Playbook (`config/TRADING_PLAYBOOK.md`) is a self-learning "experience memory":
-- Auto-generated weekly from trade outcomes (Sundays 19:00)
-- Included in DeepSeek prompts as system context
-- Contains Fear & Greed rules, success rates, anti-patterns
-- Historical versions stored in `config/playbook_history/`
-
-### Logging System
-
-All logs are JSON-structured in `logs/` directory:
-- `error.log` - Exceptions with full context
-- `trade.log` - Every trade with market data
-- `decision.log` - AI decisions with reasoning
-- `performance.log` - Daily/weekly metrics
-- `playbook.log` - Playbook updates
-
-### External APIs
-
-| API | Module | Notes |
-|-----|--------|-------|
-| Binance | `src/api/binance_client.py` | Rate limited (1000/min) |
-| DeepSeek | `src/strategies/ai_enhanced.py` | 30s timeout, 3 retries |
-| Alternative.me | `src/data/sentiment.py` | Fear & Greed Index |
-| LunarCrush | `src/data/social_sentiment.py` | Galaxy Score, social volume |
-| Reddit (PRAW) | `src/data/social_sentiment.py` | Mentions, sentiment |
-| Farside Investors | `src/data/etf_flows.py` | Bitcoin ETF flows |
-| TokenUnlocks.app | `src/data/token_unlocks.py` | Supply events |
-| Blockchain.com | `src/data/whale_alert.py` | BTC whale tracking |
-| Telegram | `src/notifications/telegram_service.py` | Bot notifications |
+@task_locked
+def my_scheduled_task():
+    pass  # Skips if already running (non-blocking)
+```
 
 ### Error Handling
 
@@ -225,9 +194,12 @@ DEEPSEEK_API_KEY, TELEGRAM_BOT_TOKEN, BINANCE_API_KEY
 DATABASE_URL, REDIS_URL
 ```
 
+Hybrid-specific config in `src/core/hybrid_config.py` with `HYBRID_*` prefix.
+
 ## Docker Services
 
-- `trading-bot` - Main GridBot
+- `trading-bot` - Classic single-coin GridBot
+- `hybrid-bot` - Hybrid multi-coin system (requires `--profile hybrid`)
 - `telegram-handler` - Telegram commands (separate process)
 - `scheduler` - Background tasks (see Key Scheduled Tasks)
 - `postgres` - Trading memory database
@@ -237,18 +209,15 @@ DATABASE_URL, REDIS_URL
 
 | Task | Schedule | Description |
 |------|----------|-------------|
+| Mode Evaluation | Hourly (:15) | Evaluate regime, check mode switch |
+| Hybrid Rebalance | Every 6h | Check allocation drift (>5% threshold) |
 | Cycle Management | Sun 00:00 | End/start weekly cycles |
 | Watchlist Update | Every 30min | Update market data for all coins |
 | Opportunity Scan | Every 2h | Scan coins for trading opportunities |
 | Portfolio Rebalance | 06:00 daily | Check allocation constraints |
-| Coin Performance | 21:30 daily | Update per-coin metrics |
 | Regime Detection | Every 4h | HMM market regime update |
 | Signal Weights | 22:00 daily | Bayesian weight update |
 | Divergence Scan | Every 2h | RSI/MACD divergences |
-| Social Sentiment | Every 4h | LunarCrush, Reddit |
-| ETF Flows | 10:00 daily | Bitcoin/ETH ETF tracking |
-| Token Unlocks | 08:00 daily | Supply events |
-| A/B Test Check | 23:00 daily | Statistical significance |
 | Playbook Update | Sun 19:00 | Generate new playbook |
 | Weekly Export | Sat 23:00 | Create analysis export |
 
@@ -256,12 +225,13 @@ DATABASE_URL, REDIS_URL
 
 Tests use fixtures from `tests/conftest.py`:
 - `reset_singletons` - Resets original singleton instances between tests
-- `reset_new_singletons` - Resets Phase 1-5 singleton instances
+- `reset_new_singletons` - Resets hybrid system singletons (ModeManager, etc.)
 - `mock_env_vars` - Sets test environment variables (autouse)
 - `sample_ohlcv_data` - OHLCV data for technical analysis tests
 - `sample_returns` - Return data for risk calculation tests
 - `sample_trade_history` - Trade history for signal analysis
-- Sample response fixtures for API mocking
+
+Mock external APIs at module level: `@patch("src.module.get_http_client")`
 
 Symbol info format for GridStrategy tests uses flat dict:
 ```python

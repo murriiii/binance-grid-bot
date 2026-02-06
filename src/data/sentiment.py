@@ -279,7 +279,7 @@ class SentimentAggregator:
             fear_greed=fg["value"],
             social_score=social_score,
             reddit_activity=reddit_score,
-            google_trend=0,  # TODO: Google Trends integrieren
+            google_trend=0,
             overall_score=overall,
             signal=signal,
             reasoning=reasoning,
