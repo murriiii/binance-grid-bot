@@ -1,3 +1,17 @@
+## v1.8.2 (2026-02-06)
+
+### Fix
+
+- pre-testphase hardening — 18 issues across 3 phases
+
+### Refactor
+
+- consolidate singleton test fixtures
+- migrate HTTPClient to SingletonMixin
+- migrate CoinScanner to SingletonMixin
+- migrate WatchlistManager to SingletonMixin
+- migrate DatabaseManager to SingletonMixin
+
 ## v1.8.1 (2026-02-06)
 
 ### Fix
