@@ -20,7 +20,7 @@ def task_mode_evaluation():
         from src.analysis.regime_detection import RegimeDetector
 
         detector = RegimeDetector.get_instance()
-        regime_state = detector.detect_regime("BTCUSDT")
+        regime_state = detector.predict_regime()
 
         if not regime_state:
             logger.warning("Mode evaluation: no regime data, skipping")
@@ -32,7 +32,9 @@ def task_mode_evaluation():
         hybrid_config = HybridConfig.from_env()
         manager = ModeManager.get_instance(hybrid_config)
 
-        manager.update_regime_info(regime_state.regime.value, regime_state.probability)
+        manager.update_regime_info(
+            regime_state.current_regime.value, regime_state.regime_probability
+        )
 
         # Get regime duration from DB
         regime_duration_days = 0
@@ -51,7 +53,7 @@ def task_mode_evaluation():
                             WHERE regime != %s
                         )
                     """,
-                        (regime_state.regime.value, regime_state.regime.value),
+                        (regime_state.current_regime.value, regime_state.current_regime.value),
                     )
                     row = cur.fetchone()
                     if row and row["first_seen"]:
@@ -62,15 +64,15 @@ def task_mode_evaluation():
                 conn.close()
 
         recommended_mode, reason = manager.evaluate_mode(
-            regime_state.regime.value,
-            regime_state.probability,
+            regime_state.current_regime.value,
+            regime_state.regime_probability,
             regime_duration_days,
         )
 
         current_mode = manager.get_current_mode()
         logger.info(
-            f"Mode evaluation: regime={regime_state.regime.value} "
-            f"(prob={regime_state.probability:.2f}, dur={regime_duration_days}d) "
+            f"Mode evaluation: regime={regime_state.current_regime.value} "
+            f"(prob={regime_state.regime_probability:.2f}, dur={regime_duration_days}d) "
             f"-> recommended={recommended_mode.value} (reason: {reason})"
         )
 
@@ -89,8 +91,8 @@ def task_mode_evaluation():
                         (
                             recommended_mode.value,
                             current_mode.current_mode.value,
-                            regime_state.regime.value,
-                            regime_state.probability,
+                            regime_state.current_regime.value,
+                            regime_state.regime_probability,
                             regime_duration_days,
                             reason,
                         ),
@@ -107,7 +109,7 @@ def task_mode_evaluation():
             telegram.send(f"""
 <b>MODE EVALUATION</b>
 
-Regime: {regime_state.regime.value} ({regime_state.probability:.1%})
+Regime: {regime_state.current_regime.value} ({regime_state.regime_probability:.1%})
 Duration: {regime_duration_days}d
 
 Current: {current_mode.current_mode.value}

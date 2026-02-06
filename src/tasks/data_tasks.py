@@ -52,7 +52,7 @@ def task_fetch_social_sentiment():
         symbols = ["BTC", "ETH", "SOL"]
 
         for symbol in symbols:
-            metrics = provider.get_sentiment(symbol)
+            metrics = provider.get_aggregated_sentiment(symbol)
 
             if metrics:
                 logger.info(
@@ -61,7 +61,7 @@ def task_fetch_social_sentiment():
                     f"Volume={metrics.social_volume}"
                 )
 
-                if abs(metrics.composite_sentiment) > 0.7:
+                if metrics.composite_sentiment and abs(metrics.composite_sentiment) > 0.7:
                     direction = "🚀 EUPHORIE" if metrics.composite_sentiment > 0 else "😰 PANIK"
                     telegram = get_telegram()
                     telegram.send(f"""

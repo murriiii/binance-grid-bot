@@ -3,9 +3,11 @@
 Ein regime-adaptiver Krypto-Trading-Bot mit Hybrid-System (HOLD/GRID/CASH), Multi-Coin Trading, AI-Enhancement, Memory-System und selbstlernendem Trading Playbook.
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![Version: 1.8.1](https://img.shields.io/badge/version-1.8.1-green.svg)](https://github.com/murriiii/binance-grid-bot/releases)
+[![Version: 1.8.2](https://img.shields.io/badge/version-1.8.2-green.svg)](https://github.com/murriiii/binance-grid-bot/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
+[![Tests: 888 passed](https://img.shields.io/badge/tests-888%20passed-brightgreen.svg)]()
+[![Coverage: 60%](https://img.shields.io/badge/coverage-60%25-yellowgreen.svg)]()
 
 ## Features
 
@@ -838,12 +840,29 @@ mypy src/
 ### Tests
 
 ```bash
-# Unit Tests
-pytest tests/
+# Alle Tests ausfuehren (888 Tests)
+pytest tests/ -v
 
-# Mit Coverage
-pytest --cov=src tests/
+# Mit Coverage (Minimum: 60%)
+pytest tests/ --cov=src --cov-report=term-missing
+
+# Einzelne Testdatei
+pytest tests/test_grid_strategy.py -v
 ```
+
+#### Test-Abdeckung
+
+| Bereich | Coverage | Tests |
+|---------|----------|-------|
+| Core (bot, orchestrator, mode) | 52-99% | GridBot, Hybrid, ModeManager |
+| Strategies | 47-99% | Grid, Dynamic, AI-Enhanced, Rebalance |
+| Tasks | 75-100% | Alle 8 Task-Module |
+| Notifications | 61-90% | Telegram, Charts, AI Assistants |
+| Data Providers | 21-73% | Market, Sentiment, Whale, ETF |
+| Risk | 49-94% | CVaR, Stop-Loss, Risk Guard |
+| API | 20-76% | Binance Client, HTTP Client |
+| Scanner/Portfolio | 43-97% | CoinScanner, Allocator |
+| **Gesamt** | **60%** | **888 Tests** |
 
 ### Pre-commit Hooks
 
@@ -860,9 +879,9 @@ pre-commit run --all-files
 
 Die GitHub Actions Pipeline:
 
-1. **Lint & Format**: Ruff checks
-2. **Type Check**: MyPy
-3. **Tests**: Pytest mit Coverage
+1. **Lint & Format**: Ruff checks (0 errors)
+2. **Type Check**: MyPy strict mode (0 errors)
+3. **Tests**: 888 Tests mit Coverage >= 60%
 4. **Auto-Release**: Bei Version-Bump in pyproject.toml wird automatisch ein GitHub Release erstellt
 
 ## Conventional Commits

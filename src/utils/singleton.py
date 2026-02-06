@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, ClassVar
+from typing import Any, ClassVar, TypeVar, cast
 
 logger = logging.getLogger("trading_bot")
+
+_T = TypeVar("_T", bound="SingletonMixin")
 
 
 class SingletonMixin:
@@ -34,11 +36,11 @@ class SingletonMixin:
         cls._instance = None
 
     @classmethod
-    def get_instance(cls, *args: Any, **kwargs: Any) -> Any:
+    def get_instance(cls: type[_T], *args: Any, **kwargs: Any) -> _T:
         """Return the singleton instance, creating it if needed."""
         if cls._instance is None:
             cls._instance = cls(*args, **kwargs)
-        return cls._instance
+        return cast("_T", cls._instance)
 
     @classmethod
     def reset_instance(cls) -> None:

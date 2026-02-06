@@ -35,24 +35,24 @@ def task_cycle_management():
                 cohort_id = str(cohort["id"])
                 cohort_name = cohort["name"]
 
-                closed_cycle = manager.close_current_cycle(cohort_id)
+                closed_cycle = manager.close_cycle(cohort_id)
 
                 if closed_cycle:
                     logger.info(
-                        f"Cycle {closed_cycle.cycle_number} closed for {cohort_name}: "
-                        f"P&L={closed_cycle.total_pnl_pct:.2f}%"
+                        f"Cycle {closed_cycle['cycle_number']} closed for {cohort_name}: "
+                        f"P&L={closed_cycle.get('total_pnl_pct', 0):.2f}%"
                     )
                     cycle_reports.append(
                         {
                             "cohort": cohort_name,
-                            "cycle": closed_cycle.cycle_number,
-                            "pnl_pct": closed_cycle.total_pnl_pct or 0,
-                            "sharpe": closed_cycle.sharpe_ratio or 0,
-                            "trades": closed_cycle.total_trades or 0,
+                            "cycle": closed_cycle["cycle_number"],
+                            "pnl_pct": closed_cycle.get("total_pnl_pct") or 0,
+                            "sharpe": closed_cycle.get("sharpe_ratio") or 0,
+                            "trades": closed_cycle.get("trades_count") or 0,
                         }
                     )
 
-                new_cycle = manager.start_new_cycle(cohort_id)
+                new_cycle = manager.start_cycle(cohort_id, cohort_name)
 
                 if new_cycle:
                     logger.info(f"Cycle {new_cycle.cycle_number} started for {cohort_name}")

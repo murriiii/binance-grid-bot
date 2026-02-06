@@ -90,10 +90,8 @@ Signals: {signals_str}
                 from src.core.cohort_manager import CohortManager
 
                 cohort_manager = CohortManager.get_instance()
-
-                top_5 = scanner.get_top_opportunities(5)
-                for opp in top_5:
-                    cohort_manager.evaluate_opportunity(opp)
+                trading_cohorts = cohort_manager.get_active_cohorts()
+                logger.info(f"Active cohorts: {len(trading_cohorts)}")
 
             except Exception as e:
                 logger.debug(f"Cohort evaluation skipped: {e}")

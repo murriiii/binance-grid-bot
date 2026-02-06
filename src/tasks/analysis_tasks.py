@@ -18,15 +18,15 @@ def task_regime_detection():
         from src.analysis.regime_detection import RegimeDetector
 
         detector = RegimeDetector.get_instance()
-        regime_state = detector.detect_regime("BTCUSDT")
+        regime_state = detector.predict_regime()
 
         if not regime_state:
             logger.warning("Regime detection returned None - using SIDEWAYS fallback")
 
         if regime_state:
             logger.info(
-                f"Market Regime: {regime_state.regime.value} "
-                f"(probability: {regime_state.probability:.2f})"
+                f"Market Regime: {regime_state.current_regime.value} "
+                f"(probability: {regime_state.regime_probability:.2f})"
             )
 
             detector.store_regime(regime_state)
@@ -42,14 +42,14 @@ def task_regime_detection():
                         """)
                         prev = cur.fetchone()
 
-                        if prev and prev["regime"] != regime_state.regime.value:
+                        if prev and prev["regime"] != regime_state.current_regime.value:
                             telegram = get_telegram()
                             telegram.send(f"""
 🔄 <b>REGIME CHANGE DETECTED</b>
 
-{prev["regime"]} → <b>{regime_state.regime.value}</b>
+{prev["regime"]} → <b>{regime_state.current_regime.value}</b>
 
-Probability: {regime_state.probability:.1%}
+Probability: {regime_state.regime_probability:.1%}
 Confidence: {regime_state.model_confidence:.1%}
 
 <i>Signal-Gewichte werden angepasst.</i>
