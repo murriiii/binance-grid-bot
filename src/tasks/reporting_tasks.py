@@ -160,26 +160,24 @@ def _build_cohort_status() -> str:
             cohort_name = fname.replace("hybrid_state_", "") if "_" in fname else "default"
 
             db_info = cohort_info.get(cohort_name, {})
-            starting = db_info.get("starting_capital", 100) if db_info else 100
+            starting = float(db_info.get("starting_capital", 100)) if db_info else 100.0
             config_data = db_info.get("config", {}) if db_info else {}
             grid_pct = config_data.get("grid_range_pct", "?") if config_data else "?"
             risk = config_data.get("risk_tolerance", "?") if config_data else "?"
 
             # Calculate current value from symbols
+            # Note: all cohorts share one Binance account, so we use
+            # allocation_usd from the state file (virtual per-cohort tracking)
+            # instead of get_account_balance() which returns the total.
             total_value = 0.0
             symbol_lines = []
             for sym, sdata in state.get("symbols", {}).items():
                 alloc = sdata.get("allocation_usd", 0)
-                value = alloc  # fallback
+                total_value += alloc
 
                 if client:
                     try:
                         price = client.get_current_price(sym)
-                        base = sym.replace("USDT", "")
-                        balance = client.get_account_balance(base)
-                        if price and balance:
-                            value = balance * price
-
                         orders = client.client.get_open_orders(symbol=sym)
                         n_buy = sum(1 for o in orders if o["side"] == "BUY")
                         n_sell = sum(1 for o in orders if o["side"] == "SELL")
@@ -192,8 +190,7 @@ def _build_cohort_status() -> str:
                     order_info = "?"
                     price_str = "N/A"
 
-                total_value += value
-                val_str = f"${value:.2f}" if value > 0 else "-"
+                val_str = f"${alloc:.2f}" if alloc > 0 else "-"
                 symbol_lines.append(f"  {sym}: {price_str} | {val_str} | {order_info}")
 
             # P&L calculation
