@@ -1,3 +1,9 @@
+## v1.13.0 (2026-02-06)
+
+### Feat
+
+- unique coins per cohort + $1000 budget for learning phase
+
 ## v1.12.0 (2026-02-06)
 
 ### Feat
