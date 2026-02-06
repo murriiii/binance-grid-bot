@@ -210,7 +210,8 @@ def _build_cohort_status() -> str:
     # Totals for footer
     total_starting = 0.0
     total_current = 0.0
-    total_trades = 0
+    total_closed_trades = 0
+    total_open_orders = 0
     total_coins = 0
 
     for sf in state_files:
@@ -239,6 +240,8 @@ def _build_cohort_status() -> str:
                 price_str = "—"
                 order_str = "—"
                 mkt_val = 0.0
+                n_buy = 0
+                n_sell = 0
                 if client:
                     try:
                         price = client.get_current_price(sym)
@@ -261,6 +264,7 @@ def _build_cohort_status() -> str:
                             mkt_val = held_qty * price
                     except Exception:
                         pass
+                total_open_orders += n_buy + n_sell
 
                 # Show market value if holding, otherwise allocation
                 val_str = f"${mkt_val:.0f}" if mkt_val >= 1 else f"${alloc:.0f}"
@@ -281,7 +285,7 @@ def _build_cohort_status() -> str:
             # Accumulate totals
             total_starting += starting
             total_current += current_value
-            total_trades += trade_count
+            total_closed_trades += trade_count
             total_coins += len(coin_rows)
 
             # P&L percentage based on total (realized + unrealized)
@@ -327,7 +331,10 @@ def _build_cohort_status() -> str:
             f"${total_current:,.0f} ({total_pnl_pct:+.1f}%)"
         )
         n_bots = len(state_files)
-        lines.append(f"🤖 {n_bots} Bots · {total_coins} Coins · {total_trades} Trades")
+        orders_str = f"📋 {total_open_orders} Orders"
+        if total_closed_trades > 0:
+            orders_str += f" · ✅ {total_closed_trades} Closed"
+        lines.append(f"🤖 {n_bots} Bots · {total_coins} Coins · {orders_str}")
 
     return "\n".join(lines)
 
