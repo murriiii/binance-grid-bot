@@ -189,18 +189,21 @@ def _build_cohort_status() -> str:
         finally:
             conn.close()
 
-    # Pre-fetch all balances once (much faster than per-symbol queries)
-    balances = {}
-    if client:
+    # Pre-load all grid state files to get actual held quantities per cohort+symbol.
+    # SELL orders in grid state = coins the bot bought and is holding.
+    # Using account balance would include pre-loaded testnet balances.
+    grid_states: dict[str, dict] = {}  # key: "{cohort}:{symbol}" -> grid state
+    for gs_file in config_dir.glob("grid_state_*_*.json"):
         try:
-            account = client.client.get_account()
-            for b in account.get("balances", []):
-                free = float(b["free"])
-                locked = float(b["locked"])
-                if free > 0 or locked > 0:
-                    balances[b["asset"]] = free + locked
-        except Exception as e:
-            logger.debug(f"Failed to fetch balances: {e}")
+            with open(gs_file) as gf:
+                gs = json.load(gf)
+            # filename: grid_state_BTCUSDT_conservative.json
+            parts = gs_file.stem.replace("grid_state_", "").rsplit("_", 1)
+            if len(parts) == 2:
+                grid_sym, grid_cohort = parts
+                grid_states[f"{grid_cohort}:{grid_sym}"] = gs
+        except Exception:
+            pass
 
     lines = ["<b>📊 PORTFOLIO DASHBOARD</b>", "━━━━━━━━━━━━━━━━━━━━━"]
 
@@ -245,14 +248,21 @@ def _build_cohort_status() -> str:
                         price_str = _format_price(price) if price else "—"
                         order_str = f"{n_buy}B/{n_sell}S"
 
-                        # Calculate market value from held balance + locked in orders
-                        held = balances.get(base, 0)
-                        if price and held > 0:
-                            mkt_val = held * price
+                        # Calculate held qty from grid state SELL orders
+                        # (SELL orders = coins the bot bought and is holding)
+                        gs_key = f"{cohort_name}:{sym}"
+                        gs = grid_states.get(gs_key, {})
+                        held_qty = sum(
+                            float(o["quantity"])
+                            for o in gs.get("active_orders", {}).values()
+                            if o.get("type") == "SELL"
+                        )
+                        if price and held_qty > 0:
+                            mkt_val = held_qty * price
                     except Exception:
                         pass
 
-                # Show market value instead of static allocation
+                # Show market value if holding, otherwise allocation
                 val_str = f"${mkt_val:.0f}" if mkt_val >= 1 else f"${alloc:.0f}"
                 cohort_market_value += mkt_val if mkt_val >= 1 else alloc
                 coin_rows.append(f"  {base:<6s} {price_str:>8s}  {val_str:>5s}  {order_str}")

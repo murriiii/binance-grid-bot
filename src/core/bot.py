@@ -76,7 +76,7 @@ class TelegramNotifier:
         if not svc:
             return
         if urgent:
-            svc.send_urgent(message, force=True)
+            svc.send_urgent(message)
         else:
             svc.send(message)
 
