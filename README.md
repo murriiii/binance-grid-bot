@@ -3,7 +3,7 @@
 Ein regime-adaptiver Krypto-Trading-Bot mit Hybrid-System (HOLD/GRID/CASH), Multi-Coin Trading, AI-Enhancement, Memory-System und selbstlernendem Trading Playbook.
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![Version: 1.16.0](https://img.shields.io/badge/version-1.16.0-green.svg)](https://github.com/murriiii/binance-grid-bot/releases)
+[![Version: 1.20.0](https://img.shields.io/badge/version-1.20.0-green.svg)](https://github.com/murriiii/binance-grid-bot/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 [![Tests: 1089 passed](https://img.shields.io/badge/tests-1089%20passed-brightgreen.svg)]()
@@ -21,12 +21,14 @@ Ein regime-adaptiver Krypto-Trading-Bot mit Hybrid-System (HOLD/GRID/CASH), Mult
 ### Core Trading
 - **Grid Trading Strategy** - Automatisches Kaufen/Verkaufen in definierten Preisbändern
 - **Decimal Precision** - Alle Preis-/Mengenberechnungen nutzen `Decimal` statt `float` (keine Binance-Rejections durch Rundungsfehler)
-- **Fee-Aware Trading** - Binance Taker-Fees (0.1%) werden bei Sell-Quantities automatisch abgezogen
+- **Fee-Aware Trading** - Binance Taker-Fees (0.1%) werden bei Sell-Quantities automatisch abgezogen, Fee-Aware Grid Spacing Warning bei zu engen Grids
 - **Multi-Coin Trading** - Handel ueber 2-3 Coins pro Cohort mit intelligenter Kapitalverteilung
 - **Dynamic Grid Strategy** - ATR-basierte Grid-Ranges pro Symbol (Range-Bridge: DynamicGridStrategy berechnet Range, GridStrategy behält Decimal-Precision), auto Grid-Rebuild bei Preis-Drift (30 Min Check)
+- **Dynamic Grid Count** - Volatilitaets-basierte Grid-Anzahl (LOW=7, NORMAL=10, HIGH=12, EXTREME=15) statt statischer Konfiguration
+- **Slippage Tracking** - Expected vs. Filled Price Tracking in Basis Points pro Trade
 - **AI-Enhanced Decisions** - DeepSeek-Integration für intelligentere Entscheidungen
 - **Trading Playbook** - Selbstlernendes "Erfahrungsgedächtnis" das aus Trades lernt
-- **Memory System** - PostgreSQL-basiertes RAG-System für historische Muster
+- **Memory System** - PostgreSQL-basiertes RAG-System mit Multi-Dimensional Similarity Scoring (Gaussian F&G Decay, Regime-Match, Symbol-Match, Temporal Decay)
 
 ### Multi-Coin System
 - **Watchlist Management** - 35+ Coins in 7 Kategorien (LARGE_CAP, MID_CAP, L2, DEFI, AI, GAMING, MEME)
@@ -70,16 +72,19 @@ Ein regime-adaptiver Krypto-Trading-Bot mit Hybrid-System (HOLD/GRID/CASH), Mult
 - **Follow-Up Retry** - Fehlgeschlagene Folge-Orders werden mit exponentiellem Backoff (2/5/15/30/60 Min) bis zu 5x wiederholt, kein Telegram-Spam
 - **Kelly Criterion** - Optimale Positionsgroessen-Berechnung
 - **Sharpe/Sortino Ratio** - Risiko-adjustierte Performance-Metriken
-- **Signal Breakdown** - 9-Signal Composite (F&G, RSI, MACD, Trend, Volume, Whale, Sentiment, Macro, AI) pro Trade-Fill in DB
+- **Signal Breakdown** - 9-Signal Composite (F&G, RSI, MACD, Trend, Volume, Whale, Sentiment, Macro, AI) pro Trade-Fill in DB mit AI Signal-Validierung (Enum, Confidence Clamping, Semantische Konsistenz)
 - **Metrics Snapshots** - Taegliche Sharpe/CVaR/Kelly Snapshots in `calculation_snapshots` Tabelle
+- **Data Retention** - Automatische Bereinigung alter Daten (8 Tabellen, konfigurierbare Retention: 30-180 Tage)
 
 ### Data Sources
 - **Fear & Greed Integration** - Sentiment-basierte Trading-Signale
-- **Social Sentiment** - LunarCrush, Reddit, Twitter Tracking
+- **Social Sentiment** - LunarCrush, Reddit, Twitter mit Source-Availability Dampening und Divergenz-Erkennung
 - **ETF Flow Tracking** - Bitcoin/Ethereum ETF Zuflüsse/Abflüsse
 - **Token Unlocks** - Supply Events vorausschauend berücksichtigt
 - **Whale Alert Tracking** - Überwachung großer Transaktionen
-- **Economic Events** - FOMC, CPI, NFP automatisch berücksichtigt
+- **Economic Events** - FOMC, CPI, NFP automatisch berücksichtigt (DB-Persistenz mit Deduplizierung)
+- **Funding Rate Signal** - Binance Futures Funding Rate (5min Cache, bearish bei >0.05%, bullish bei <-0.05%)
+- **Correlation Matrix** - 60-Tage Pearson-Korrelation zwischen Coin-Paaren, Allocator-Penalty fuer hochkorrelierte Positionen
 
 ### Technical Analysis
 - **Divergence Detection** - RSI, MACD, Stochastic, MFI, OBV Divergenzen
@@ -616,7 +621,8 @@ binance-grid-bot/
 │   │   ├── metrics_calculator.py # Sharpe, Sortino, Kelly
 │   │   ├── regime_detection.py # HMM Markt-Regime
 │   │   ├── bayesian_weights.py # Adaptive Signal-Gewichte
-│   │   └── divergence_detector.py # RSI/MACD Divergenzen
+│   │   ├── divergence_detector.py # RSI/MACD Divergenzen
+│   │   └── correlation_matrix.py # 60-Tage Pearson-Korrelation
 │   ├── optimization/
 │   │   └── ab_testing.py       # A/B Testing Framework
 │   ├── models/
@@ -640,7 +646,8 @@ binance-grid-bot/
 │   │   ├── portfolio_tasks.py  # Watchlist, Scan, Allocation
 │   │   ├── cycle_tasks.py      # Cycle Mgmt, Weekly Rebalance
 │   │   ├── reporting_tasks.py  # Summary, Export, Playbook
-│   │   └── monitoring_tasks.py # Order Reconciliation, Grid Health
+│   │   ├── monitoring_tasks.py # Order Reconciliation, Grid Health
+│   │   └── retention_tasks.py  # Data Retention Auto-Cleanup
 │   └── backtest/
 │       └── engine.py           # Backtesting Engine
 ├── docker/
@@ -882,6 +889,7 @@ DATABASE_URL=postgresql://trading:password@localhost:5433/trading_bot
 | **Analysis** | | |
 | Regime Detection | 4h | HMM Markt-Regime Update |
 | Divergence Scan | 2h | RSI/MACD Divergenzen |
+| Technical Indicators | 2h | Indikatoren berechnen und in DB schreiben |
 | Signal Weights | 22:00 | Bayesian Weight Update |
 | Pattern Learning | 21:00 | Tägliche Trade-Analyse |
 | **Risk & Performance** | | |
@@ -915,6 +923,8 @@ DATABASE_URL=postgresql://trading:password@localhost:5433/trading_bot
 | Profit Redistribution | So 17:00 | Tier-Rebalancing bei Drift > 3% |
 | AI Portfolio Optimizer | 1. des Monats | DeepSeek Tier-Gewichtungs-Empfehlung |
 | Production Validation | 09:00 | Go-Live Readiness Check |
+| **Data Maintenance** | | |
+| Data Retention Cleanup | 03:00 | Alte Daten bereinigen (8 Tabellen, 30-180 Tage) |
 
 ## Wöchentlicher Optimierungs-Workflow
 
@@ -1081,7 +1091,8 @@ chore: Update dependencies
 
 | API | Zweck | Auth |
 |-----|-------|------|
-| Binance | Trading, Preise | API Key |
+| Binance Spot | Trading, Preise | API Key |
+| Binance Futures | Funding Rate Signal | Keine (public) |
 | Alternative.me | Fear & Greed Index | Keine |
 | CoinGecko | Social Stats, Trending, Market Cap (Index Tier) | Keine |
 | LunarCrush | Social Sentiment, Galaxy Score | API Key |

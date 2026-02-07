@@ -1,3 +1,21 @@
+## v1.20.0 (2026-02-07)
+
+### Feat (Priorität B+C: 13 Optimierungen)
+
+- C1: Multi-dimensional RAG similarity scoring (Gaussian F&G, regime, symbol, temporal decay)
+- C2: CHECK constraints (9 columns), composite indexes (5), retention indexes (8), UNIQUE on economic_events
+- C3: AI signal validation (enum, confidence clamp, semantic consistency, reasoning quality)
+- C4: Sentiment source-availability dampening, volume-threshold dampening, divergence detection
+- D1: Fee-aware grid spacing warning + MIN_PROFITABLE_SPACING_PCT classmethod
+- D2: Data retention auto-cleanup task (8 tables, configurable retention days)
+- D3: Dynamic grid count by ATR volatility regime (LOW=7, NORMAL=10, HIGH=12, EXTREME=15)
+- D4: Slippage tracking in trades table (expected_price, slippage_bps)
+- D5: Funding rate signal from Binance Futures API (5min cache)
+- D6: Correlation matrix from 60-day daily returns + allocator penalty for correlated pairs
+- F2: technical_indicators writer task (every 2h, watchlist symbols)
+- F3: economic_events writer in task_macro_check (ON CONFLICT dedup)
+- F4: ai_conversations writer in DeepSeekAssistant.ask()
+
 ## v1.15.0 (2026-02-07)
 
 ### Feat

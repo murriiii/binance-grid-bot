@@ -303,7 +303,7 @@ Aufgabe:
             else:
                 raise ValueError("No JSON found")
 
-            return AISignal(
+            signal = AISignal(
                 direction=data.get("direction", "NEUTRAL"),
                 confidence=float(data.get("confidence", 0.0)),
                 reasoning=data.get("reasoning", "Keine Begründung"),
@@ -311,6 +311,7 @@ Aufgabe:
                 affected_assets=data.get("affected_assets", []),
                 risk_level=data.get("risk_level", "MEDIUM"),
             )
+            return self._validate_signal(signal)
         except Exception as e:
             return AISignal(
                 direction="NEUTRAL",
@@ -320,6 +321,53 @@ Aufgabe:
                 affected_assets=[],
                 risk_level="HIGH",
             )
+
+    @staticmethod
+    def _validate_signal(signal: AISignal) -> AISignal:
+        """C3: Validate and sanitize AI output.
+
+        Checks:
+        1. Enum validation for direction, action, risk_level
+        2. Confidence bounds clamped to 0.0-1.0
+        3. Semantic consistency (e.g. BEARISH+BUY → reduced confidence)
+        4. Reasoning quality (too short → reduced confidence)
+        """
+        valid_directions = {"BULLISH", "BEARISH", "NEUTRAL"}
+        valid_actions = {"BUY", "SELL", "HOLD", "REDUCE"}
+        valid_risk_levels = {"LOW", "MEDIUM", "HIGH"}
+
+        # 1. Enum validation
+        if signal.direction not in valid_directions:
+            logger.debug(f"AI signal: invalid direction '{signal.direction}', defaulting NEUTRAL")
+            signal.direction = "NEUTRAL"
+
+        if signal.action not in valid_actions:
+            logger.debug(f"AI signal: invalid action '{signal.action}', defaulting HOLD")
+            signal.action = "HOLD"
+
+        if signal.risk_level not in valid_risk_levels:
+            logger.debug(f"AI signal: invalid risk_level '{signal.risk_level}', defaulting MEDIUM")
+            signal.risk_level = "MEDIUM"
+
+        # 2. Confidence bounds
+        signal.confidence = max(0.0, min(1.0, signal.confidence))
+
+        # 3. Semantic consistency
+        bearish_buy = signal.direction == "BEARISH" and signal.action == "BUY"
+        bullish_sell = signal.direction == "BULLISH" and signal.action == "SELL"
+        if bearish_buy or bullish_sell:
+            logger.debug(
+                f"AI signal: semantic conflict {signal.direction}+{signal.action}, "
+                "reducing confidence"
+            )
+            signal.confidence *= 0.3
+
+        # 4. Reasoning quality
+        if len(signal.reasoning) < 10:
+            logger.debug("AI signal: reasoning too short, reducing confidence")
+            signal.confidence *= 0.5
+
+        return signal
 
 
 class HybridStrategy:

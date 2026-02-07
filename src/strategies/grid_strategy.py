@@ -7,6 +7,12 @@ from decimal import ROUND_DOWN, Decimal
 # Binance standard taker fee (0.1%). With BNB discount: 0.075%
 TAKER_FEE_RATE = Decimal("0.001")
 
+# D1: Round-trip fee = 2x taker fee (buy + sell)
+ROUND_TRIP_FEE_RATE = TAKER_FEE_RATE * 2  # 0.2%
+
+# D1: Minimum profitable spacing = round-trip fee + safety margin
+MIN_PROFITABLE_SPACING_PCT = float(ROUND_TRIP_FEE_RATE) * 100 * 1.5  # 0.3%
+
 logger = logging.getLogger("trading_bot")
 
 
@@ -59,10 +65,25 @@ class GridStrategy:
 
         self._calculate_grid_levels()
 
+    @classmethod
+    def get_min_profitable_spacing(cls) -> float:
+        """D1: Returns minimum profitable grid spacing in percent."""
+        return MIN_PROFITABLE_SPACING_PCT
+
     def _calculate_grid_levels(self):
         """Berechnet die Grid-Ebenen mit min_qty und min_notional Validierung"""
         price_range = self.upper_price - self.lower_price
         grid_spacing = price_range / self.num_grids
+
+        # D1: Fee-aware spacing check
+        mid_price = (self.lower_price + self.upper_price) / 2
+        spacing_pct = float(grid_spacing / mid_price) * 100 if mid_price > 0 else 0
+        if spacing_pct < MIN_PROFITABLE_SPACING_PCT:
+            logger.warning(
+                f"Grid spacing {spacing_pct:.3f}% is below minimum profitable "
+                f"spacing {MIN_PROFITABLE_SPACING_PCT:.3f}% (round-trip fees). "
+                f"Trades may not cover fees."
+            )
 
         investment_per_grid = self.total_investment / self.num_grids
 

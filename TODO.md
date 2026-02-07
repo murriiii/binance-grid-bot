@@ -142,35 +142,24 @@
 
 ### Priorität B: Optimierungen
 
-- [ ] C1: RAG-Similarity verbessern (`memory.py`)
-- [ ] C2: DB Retention + Indexes + Constraints (`init.sql`)
-- [ ] C3: AI-Output validieren (`ai_enhanced.py`)
-- [ ] C4: Sentiment Single-Source Dampening (`social_sentiment.py`)
-- [ ] D1: Fee-Aware Grid Calculation
-- [ ] D2: Data Retention Auto-Cleanup
-- [ ] D3: Dynamic Grid Count basierend auf ATR
-- [ ] D4: Slippage Tracking
-- [ ] D5: Funding Rate Signal
-- [ ] D6: Echte Korrelations-Matrix
+- [x] C1: RAG-Similarity verbessern (`memory.py`) — Multi-dimensional scoring
+- [x] C2: DB Retention + Indexes + Constraints (`init.sql`) — CHECK constraints + composite indexes
+- [x] C3: AI-Output validieren (`ai_enhanced.py`) — Enum/semantic/confidence validation
+- [x] C4: Sentiment Single-Source Dampening (`social_sentiment.py`) — Source-availability + divergence
+- [x] D1: Fee-Aware Grid Calculation — Round-trip fee warning + min profitable spacing
+- [x] D2: Data Retention Auto-Cleanup — Daily cleanup task with configurable retention
+- [x] D3: Dynamic Grid Count basierend auf ATR — Volatility-regime-based grid count
+- [x] D4: Slippage Tracking — Basis points in trades table + order_manager
+- [x] D5: Funding Rate Signal — Binance Futures funding rate in MarketDataProvider
+- [x] D6: Echte Korrelations-Matrix — 60-day Pearson correlation + allocator penalty
 
 ### Priorität C: Ungenutzte DB-Tabellen aktivieren
 
 - [x] **F1: portfolio_snapshots Writer** — → Phase 10.7
 
-- [ ] **F2: technical_indicators Writer** — Historische Indikator-Daten (MITTEL)
-  - Tabelle existiert (RSI, MACD, BB, SMA, ATR pro Symbol)
-  - Braucht: Neuer Scheduler-Task + Writer-Code (TechnicalIndicators Klasse erweitern)
-  - Mehrwert: Playbook-Lernen, Signal-Validierung, AI-Training, Dashboard-Kontext
-
-- [ ] **F3: economic_events Writer** — Makro-Event-Awareness (NIEDRIG)
-  - Tabelle existiert, task_macro_check scheduled aber schreibt nicht in DB
-  - Braucht: Writer in task_macro_check, API-Quelle für Events (z.B. investing.com)
-  - Mehrwert: Automatische Positionsreduktion vor wichtigen Events (Fed, CPI)
-
-- [ ] **F4: ai_conversations Writer** — Telegram Chat-Log (MINIMAL)
-  - Tabelle existiert für AI-Chat-History
-  - Braucht: Integration in Telegram AI-Handler
-  - Mehrwert: Minimal — nur Konversations-Logging, kein Trading-Mehrwert
+- [x] **F2: technical_indicators Writer** — Scheduler task every 2h, writes to DB
+- [x] **F3: economic_events Writer** — task_macro_check now persists to DB (ON CONFLICT dedup)
+- [x] **F4: ai_conversations Writer** — DeepSeekAssistant._save_conversation() after each call
 
 ---
 

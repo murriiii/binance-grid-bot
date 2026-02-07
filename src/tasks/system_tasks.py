@@ -373,6 +373,10 @@ def task_macro_check():
 
         calendar = EconomicCalendar()
         events = calendar.fetch_upcoming_events(days=2)
+
+        # F3: Persist events to economic_events table
+        _persist_economic_events(events)
+
         high_impact = [e for e in events if e.impact == "HIGH"]
 
         if high_impact:
@@ -385,3 +389,47 @@ def task_macro_check():
 
     except Exception as e:
         logger.error(f"Macro Check Error: {e}")
+
+
+def _persist_economic_events(events):
+    """F3: Persist economic events to DB (dedup via UNIQUE constraint)."""
+    if not events:
+        return
+
+    conn = get_db_connection()
+    if not conn:
+        return
+
+    try:
+        inserted = 0
+        with conn.cursor() as cur:
+            for event in events:
+                cur.execute(
+                    """
+                    INSERT INTO economic_events (
+                        event_date, name, country, impact, category,
+                        previous_value, forecast_value, actual_value
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (event_date, name, country) DO UPDATE
+                        SET actual_value = COALESCE(EXCLUDED.actual_value, economic_events.actual_value)
+                    """,
+                    (
+                        event.date,
+                        event.name,
+                        event.country,
+                        event.impact,
+                        event.category,
+                        event.previous,
+                        event.forecast,
+                        event.actual,
+                    ),
+                )
+                inserted += 1
+
+        conn.commit()
+        logger.info(f"Economic events: persisted {inserted} events")
+
+    except Exception as e:
+        logger.error(f"Economic events persistence error: {e}")
+    finally:
+        conn.close()

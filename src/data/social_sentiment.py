@@ -389,6 +389,9 @@ class SocialSentimentProvider(SingletonMixin):
             sentiment_trend=trend,
         )
 
+    # C4: Source-availability dampening factors
+    _SOURCE_DAMPENING = {0: 0.0, 1: 0.5, 2: 0.8, 3: 1.0}
+
     def _calculate_composite_sentiment(
         self,
         galaxy_score: float | None,
@@ -399,6 +402,11 @@ class SocialSentimentProvider(SingletonMixin):
         """
         Berechne gewichteten Composite Sentiment Score.
 
+        C4 improvements:
+        - Source-availability dampening: fewer sources → lower confidence
+        - Volume-threshold dampening: low reddit mentions → reduced weight
+        - Divergence detection: opposing sources → dampened composite
+
         Gewichte:
         - Galaxy Score: 40% (normalisiert auf -1 bis +1)
         - LunarCrush Sentiment: 20% (normalisiert)
@@ -407,23 +415,36 @@ class SocialSentimentProvider(SingletonMixin):
         """
         components = []
         weights = []
+        source_count = 0
 
         # Galaxy Score (0-100 → -1 bis +1)
         if galaxy_score is not None:
             normalized_gs = (galaxy_score - 50) / 50
             components.append(normalized_gs)
             weights.append(0.40)
+            source_count += 1
 
         # LunarCrush Sentiment (0-5 → -1 bis +1)
+        lc_normalized = None
         if lc_sentiment is not None:
-            normalized_lc = (lc_sentiment - 2.5) / 2.5
-            components.append(normalized_lc)
+            lc_normalized = (lc_sentiment - 2.5) / 2.5
+            components.append(lc_normalized)
             weights.append(0.20)
+            source_count += 1
 
         # Reddit Sentiment (bereits -1 bis +1)
+        reddit_weight = 0.30
         if reddit_sentiment is not None:
+            # C4: Volume-threshold dampening for reddit
+            if reddit_mentions is not None:
+                if reddit_mentions < 5:
+                    reddit_weight *= 0.3
+                elif reddit_mentions < 20:
+                    reddit_weight *= 0.7
+
             components.append(reddit_sentiment)
-            weights.append(0.30)
+            weights.append(reddit_weight)
+            source_count += 1
 
         # Reddit Activity (Log-normalisiert)
         if reddit_mentions is not None and reddit_mentions > 0:
@@ -440,6 +461,21 @@ class SocialSentimentProvider(SingletonMixin):
         # Gewichteter Durchschnitt
         total_weight = sum(weights)
         composite = sum(c * w for c, w in zip(components, weights)) / total_weight
+
+        # C4: Source-availability dampening
+        dampening = self._SOURCE_DAMPENING.get(source_count, 1.0)
+        composite *= dampening
+
+        # C4: Divergence detection — opposing LunarCrush and Reddit
+        if (
+            lc_normalized is not None
+            and reddit_sentiment is not None
+            and (
+                (lc_normalized > 0.2 and reddit_sentiment < -0.2)
+                or (lc_normalized < -0.2 and reddit_sentiment > 0.2)
+            )
+        ):
+            composite *= 0.8
 
         return max(-1.0, min(1.0, composite))
 

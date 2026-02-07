@@ -1,5 +1,7 @@
 """Analysis and detection tasks."""
 
+from datetime import datetime
+
 from psycopg2.extras import RealDictCursor
 
 from src.tasks.base import get_db_connection, logger
@@ -192,3 +194,106 @@ def task_learn_patterns():
     finally:
         if conn:
             conn.close()
+
+
+@task_locked
+def task_compute_technical_indicators():
+    """Computes technical indicators for active watchlist symbols. Runs every 2 hours."""
+    logger.info("Computing technical indicators...")
+
+    conn = get_db_connection()
+    if not conn:
+        return
+
+    try:
+        import numpy as np
+        import pandas as pd
+
+        from src.analysis.technical_indicators import TechnicalAnalyzer
+        from src.api.http_client import get_http_client
+
+        # Get active symbols from watchlist
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("SELECT symbol FROM watchlist")
+            rows = cur.fetchall()
+
+        symbols = [r["symbol"] for r in rows]
+        if not symbols:
+            logger.info("No watchlist symbols — skipping technical indicators")
+            return
+
+        http = get_http_client()
+        analyzer = TechnicalAnalyzer()
+        now = datetime.utcnow()
+        inserted = 0
+
+        for symbol in symbols:
+            try:
+                # Fetch 1h OHLCV from Binance mainnet (need 200+ candles for SMA200)
+                response = http.get(
+                    "https://api.binance.com/api/v3/klines",
+                    params={"symbol": symbol.upper(), "interval": "1h", "limit": 250},
+                    timeout=10,
+                )
+                if not response:
+                    continue
+
+                data = np.array(response)
+                df = pd.DataFrame(
+                    {
+                        "open": data[:, 1].astype(float),
+                        "high": data[:, 2].astype(float),
+                        "low": data[:, 3].astype(float),
+                        "close": data[:, 4].astype(float),
+                        "volume": data[:, 5].astype(float),
+                    }
+                )
+
+                signals = analyzer.analyze(df, symbol=symbol)
+
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        INSERT INTO technical_indicators (
+                            timestamp, symbol, price,
+                            sma_20, sma_50, sma_200,
+                            rsi_14, macd_line, macd_signal, macd_histogram,
+                            bollinger_upper, bollinger_lower, atr_14,
+                            trend, momentum, volatility
+                        ) VALUES (
+                            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                        )
+                        ON CONFLICT (timestamp, symbol) DO NOTHING
+                        """,
+                        (
+                            now,
+                            symbol,
+                            signals.price,
+                            signals.sma_20,
+                            signals.sma_50,
+                            signals.sma_200,
+                            signals.rsi,
+                            signals.macd,
+                            signals.macd_signal,
+                            signals.macd_histogram,
+                            signals.bollinger_upper,
+                            signals.bollinger_lower,
+                            signals.atr,
+                            signals.trend.value,
+                            signals.momentum.value,
+                            signals.volatility,
+                        ),
+                    )
+                    inserted += 1
+
+            except Exception as e:
+                logger.warning(f"Technical indicators failed for {symbol}: {e}")
+                continue
+
+        conn.commit()
+        logger.info(f"Technical indicators: inserted for {inserted}/{len(symbols)} symbols")
+
+    except Exception as e:
+        logger.error(f"Technical Indicators Error: {e}")
+    finally:
+        conn.close()

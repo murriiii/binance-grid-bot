@@ -233,6 +233,9 @@ class PortfolioAllocator(SingletonMixin):
         # Wende Kelly Fraction an
         allocations = self._apply_kelly_adjustment(allocations, filtered_opps)
 
+        # D6: Penalize highly correlated positions
+        allocations = self._apply_correlation_penalty(allocations, filtered_opps)
+
         # Validiere gegen Constraints
         valid, violations = self.constraints.validate_allocation(
             allocations,
@@ -359,6 +362,52 @@ class PortfolioAllocator(SingletonMixin):
 
             # Kelly-adjustierte Allocation
             allocations[symbol] = amount * (0.5 + half_kelly * 0.5)
+
+        return allocations
+
+    def _apply_correlation_penalty(
+        self,
+        allocations: dict[str, float],
+        opportunities: list[Opportunity],
+    ) -> dict[str, float]:
+        """D6: Reduce allocation for highly correlated pairs.
+
+        For each pair with correlation > 0.7, the lower-scored coin
+        gets its allocation reduced by 50%. Non-critical — falls back
+        silently on any error.
+        """
+        if len(allocations) < 2:
+            return allocations
+
+        try:
+            from src.analysis.correlation_matrix import CorrelationCalculator
+
+            calc = CorrelationCalculator.get_instance()
+            symbols = list(allocations.keys())
+            pairs = calc.get_highly_correlated_pairs(symbols, threshold=0.7)
+
+            if not pairs:
+                return allocations
+
+            opp_scores = {o.symbol: o.total_score for o in opportunities}
+            penalized = set()
+
+            for sym_a, sym_b, corr in pairs:
+                score_a = opp_scores.get(sym_a, 0)
+                score_b = opp_scores.get(sym_b, 0)
+                weaker = sym_b if score_a >= score_b else sym_a
+
+                if weaker not in penalized and weaker in allocations:
+                    old_amt = allocations[weaker]
+                    allocations[weaker] = old_amt * 0.5
+                    penalized.add(weaker)
+                    logger.info(
+                        f"Correlation penalty: {weaker} reduced 50% "
+                        f"(corr={corr:.2f} with {sym_a if weaker == sym_b else sym_b})"
+                    )
+
+        except Exception as e:
+            logger.debug(f"Correlation penalty skipped (non-critical): {e}")
 
         return allocations
 

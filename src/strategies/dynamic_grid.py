@@ -139,7 +139,11 @@ class DynamicGridStrategy(SingletonMixin):
     2. Trend-sensitive Asymmetrie
     3. Support/Resistance Integration
     4. Regime-aware Anpassungen
+    5. Dynamic grid count based on volatility regime (D3)
     """
+
+    # D3: Grid count by volatility regime
+    GRID_COUNT_BY_REGIME = {"EXTREME": 15, "HIGH": 12, "NORMAL": 10, "LOW": 7}
 
     def __init__(self):
         self.conn = None
@@ -239,6 +243,40 @@ class DynamicGridStrategy(SingletonMixin):
             return "HIGH"
         else:
             return "EXTREME"
+
+    def calculate_dynamic_grid_count(
+        self, symbol: str, base_num_grids: int = 10
+    ) -> tuple[int, str]:
+        """D3: Calculate grid count based on ATR volatility regime.
+
+        Higher volatility → more grids (wider range, more levels).
+        Lower volatility → fewer grids (tighter range, each level more significant).
+
+        Args:
+            symbol: Trading pair (e.g. "BTCUSDT").
+            base_num_grids: Fallback grid count if OHLCV unavailable.
+
+        Returns:
+            (grid_count, volatility_regime) tuple.
+        """
+        try:
+            ohlcv = self._fetch_ohlcv(symbol, "1h", 200)
+            if not ohlcv:
+                return base_num_grids, "UNKNOWN"
+
+            atr_pct = self.calculate_atr_pct(ohlcv["high"], ohlcv["low"], ohlcv["close"])
+            vol_regime = self.calculate_volatility_regime(atr_pct)
+            grid_count = self.GRID_COUNT_BY_REGIME.get(vol_regime, base_num_grids)
+
+            logger.debug(
+                f"Dynamic grid count for {symbol}: {grid_count} "
+                f"(regime={vol_regime}, ATR={atr_pct:.4f})"
+            )
+            return grid_count, vol_regime
+
+        except Exception as e:
+            logger.warning(f"Dynamic grid count failed for {symbol}: {e}")
+            return base_num_grids, "UNKNOWN"
 
     # ═══════════════════════════════════════════════════════════════
     # TREND DETECTION

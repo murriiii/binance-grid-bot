@@ -240,6 +240,40 @@ class MarketDataProvider(SingletonMixin):
             "total_market_cap": self.get_total_market_cap(),
         }
 
+    def get_funding_rate(self, symbol: str) -> float | None:
+        """D5: Get current funding rate from Binance Futures (public endpoint).
+
+        Funding rate interpretation:
+        - Rate > 0.05%: bearish signal (longs pay shorts, market overheated)
+        - Rate < -0.05%: bullish signal (shorts pay longs, market oversold)
+        - Rate between -0.05% and 0.05%: neutral
+
+        Returns funding rate as a decimal (e.g. 0.0001 = 0.01%), or None on error.
+        """
+        cache_key = f"funding_{symbol}"
+        now = datetime.now()
+        if cache_key in self._price_cache:
+            cached_time, cached_val = self._price_cache[cache_key]
+            if now - cached_time < timedelta(minutes=5):
+                return cached_val
+
+        try:
+            data = self.http.get(
+                "https://fapi.binance.com/fapi/v1/fundingRate",
+                params={"symbol": symbol.upper(), "limit": 1},
+                timeout=10,
+            )
+            if data and len(data) > 0:
+                rate = float(data[0].get("fundingRate", 0))
+                self._price_cache[cache_key] = (now, rate)
+                return rate
+        except HTTPClientError as e:
+            logger.debug(f"Funding rate fetch failed for {symbol}: {e}")
+        except Exception as e:
+            logger.debug(f"Funding rate error for {symbol}: {e}")
+
+        return None
+
     def clear_cache(self):
         """Leert alle Caches"""
         self._price_cache.clear()

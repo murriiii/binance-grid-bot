@@ -12,6 +12,7 @@ Das macht professionelle AI-Features auch bei kleinem Portfolio sinnvoll.
 
 import logging
 import os
+import time
 from datetime import datetime
 
 from dotenv import load_dotenv
@@ -99,6 +100,7 @@ Sei direkt - keine Floskeln."""
         messages.append({"role": "user", "content": user_content})
 
         try:
+            start_ms = time.monotonic_ns() // 1_000_000
             http = get_http_client()
             data = http.post(
                 self.API_URL,
@@ -114,12 +116,24 @@ Sei direkt - keine Floskeln."""
                 },
                 api_type="deepseek",
             )
+            response_ms = int(time.monotonic_ns() // 1_000_000 - start_ms)
 
             answer = data["choices"][0]["message"]["content"]
 
             # Token-Tracking
             usage = data.get("usage", {})
-            self.total_tokens_used += usage.get("total_tokens", 0)
+            total_tokens = usage.get("total_tokens", 0)
+            self.total_tokens_used += total_tokens
+
+            # F4: Persist conversation to DB
+            self._save_conversation(
+                user_msg=user_content,
+                ai_response=answer,
+                tokens=total_tokens,
+                response_ms=response_ms,
+                had_trade_context="trade" in user_content.lower() if user_content else False,
+                had_market_context=context is not None,
+            )
 
             # History speichern
             if keep_history:
@@ -130,6 +144,43 @@ Sei direkt - keine Floskeln."""
 
         except HTTPClientError as e:
             return f"❌ API Fehler: {e!s}"
+
+    def _save_conversation(
+        self,
+        user_msg: str,
+        ai_response: str,
+        tokens: int,
+        response_ms: int,
+        had_trade_context: bool,
+        had_market_context: bool,
+    ):
+        """F4: Persist AI conversation to ai_conversations table."""
+        try:
+            from src.data.database import DatabaseManager
+
+            db = DatabaseManager.get_instance()
+            if not db or not db._pool:
+                return
+
+            with db.get_cursor(dict_cursor=False) as cur:
+                cur.execute(
+                    """
+                    INSERT INTO ai_conversations (
+                        user_message, ai_response, tokens_used, response_time_ms,
+                        had_trade_context, had_market_context
+                    ) VALUES (%s, %s, %s, %s, %s, %s)
+                    """,
+                    (
+                        user_msg,
+                        ai_response,
+                        tokens,
+                        response_ms,
+                        had_trade_context,
+                        had_market_context,
+                    ),
+                )
+        except Exception as e:
+            logger.debug(f"AI conversation save failed (non-critical): {e}")
 
     def clear_history(self):
         """Löscht Konversations-History"""

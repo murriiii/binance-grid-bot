@@ -17,6 +17,7 @@ Das ist KEIN echtes ML-Training, sondern:
 
 import json
 import logging
+import math
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -48,6 +49,10 @@ class TradeRecord:
 
     # Fees
     fee_usd: float = 0.0
+
+    # Slippage tracking (D4)
+    expected_price: float | None = None  # Limit order price
+    slippage_bps: float | None = None  # Basis points: positive = worse execution
 
     # Ergebnis (wird später aktualisiert)
     outcome_24h: float | None = None  # PnL nach 24h
@@ -112,9 +117,10 @@ class TradingMemory:
                     INSERT INTO trades (
                         timestamp, action, symbol, price, quantity, value_usd,
                         fear_greed, btc_price, symbol_24h_change, market_trend,
-                        math_signal, ai_signal, reasoning, fee_usd
+                        math_signal, ai_signal, reasoning, fee_usd,
+                        expected_price, slippage_bps
                     ) VALUES (
-                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
                     ) RETURNING id
                 """,
                     (
@@ -132,6 +138,8 @@ class TradingMemory:
                         trade.ai_signal,
                         trade.reasoning,
                         trade.fee_usd,
+                        trade.expected_price,
+                        trade.slippage_bps,
                     ),
                 )
                 trade_id = cur.fetchone()[0]
@@ -165,6 +173,63 @@ class TradingMemory:
                 (outcome_24h, outcome_7d, was_good, trade_id),
             )
 
+    @staticmethod
+    def _similarity_score(
+        candidate: dict,
+        fear_greed: int,
+        symbol: str | None,
+        market_trend: str | None,
+    ) -> float:
+        """Multi-dimensional similarity scoring (C1).
+
+        Dimensions with weights:
+        - Fear&Greed distance (30%): Gaussian decay, sigma=15
+        - Regime match (25%): exact match on market_trend
+        - Symbol match (20%): exact=1.0, same base=0.5
+        - Temporal decay (15%): half-life 30 days
+        - Outcome quality (10%): boost trades with known outcomes
+        """
+        score = 0.0
+
+        # 1. Fear&Greed distance (30%) — Gaussian kernel
+        fg_diff = abs((candidate.get("fear_greed") or 50) - fear_greed)
+        score += 0.30 * math.exp(-(fg_diff**2) / (2 * 15**2))
+
+        # 2. Regime match (25%)
+        if market_trend and candidate.get("market_trend"):
+            score += 0.25 * (1.0 if candidate["market_trend"] == market_trend else 0.0)
+        else:
+            score += 0.25 * 0.5  # neutral if unknown
+
+        # 3. Symbol match (20%)
+        if symbol and candidate.get("symbol"):
+            if candidate["symbol"] == symbol:
+                score += 0.20
+            elif candidate["symbol"][:3] == symbol[:3]:
+                score += 0.20 * 0.5
+        else:
+            score += 0.20 * 0.3
+
+        # 4. Temporal decay (15%) — exponential half-life 30 days
+        ts = candidate.get("timestamp")
+        if ts:
+            if isinstance(ts, str):
+                try:
+                    ts = datetime.fromisoformat(ts)
+                except (ValueError, TypeError):
+                    ts = None
+            if ts:
+                days_ago = (datetime.now() - ts).total_seconds() / 86400
+                score += 0.15 * math.exp(-0.693 * days_ago / 30)
+
+        # 5. Outcome quality (10%) — boost trades with known outcomes
+        if candidate.get("outcome_24h") is not None:
+            score += 0.10
+        elif candidate.get("outcome_7d") is not None:
+            score += 0.05
+
+        return score
+
     def find_similar_situations(
         self,
         fear_greed: int,
@@ -173,44 +238,56 @@ class TradingMemory:
         limit: int = 10,
     ) -> list[dict]:
         """
-        Findet ähnliche historische Situationen.
+        Findet ähnliche historische Situationen (C1: Multi-Dimensional Scoring).
 
-        Das ist der Kern des "Lernens":
-        - Suche nach Trades unter ähnlichen Bedingungen
-        - Zeige was funktioniert hat und was nicht
+        Loads a broad candidate pool and ranks by weighted similarity score
+        across Fear&Greed distance, regime, symbol, recency, and outcome quality.
         """
         if not self.db:
             return []
 
-        # Fear & Greed Range: ±10
-        fg_min = max(0, fear_greed - 10)
-        fg_max = min(100, fear_greed + 10)
+        # Broad candidate pool: F&G ±25 OR last 500 trades with outcomes
+        fg_min = max(0, fear_greed - 25)
+        fg_max = min(100, fear_greed + 25)
 
         with self.db.get_cursor() as cur:
-            query = """
-                SELECT
-                    timestamp, action, symbol, price, value_usd,
-                    fear_greed, market_trend, reasoning,
-                    outcome_24h, outcome_7d, was_good_decision
-                FROM trades
-                WHERE fear_greed BETWEEN %s AND %s
-                AND outcome_24h IS NOT NULL
-            """
-            params: list = [fg_min, fg_max]
+            cur.execute(
+                """
+                (
+                    SELECT timestamp, action, symbol, price, value_usd,
+                           fear_greed, market_trend, reasoning,
+                           outcome_24h, outcome_7d, was_good_decision
+                    FROM trades
+                    WHERE fear_greed BETWEEN %s AND %s
+                    AND outcome_24h IS NOT NULL
+                    ORDER BY timestamp DESC
+                    LIMIT 500
+                )
+                UNION
+                (
+                    SELECT timestamp, action, symbol, price, value_usd,
+                           fear_greed, market_trend, reasoning,
+                           outcome_24h, outcome_7d, was_good_decision
+                    FROM trades
+                    WHERE outcome_24h IS NOT NULL
+                    ORDER BY timestamp DESC
+                    LIMIT 500
+                )
+                """,
+                [fg_min, fg_max],
+            )
+            candidates = cur.fetchall()
 
-            if symbol:
-                query += " AND symbol = %s"
-                params.append(symbol)
+        if not candidates:
+            return []
 
-            if market_trend:
-                query += " AND market_trend = %s"
-                params.append(market_trend)
+        # Score and rank
+        scored = [
+            (self._similarity_score(c, fear_greed, symbol, market_trend), c) for c in candidates
+        ]
+        scored.sort(key=lambda x: x[0], reverse=True)
 
-            query += " ORDER BY timestamp DESC LIMIT %s"
-            params.append(limit)
-
-            cur.execute(query, params)
-            return cur.fetchall()
+        return [c for _, c in scored[:limit]]
 
     def get_pattern_stats(self, conditions: dict) -> dict:
         """
@@ -303,8 +380,9 @@ class TradingMemory:
 
             for i, trade in enumerate(similar[:5], 1):
                 outcome = "OK" if trade.get("was_good_decision") else "FAIL"
-                context += f"{i}. {outcome} {trade['action']} {trade['symbol']} "
-                context += f"bei F&G={trade['fear_greed']}: "
+                trend_tag = f" [{trade.get('market_trend', '?')}]"
+                context += f"{i}. {outcome} {trade['action']} {trade['symbol']}"
+                context += f"{trend_tag} bei F&G={trade['fear_greed']}: "
                 context += f"{trade['outcome_24h']:+.2f}% (24h)\n"
         else:
             context += "Keine ähnlichen Situationen in der Datenbank.\n"

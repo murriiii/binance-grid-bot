@@ -395,6 +395,17 @@ class OrderManagerMixin:
                 self.client.get_current_price("BTCUSDT") if self.symbol != "BTCUSDT" else price
             )
 
+            # D4: Slippage tracking
+            expected_price = float(order_info.get("price", price))
+            slippage_bps = None
+            if expected_price > 0:
+                if order_info["type"] == "BUY":
+                    # Positive = paid more than expected (worse)
+                    slippage_bps = (price - expected_price) / expected_price * 10000
+                else:
+                    # Positive = received less than expected (worse)
+                    slippage_bps = (expected_price - price) / expected_price * 10000
+
             trade_record = TradeRecord(
                 timestamp=datetime.now(),
                 action=order_info["type"],
@@ -410,6 +421,8 @@ class OrderManagerMixin:
                 ai_signal="N/A",
                 reasoning=f"Grid order filled at {price} (fee: ${fee_usd:.4f})",
                 fee_usd=fee_usd,
+                expected_price=expected_price,
+                slippage_bps=round(slippage_bps, 4) if slippage_bps is not None else None,
             )
 
             trade_id = self.memory.save_trade(trade_record)

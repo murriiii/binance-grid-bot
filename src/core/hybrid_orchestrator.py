@@ -544,8 +544,9 @@ class HybridOrchestrator:
 
     def _create_grid_bot(self, state: SymbolState) -> GridBot | None:
         """Create and initialize a GridBot for a symbol."""
-        # Calculate dynamic range based on ATR
+        # Calculate dynamic range and grid count based on ATR
         dynamic_range_pct = self.config.grid_range_percent
+        dynamic_num_grids = self.config.num_grids
         try:
             from src.strategies.dynamic_grid import DynamicGridStrategy
 
@@ -558,9 +559,15 @@ class HybridOrchestrator:
                 base_range_pct=self.config.grid_range_percent,
                 regime=regime,
             )
+            # D3: Dynamic grid count based on volatility regime
+            dynamic_num_grids, vol_regime = dgs.calculate_dynamic_grid_count(
+                symbol=state.symbol,
+                base_num_grids=self.config.num_grids,
+            )
             logger.info(
                 f"GRID: {state.symbol} dynamic range {dynamic_range_pct:.2f}% "
-                f"(ATR={meta.get('atr_pct')}%, vol={meta.get('volatility_regime')})"
+                f"grids={dynamic_num_grids} "
+                f"(ATR={meta.get('atr_pct')}%, vol={vol_regime})"
             )
         except Exception as e:
             logger.warning(f"GRID: dynamic range fallback for {state.symbol}: {e}")
@@ -572,7 +579,7 @@ class HybridOrchestrator:
         bot_config = {
             "symbol": state.symbol,
             "investment": state.allocation_usd,
-            "num_grids": self.config.num_grids,
+            "num_grids": dynamic_num_grids,
             "grid_range_percent": dynamic_range_pct,
             "testnet": self.client.testnet,
             "state_file": state_file,

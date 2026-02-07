@@ -228,6 +228,8 @@ DynamicGridStrategy.calculate_dynamic_range(symbol, price, base_range, regime)
 
 **Fallback**: If OHLCV fetch fails, falls back to the static `HybridConfig.grid_range_percent`.
 
+**Dynamic grid count** (D3): `calculate_dynamic_grid_count(symbol, base_num_grids)` adjusts grid count by ATR volatility regime: `GRID_COUNT_BY_REGIME = {"EXTREME": 15, "HIGH": 12, "NORMAL": 10, "LOW": 7}`. Called in `HybridOrchestrator._create_grid_bot()` to set `num_grids` dynamically.
+
 ### Integrated Analysis Features
 
 **SignalAnalyzer** (`src/analysis/signal_analyzer.py`, SingletonMixin) computes a 9-signal composite breakdown per trade fill: fear_greed, RSI, MACD, trend, volume, whale, sentiment, macro, AI. Stored in `signal_components` DB table. Called from `OrderManagerMixin._save_trade_to_memory()` after each fill.
@@ -236,9 +238,29 @@ DynamicGridStrategy.calculate_dynamic_range(symbol, price, base_range, regime)
 
 Both are non-critical — wrapped in try/except with graceful degradation on failure.
 
+**AI Signal Validation** (C3): `_validate_signal()` in `AITradingEnhancer` validates AI output: enum check (direction/action), confidence clamping (0.0-1.0), semantic consistency penalty (BEARISH+BUY → confidence * 0.3), reasoning quality check (< 10 chars → confidence * 0.5).
+
+**RAG Similarity** (C1): `find_similar_situations()` in `TradingMemory` uses multi-dimensional scoring: F&G distance (30%, Gaussian decay sigma=15), regime match (25%), symbol match (20%), temporal decay (15%, half-life 30 days), outcome quality (10%).
+
+**Sentiment Dampening** (C4): `_calculate_composite_sentiment()` applies source-availability dampening ({0: 0.0, 1: 0.5, 2: 0.8, 3: 1.0}), volume-threshold dampening for low Reddit mentions, and divergence detection when sources disagree.
+
+**Funding Rate** (D5): `MarketDataProvider.get_funding_rate(symbol)` fetches from `fapi.binance.com/fapi/v1/fundingRate` (public endpoint, no API key needed). 5-minute cache. Rate > 0.05% = bearish signal, rate < -0.05% = bullish signal.
+
+**Data Retention** (D2): `task_cleanup_old_data()` in `src/tasks/retention_tasks.py` runs daily at 03:00. Configurable per-table retention: market_snapshots (90d), whale_alerts (60d), social_sentiment (90d), opportunities (30d), technical_indicators (60d), calculation_snapshots (90d), ai_conversations (30d), regime_history (180d).
+
+**AI Conversation Persistence** (F4): `DeepSeekAssistant.ask()` persists every conversation to `ai_conversations` table with tokens, response time, and context flags.
+
+**Technical Indicators Writer** (F2): `task_compute_technical_indicators()` runs every 2h, computes indicators for active watchlist symbols and writes to `technical_indicators` table.
+
+**Economic Events Persistence** (F3): `task_macro_check()` persists events to `economic_events` table with `ON CONFLICT` deduplication via UNIQUE constraint on `(event_date, name, country)`.
+
 ### Grid Strategy Logic
 
 **Decimal precision**: `GridStrategy` uses `Decimal` throughout for Binance API compliance. `_to_decimal()` helper safely converts float/int/str/Decimal, handling scientific notation (e.g., `'1e-05'`). `_DecimalEncoder` converts Decimals to floats at JSON serialization boundary. Never use `float()` for order quantities or prices.
+
+**Fee-aware spacing** (D1): `ROUND_TRIP_FEE_RATE = TAKER_FEE_RATE * 2` and `MIN_PROFITABLE_SPACING_PCT` constants. `_calculate_grid_levels()` logs a warning when grid spacing is below minimum profitable spacing. `get_min_profitable_spacing()` classmethod returns the minimum spacing percentage.
+
+**Slippage tracking** (D4): `trades` table has `expected_price` and `slippage_bps` columns. Calculated in `OrderManagerMixin.check_orders()` as `(filled - expected) / expected * 10000` (inverted for SELL).
 
 1. Calculate grid levels: `spacing = (upper - lower) / num_grids`
 2. Each level gets `investment_per_grid / price` quantity
@@ -313,9 +335,10 @@ PortfolioManager (src/portfolio/portfolio_manager.py)
 
 1. **WatchlistManager** maintains coin universe (25+ coins in 6 categories: LARGE_CAP, MID_CAP, L2, DEFI, AI, GAMING)
 2. **CoinScanner** scores opportunities on 5 dimensions: technical (30%), volume (20%), sentiment (15%), whale (15%), momentum (20%)
-3. **PortfolioAllocator** distributes capital via Kelly Criterion with regime-aware constraints
-4. Constraint presets in `src/portfolio/constraints.py`: `CONSERVATIVE_CONSTRAINTS`, `BALANCED_CONSTRAINTS`, `AGGRESSIVE_CONSTRAINTS`, `SMALL_PORTFOLIO_CONSTRAINTS`
-5. ModeManager selects constraints based on current mode (HOLD→aggressive, GRID→balanced/small, CASH→conservative)
+3. **PortfolioAllocator** distributes capital via Kelly Criterion with regime-aware constraints + correlation penalty (D6: highly correlated pairs >0.7 get weaker coin allocation halved)
+4. **CorrelationCalculator** (`src/analysis/correlation_matrix.py`, SingletonMixin) computes 60-day Pearson correlation matrix from Binance mainnet daily returns (24h cache)
+5. Constraint presets in `src/portfolio/constraints.py`: `CONSERVATIVE_CONSTRAINTS`, `BALANCED_CONSTRAINTS`, `AGGRESSIVE_CONSTRAINTS`, `SMALL_PORTFOLIO_CONSTRAINTS`
+6. ModeManager selects constraints based on current mode (HOLD→aggressive, GRID→balanced/small, CASH→conservative)
 
 ### Scheduled Tasks (`src/tasks/`)
 
@@ -325,13 +348,14 @@ Tasks are organized in domain-specific modules under `src/tasks/`, registered by
 |--------|-------|
 | `hybrid_tasks.py` | Mode evaluation (hourly), hybrid rebalance (6h) |
 | `portfolio_tasks.py` | Watchlist update (30min), opportunity scan (2h), portfolio rebalance (daily), coin performance (daily) |
-| `analysis_tasks.py` | Regime detection (4h), signal weights (daily), divergence scan (2h), pattern learning (daily) |
+| `analysis_tasks.py` | Regime detection (4h), signal weights (daily), divergence scan (2h), pattern learning (daily), technical indicators (2h) |
 | `cycle_tasks.py` | Cycle management (weekly), weekly rebalance, A/B test check (daily) |
 | `data_tasks.py` | ETF flows, social sentiment, token unlocks, whale checks |
 | `market_tasks.py` | Market snapshots (hourly), sentiment checks (4h) |
 | `reporting_tasks.py` | Daily summary, playbook update (weekly), weekly export |
-| `system_tasks.py` | Stop-loss check (5min), health check (6h), macro events, outcome updates (1h/4h/24h/7d), signal correctness (6h), trade decision quality (daily) |
+| `system_tasks.py` | Stop-loss check (5min), health check (6h), macro events (with DB persistence), outcome updates (1h/4h/24h/7d), signal correctness (6h), trade decision quality (daily) |
 | `monitoring_tasks.py` | Order reconciliation (30min), order timeout (1h), portfolio plausibility (2h), grid health (4h), stale detection (30min), tier health (2h) |
+| `retention_tasks.py` | Data retention cleanup (daily 03:00) — 8 tables with configurable retention (30-180 days) |
 
 Shared infrastructure in `src/tasks/base.py` provides `get_db_connection()`. All tasks use `@task_locked` from `src/utils/task_lock.py` to prevent concurrent execution (non-blocking skip).
 

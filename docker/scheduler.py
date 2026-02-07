@@ -21,6 +21,7 @@ load_dotenv()
 
 from src.notifications.telegram_service import get_telegram
 from src.tasks.analysis_tasks import (
+    task_compute_technical_indicators,
     task_divergence_scan,
     task_learn_patterns,
     task_regime_detection,
@@ -61,6 +62,7 @@ from src.tasks.reporting_tasks import (
     task_update_playbook,
     task_weekly_export,
 )
+from src.tasks.retention_tasks import task_cleanup_old_data
 from src.tasks.system_tasks import (
     task_check_stops,
     task_evaluate_signal_correctness,
@@ -287,6 +289,9 @@ def main():
     # Daily Drawdown Reset um Mitternacht
     schedule.every().day.at("00:00").do(task_reset_daily_drawdown)
 
+    # Data Retention Cleanup täglich um 03:00 (D2)
+    schedule.every().day.at("03:00").do(task_cleanup_old_data)
+
     # ═══════════════════════════════════════════════════════════════
     # ANALYSIS JOBS
     # ═══════════════════════════════════════════════════════════════
@@ -314,6 +319,9 @@ def main():
 
     # Divergence Scan alle 2 Stunden
     schedule.every(2).hours.do(task_divergence_scan)
+
+    # Technical Indicators alle 2 Stunden (F2)
+    schedule.every(2).hours.do(task_compute_technical_indicators)
 
     # ═══════════════════════════════════════════════════════════════
     # MULTI-COIN JOBS

@@ -1376,5 +1376,93 @@ CREATE TABLE IF NOT EXISTS ai_portfolio_recommendations (
 
 CREATE INDEX IF NOT EXISTS idx_ai_recommendations_ts ON ai_portfolio_recommendations(timestamp DESC);
 
+-- ═══════════════════════════════════════════════════════════════
+-- C2: CHECK CONSTRAINTS (safe: skip if already exists)
+-- ═══════════════════════════════════════════════════════════════
+
+DO $$ BEGIN
+    ALTER TABLE trades ADD CONSTRAINT chk_trades_confidence
+        CHECK (confidence >= 0 AND confidence <= 1);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+DO $$ BEGIN
+    ALTER TABLE trades ADD CONSTRAINT chk_trades_fear_greed
+        CHECK (fear_greed >= 0 AND fear_greed <= 100);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+DO $$ BEGIN
+    ALTER TABLE market_snapshots ADD CONSTRAINT chk_snapshots_fear_greed
+        CHECK (fear_greed >= 0 AND fear_greed <= 100);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+DO $$ BEGIN
+    ALTER TABLE regime_history ADD CONSTRAINT chk_regime_probability
+        CHECK (regime_probability >= 0 AND regime_probability <= 1);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+DO $$ BEGIN
+    ALTER TABLE regime_history ADD CONSTRAINT chk_regime_model_confidence
+        CHECK (model_confidence >= 0 AND model_confidence <= 1);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+DO $$ BEGIN
+    ALTER TABLE signal_components ADD CONSTRAINT chk_signals_ai_confidence
+        CHECK (ai_confidence >= 0 AND ai_confidence <= 1);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+DO $$ BEGIN
+    ALTER TABLE opportunities ADD CONSTRAINT chk_opp_total_score
+        CHECK (total_score >= 0 AND total_score <= 1);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+DO $$ BEGIN
+    ALTER TABLE opportunities ADD CONSTRAINT chk_opp_confidence
+        CHECK (confidence >= 0 AND confidence <= 1);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+DO $$ BEGIN
+    ALTER TABLE social_sentiment ADD CONSTRAINT chk_social_composite
+        CHECK (composite_sentiment >= -1 AND composite_sentiment <= 1);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+-- ═══════════════════════════════════════════════════════════════
+-- C2: COMPOSITE INDEXES for common query patterns
+-- ═══════════════════════════════════════════════════════════════
+
+CREATE INDEX IF NOT EXISTS idx_trades_symbol_timestamp ON trades(symbol, timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_social_symbol_timestamp ON social_sentiment(symbol, timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_opp_symbol_timestamp ON opportunities(symbol, timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_tech_symbol_timestamp ON technical_indicators(symbol, timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_trades_cohort_cycle ON trades(cohort_id, cycle_id, timestamp DESC);
+
+-- ═══════════════════════════════════════════════════════════════
+-- C2: RETENTION-FRIENDLY INDEXES (for D2 cleanup DELETEs)
+-- ═══════════════════════════════════════════════════════════════
+
+CREATE INDEX IF NOT EXISTS idx_snapshots_created ON market_snapshots(created_at);
+CREATE INDEX IF NOT EXISTS idx_whale_created ON whale_alerts(created_at);
+CREATE INDEX IF NOT EXISTS idx_social_created ON social_sentiment(created_at);
+CREATE INDEX IF NOT EXISTS idx_opp_created ON opportunities(created_at);
+CREATE INDEX IF NOT EXISTS idx_ai_conv_created ON ai_conversations(created_at);
+CREATE INDEX IF NOT EXISTS idx_calc_created ON calculation_snapshots(created_at);
+CREATE INDEX IF NOT EXISTS idx_regime_created ON regime_history(created_at);
+CREATE INDEX IF NOT EXISTS idx_tech_created ON technical_indicators(created_at);
+
+-- ═══════════════════════════════════════════════════════════════
+-- F3: UNIQUE CONSTRAINT for economic_events dedup
+-- ═══════════════════════════════════════════════════════════════
+
+DO $$ BEGIN
+    ALTER TABLE economic_events ADD CONSTRAINT unique_economic_event
+        UNIQUE (event_date, name, country);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+-- ═══════════════════════════════════════════════════════════════
+-- D4: SLIPPAGE TRACKING columns on trades
+-- ═══════════════════════════════════════════════════════════════
+
+ALTER TABLE trades ADD COLUMN IF NOT EXISTS expected_price DECIMAL(20, 8);
+ALTER TABLE trades ADD COLUMN IF NOT EXISTS slippage_bps DECIMAL(10, 4);
+
 -- Fertig!
 SELECT 'Trading Bot Database initialized successfully with 3-Tier Portfolio System!' as status;
