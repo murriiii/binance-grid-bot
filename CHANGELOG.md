@@ -1,3 +1,94 @@
+## v1.15.0 (2026-02-07)
+
+### Feat
+
+- implement Phase 10-12 — AI Learning Loop, 3-Tier Portfolio, Production Readiness
+- integrate DynamicGridStrategy, activate SignalAnalyzer + MetricsCalculator, use SchedulerConfig
+- add trade pairs tracking, dashboard BUY/SELL split, stale detection
+- add monitoring tasks, fix Decimal precision bug, document learning phase
+
+### Fix
+
+- increase grid activity — 6 fixes for low fill rates on testnet
+
+## v1.14.5 (2026-02-06)
+
+### Fix
+
+- disable portfolio drawdown check in hybrid/cohort mode
+
+## v1.14.4 (2026-02-06)
+
+### Fix
+
+- show open order counts instead of 0 trades in dashboard footer
+
+## v1.14.3 (2026-02-06)
+
+### Fix
+
+- report uses grid state instead of account balance, suppress urgent spam
+
+## v1.14.2 (2026-02-06)
+
+### Fix
+
+- enforce learning mode for all Telegram notifications
+
+## v1.14.1 (2026-02-06)
+
+### Fix
+
+- increase allocation limits and add live unrealized P&L to dashboard
+
+## v1.14.0 (2026-02-06)
+
+### Feat
+
+- add 2 small-cap cohorts, emoji dashboard report, MEME category
+
+## v1.13.0 (2026-02-06)
+
+### Feat
+
+- unique coins per cohort + $1000 budget for learning phase
+
+## v1.12.0 (2026-02-06)
+
+### Feat
+
+- add category-based coin differentiation per cohort risk level
+
+## v1.11.0 (2026-02-06)
+
+### Feat
+
+- add min_confidence filtering for cohort coin differentiation
+
+## v1.10.3 (2026-02-06)
+
+### Fix
+
+- show correct cohort portfolio breakdown with cash reserve
+
+## v1.10.2 (2026-02-06)
+
+### Fix
+
+- resolve Decimal type error and per-cohort balance in /report
+
+## v1.10.1 (2026-02-06)
+
+### Fix
+
+- mount hybrid_state volume in telegram-handler container
+
+## v1.10.0 (2026-02-06)
+
+### Feat
+
+- add /report command for on-demand cohort status
+
 ## v1.19.0 (2026-02-07)
 
 ### Feat (Phase 12: Production Readiness)
