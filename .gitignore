@@ -39,15 +39,24 @@ analysis_exports/*
 .vscode/
 *.swp
 *.swo
+*.code-workspace
 
 # OS
 .DS_Store
 Thumbs.db
+*~
 
-# Bot State (optional - kann committet werden für Persistenz)
+# Bot State (optional - kann committet werden fuer Persistenz)
 # config/bot_state.json
 
 # Data files (root level data folder, not src/data)
 /data/
 *.csv
 *.parquet
+
+# Docker
+docker/postgres-data/
+
+# Profiling
+*.prof
+*.pstats
