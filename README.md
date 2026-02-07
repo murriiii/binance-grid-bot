@@ -3,10 +3,10 @@
 Ein regime-adaptiver Krypto-Trading-Bot mit Hybrid-System (HOLD/GRID/CASH), Multi-Coin Trading, AI-Enhancement, Memory-System und selbstlernendem Trading Playbook.
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![Version: 1.14.9](https://img.shields.io/badge/version-1.14.9-green.svg)](https://github.com/murriiii/binance-grid-bot/releases)
+[![Version: 1.16.0](https://img.shields.io/badge/version-1.16.0-green.svg)](https://github.com/murriiii/binance-grid-bot/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
-[![Tests: 942 passed](https://img.shields.io/badge/tests-942%20passed-brightgreen.svg)]()
+[![Tests: 1089 passed](https://img.shields.io/badge/tests-1089%20passed-brightgreen.svg)]()
 [![Coverage: 60%](https://img.shields.io/badge/coverage-60%25-yellowgreen.svg)]()
 
 ## Features
@@ -37,8 +37,20 @@ Ein regime-adaptiver Krypto-Trading-Bot mit Hybrid-System (HOLD/GRID/CASH), Mult
 - **Pre-Feasibility Filter** - Coins werden vor Allocation geprueft ob min_position_usd erreichbar ist
 - **Per-Coin Learning** - Optimale Settings pro Coin automatisch erlernen
 
+### 3-Tier Portfolio Management
+- **Cash Reserve Tier** - Konfigurierbarer USDT-Sicherheitspuffer (Standard 10%)
+- **Index Holdings Tier** - ETF-artiges Buy-and-Hold der CMC Top 20 nach Market Cap, quarterly Rebalance, 15% Trailing Stops
+- **Trading Tier** - Wrapper um CohortOrchestrator, skaliert Cohorts nach verfuegbarem Kapital
+- **Profit Redistribution** - Woechentliche Gewinnumverteilung wenn Tier-Drift > 3%
+- **AI Portfolio Optimizer** - Monatliche DeepSeek-Empfehlungen fuer optimale Tier-Gewichtung mit Guard Rails (Lernmodus erste 3 Monate)
+- **Production Validator** - 9 Kriterien fuer Go-Live (Trades, Sharpe, Drawdown, Win Rate, Signal-Accuracy, etc.)
+- **Deployment Phases** - Gradueller Kapitalaufbau: Paper → Alpha ($1K) → Beta ($3K) → Production ($5K+)
+- **Feature Flag** - `PORTFOLIO_MANAGER=true` aktiviert 3-Tier-System, sonst CohortOrchestrator-Fallback
+
 ### Learning & Optimization
 - **Cohort System** - 6 parallele HybridOrchestrator-Instanzen mit je $1000 eigenem Kapital (Conservative, Balanced, Aggressive, Baseline, DeFi Explorer, Meme Hunter)
+- **AI Learning Loop** - Signal-Korrektheit (`was_correct`), Trade-Entscheidungsqualitaet (`was_good_decision`), Multi-Timeframe Outcomes (1h/4h/24h/7d)
+- **Signal-Accuracy im Playbook** - Top-Signale nach Zuverlaessigkeit, regime-stratifizierte Regeln (BULL/BEAR/SIDEWAYS)
 - **Cycle Management** - Wöchentliche Trading-Zyklen mit vollständiger Performance-Analyse
 - **Bayesian Weight Learning** - Adaptive Signal-Gewichtung via Dirichlet-Distribution
 - **A/B Testing Framework** - Statistische Signifikanz-Tests (Welch t-Test, Mann-Whitney U)
@@ -162,8 +174,20 @@ Ein regime-adaptiver Krypto-Trading-Bot mit Hybrid-System (HOLD/GRID/CASH), Mult
 │  │                        LEARNING & ANALYSIS                              │ │
 │  │  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐   │ │
 │  │  │   Logging    │ │   Weekly     │ │  Playbook    │ │   Pattern    │   │ │
-│  │  │   System     │ │   Export     │ │   History    │ │   Learning   │   │ │
+│  │  │   System     │ │   Export     │ │  (Regime)    │ │   Learning   │   │ │
 │  │  └──────────────┘ └──────────────┘ └──────────────┘ └──────────────┘   │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                              │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │              3-TIER PORTFOLIO (PORTFOLIO_MANAGER=true)                   │ │
+│  │  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐   │ │
+│  │  │  Cash Tier   │ │  Index Tier  │ │ Trading Tier │ │   AI Port.   │   │ │
+│  │  │  (10% USDT)  │ │  (65% Top20) │ │ (25% Cohorts)│ │  Optimizer   │   │ │
+│  │  └──────────────┘ └──────────────┘ └──────────────┘ └──────────────┘   │ │
+│  │  ┌──────────────┐ ┌──────────────┐                                      │ │
+│  │  │   Profit     │ │  Production  │                                      │ │
+│  │  │   Engine     │ │  Validator   │                                      │ │
+│  │  └──────────────┘ └──────────────┘                                      │ │
 │  └────────────────────────────────────────────────────────────────────────┘ │
 │                             │                                               │
 │                             ▼                                               │
@@ -232,6 +256,66 @@ Jede Cohort durchlaeuft woechentliche Zyklen:
 - **Sonntag 00:00**: Neuer Zyklus startet mit frischem Kapital
 - **Samstag 23:59**: Zyklus endet, Metriken werden berechnet
 - **Automatisch**: Sharpe, Sortino, Kelly, VaR, CVaR pro Zyklus
+
+## 3-Tier Portfolio Management
+
+Das **3-Tier Portfolio System** (`PORTFOLIO_MANAGER=true`) verwaltet Kapital strategisch ueber drei Tiers:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    PORTFOLIO MANAGER                              │
+│              (AI-optimierte 3-Tier-Verwaltung)                  │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  Tier 1: Cash Reserve (10%)    Tier 2: Index Holdings (65%)     │
+│  ├─ Immer USDT                 ├─ CMC Top 20 nach Market Cap    │
+│  ├─ Sicherheitspuffer          ├─ Quarterly Rebalance (90 Tage) │
+│  ├─ Underfunded < 2% → Alert   ├─ 15% Trailing Stops            │
+│  └─ Overfunded > 5% → Umvert.  ├─ Max 30% pro Coin (BTC-Cap)   │
+│                                  └─ Stablecoins ausgeschlossen   │
+│                                                                  │
+│  Tier 3: Hybrid Trading (25%)                                   │
+│  ├─ CohortOrchestrator (6 Bots)                                │
+│  ├─ Kapitalbudget vom Manager                                   │
+│  └─ Cohort-Anzahl skaliert mit Kapital                          │
+│                                                                  │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │ Profit Redistribution Engine (wöchentlich So 17:00)      │   │
+│  │ ├─ Rebalance wenn Tier-Drift > 3%                        │   │
+│  │ ├─ Priorität: Cash → Index → Trading                     │   │
+│  │ └─ Min $10 pro Transfer                                  │   │
+│  ├──────────────────────────────────────────────────────────┤   │
+│  │ AI Portfolio Optimizer (monatlich, DeepSeek)              │   │
+│  │ ├─ Guard Rails: Cash 5-20%, Index 40-80%, Trading 10-40% │   │
+│  │ ├─ Max 5pp Shift pro Empfehlung                          │   │
+│  │ └─ Auto-Apply nach 3+ Empfehlungen bei Confidence > 0.8  │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Deployment Phases
+
+| Phase | Kapital | Cohorts | Validation |
+|-------|---------|---------|------------|
+| Paper | $10.000 (virtuell) | 6 | Nicht erforderlich |
+| Alpha | $1.000 | 2 | ProductionValidator muss bestehen |
+| Beta | $3.000 | 4 | ProductionValidator muss bestehen |
+| Production | $5.000+ | 6 | ProductionValidator muss bestehen |
+
+### Production Validation (9 Kriterien)
+
+| Kriterium | Schwellenwert |
+|-----------|---------------|
+| Mindest-Trades | 5.000 geschlossene Trade-Paare |
+| Sharpe Ratio | >= 0.5 (annualisiert) |
+| Playbook-Version | >= v4 |
+| Signal-Evaluationen | >= 1.000 (`was_correct` populiert) |
+| Regime-Wechsel | >= 2 (BULL→BEAR oder umgekehrt) |
+| Max Drawdown | < 15% (kein Tier) |
+| Win Rate | >= 45% |
+| Index Tracking Error | < 5pp |
+| AI-Empfehlungen | >= 2 geloggt |
 
 ## Hybrid Trading System
 
@@ -499,16 +583,28 @@ binance-grid-bot/
 │   │   ├── whale_alert.py      # Whale-Tracking
 │   │   ├── economic_events.py  # FOMC, CPI, NFP Events
 │   │   ├── memory.py           # Trading Memory System (RAG)
-│   │   ├── playbook.py         # Trading Playbook Generator
+│   │   ├── playbook.py         # Trading Playbook Generator (Regime-stratifiziert)
+│   │   ├── market_cap.py       # CoinGecko Market Cap API
 │   │   └── fetcher.py          # Historische Daten
 │   ├── scanner/                # Multi-Coin Opportunity Scanner
 │   │   ├── __init__.py
 │   │   ├── coin_scanner.py     # Opportunity Detection
+│   │   ├── coin_discovery.py   # AI Auto-Discovery (DeepSeek)
 │   │   └── opportunity.py      # Opportunity Dataclass
 │   ├── portfolio/              # Portfolio Management
 │   │   ├── __init__.py
 │   │   ├── allocator.py        # Kelly-basierte Kapitalverteilung
-│   │   └── constraints.py      # Allocation Rules & Limits
+│   │   ├── constraints.py      # Allocation Rules & Limits
+│   │   ├── portfolio_manager.py # 3-Tier Orchestrator (PORTFOLIO_MANAGER=true)
+│   │   ├── profit_engine.py    # Woechentliche Gewinnumverteilung
+│   │   ├── ai_optimizer.py     # Monatliche DeepSeek Tier-Optimierung
+│   │   ├── validation.py       # ProductionValidator (9 Go-Live Kriterien)
+│   │   ├── go_live.py          # GoLiveChecklist + DeploymentPhases
+│   │   └── tiers/
+│   │       ├── __init__.py
+│   │       ├── cash_reserve.py # Cash Reserve Tier (USDT)
+│   │       ├── index_holdings.py # Index Tier (CMC Top 20)
+│   │       └── trading_tier.py # Trading Tier (CohortOrchestrator)
 │   ├── risk/
 │   │   ├── stop_loss.py        # Stop-Loss Management (Lifecycle: confirm/reactivate)
 │   │   ├── stop_loss_executor.py # Retry + Balance-Aware Market-Sell
@@ -603,6 +699,13 @@ binance-grid-bot/
 | `stop_loss_orders` | Stop-Loss Tracking | Risk Management |
 | `technical_indicators` | Berechnete Indikatoren | Technical Analysis |
 | `ai_conversations` | Telegram AI Chat | Context für AI Antworten |
+| **Portfolio Tier Tabellen** | | |
+| `portfolio_tiers` | Tier-Zielallokationen (cash/index/trading) | 3-Tier Management |
+| `tier_allocation_history` | Aenderungshistorie pro Tier | Audit Trail |
+| `index_holdings` | CMC Top 20 Positionen + Trailing Stops | Index Tier |
+| `profit_redistributions` | Gewinn-Umverteilungs-Log | Rebalancing |
+| `ai_portfolio_recommendations` | DeepSeek Tier-Empfehlungen | AI Optimizer |
+| `coin_discoveries` | AI Auto-Discovery Ergebnisse | Coin Discovery |
 
 ### Multi-Coin Views
 
@@ -751,6 +854,9 @@ DATABASE_URL=postgresql://trading:password@localhost:5433/trading_bot
 | `/playbook` | Aktuelles Trading Playbook anzeigen |
 | `/playbook_stats` | Playbook-Statistiken |
 | `/playbook_update` | Manuelles Playbook-Update auslösen |
+| `/compare` | Cohort-Vergleichsranking |
+| `/portfolio` | 3-Tier Portfolio-Breakdown mit Drift-Anzeige |
+| `/validate` | Production Readiness Check (9 Kriterien) |
 | `/stop` | Bot stoppen |
 
 ### Scheduler Tasks
@@ -790,12 +896,25 @@ DATABASE_URL=postgresql://trading:password@localhost:5433/trading_bot
 | Portfolio Plausibility | 2h | Allokations-Mathematik verifizieren |
 | Grid Health | 4h | BUY/SELL-Counts, failed follow-ups |
 | **Reports** | | |
-| Daily Summary | 20:00 | Portfolio-Report |
+| Daily Summary | 20:00 | Portfolio-Report (inkl. Tier-Breakdown) |
 | Weekly Export | Sa 23:00 | Analyse-Export erstellen |
 | **Weekly Tasks** | | |
 | Cycle Management | So 00:00 | Zyklus beenden/starten |
 | Weekly Rebalance | So 18:00 | Portfolio-Rebalancing |
 | Playbook Update | So 19:00 | Playbook neu generieren |
+| **AI Learning Loop** | | |
+| Outcome 1h | Stuendlich | 1h Trade-Ergebnis berechnen |
+| Outcome 4h | 4h | 4h Trade-Ergebnis berechnen |
+| Outcome 24h | 6h | 24h Trade-Ergebnis berechnen (bestehend) |
+| Outcome 7d | 12:00 | 7d Trade-Ergebnis berechnen |
+| Signal Correctness | 6h | `was_correct` fuer Signal-Komponenten |
+| Trade Decisions | 22:30 | `was_good_decision` via trade_pairs P&L |
+| Portfolio Snapshot | Stuendlich | Equity-Kurve + Sharpe Berechnung |
+| **Portfolio Tier Tasks** | | |
+| Tier Health Check | 2h | Cash-Level, Drift, Trading-Aktivitaet |
+| Profit Redistribution | So 17:00 | Tier-Rebalancing bei Drift > 3% |
+| AI Portfolio Optimizer | 1. des Monats | DeepSeek Tier-Gewichtungs-Empfehlung |
+| Production Validation | 09:00 | Go-Live Readiness Check |
 
 ## Wöchentlicher Optimierungs-Workflow
 
@@ -892,7 +1011,7 @@ mypy src/
 ### Tests
 
 ```bash
-# Alle Tests ausfuehren (942 Tests)
+# Alle Tests ausfuehren (1089 Tests)
 pytest tests/ -v
 
 # Mit Coverage (Minimum: 60%)
@@ -914,8 +1033,10 @@ pytest tests/test_grid_strategy.py -v
 | Risk | 49-94% | CVaR, Stop-Loss, Risk Guard |
 | API | 20-76% | Binance Client, HTTP Client |
 | Scanner/Portfolio | 43-97% | CoinScanner, Allocator |
-| Monitoring | 100% | Order Reconciliation, Grid Health |
-| **Gesamt** | **60%** | **942 Tests** |
+| Monitoring | 100% | Order Reconciliation, Grid Health, Tier Health |
+| Portfolio Tiers | 90%+ | PortfolioManager, Tiers, Profit Engine, AI Optimizer |
+| Production | 100% | ProductionValidator, GoLiveChecklist |
+| **Gesamt** | **60%** | **1089 Tests** |
 
 ### Pre-commit Hooks
 
@@ -934,7 +1055,7 @@ Die GitHub Actions Pipeline:
 
 1. **Lint & Format**: Ruff checks (0 errors)
 2. **Type Check**: MyPy strict mode (0 errors)
-3. **Tests**: 942 Tests mit Coverage >= 60%
+3. **Tests**: 1089 Tests mit Coverage >= 60%
 4. **Auto-Release**: Bei Version-Bump in pyproject.toml wird automatisch ein GitHub Release erstellt
 
 ## Conventional Commits
@@ -962,7 +1083,7 @@ chore: Update dependencies
 |-----|-------|------|
 | Binance | Trading, Preise | API Key |
 | Alternative.me | Fear & Greed Index | Keine |
-| CoinGecko | Social Stats, Trending | Keine |
+| CoinGecko | Social Stats, Trending, Market Cap (Index Tier) | Keine |
 | LunarCrush | Social Sentiment, Galaxy Score | API Key |
 | Reddit (PRAW) | Reddit Mentions, Sentiment | OAuth |
 | Farside Investors | Bitcoin ETF Flows | Keine |

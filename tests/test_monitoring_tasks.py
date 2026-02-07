@@ -339,3 +339,111 @@ class TestTaskGridHealthSummary:
 
         with patch("src.tasks.monitoring_tasks.CONFIG_DIR", tmp_path / "config"):
             task_grid_health_summary()  # Logs "no sells" but no Telegram alert
+
+
+# ═══════════════════════════════════════════════════════════════
+# task_stale_detection
+# ═══════════════════════════════════════════════════════════════
+
+
+class TestTaskStaleDetection:
+    def test_no_grid_states(self, tmp_path):
+        """No alert when no grid state files."""
+        from src.tasks.monitoring_tasks import task_stale_detection
+
+        (tmp_path / "config").mkdir(exist_ok=True)
+        with patch("src.tasks.monitoring_tasks.CONFIG_DIR", tmp_path / "config"):
+            task_stale_detection()  # Should just log and return
+
+    @patch("src.notifications.telegram_service.get_telegram")
+    def test_stale_orders_triggers_alert(self, mock_tg, tmp_path):
+        """Alert when newest order is older than 30 minutes."""
+        from src.tasks.monitoring_tasks import task_stale_detection
+
+        old_time = (datetime.now() - timedelta(hours=2)).isoformat()
+        state = _grid_state("BTCUSDT", {"1": {"type": "BUY", "created_at": old_time}})
+        _write_state(tmp_path, "grid_state_BTCUSDT_conservative.json", state)
+
+        with patch("src.tasks.monitoring_tasks.CONFIG_DIR", tmp_path / "config"):
+            task_stale_detection()
+
+        mock_tg.return_value.send.assert_called_once()
+        call_args = mock_tg.return_value.send.call_args[0][0]
+        assert "Stale" in call_args
+
+    def test_fresh_orders_no_alert(self, tmp_path):
+        """No alert when orders are recent."""
+        from src.tasks.monitoring_tasks import task_stale_detection
+
+        recent_time = (datetime.now() - timedelta(minutes=5)).isoformat()
+        state = _grid_state("BTCUSDT", {"1": {"type": "BUY", "created_at": recent_time}})
+        _write_state(tmp_path, "grid_state_BTCUSDT_conservative.json", state)
+
+        with patch("src.tasks.monitoring_tasks.CONFIG_DIR", tmp_path / "config"):
+            task_stale_detection()  # No telegram call expected
+
+    def test_no_timestamps_in_orders(self, tmp_path):
+        """Handles orders with no created_at gracefully."""
+        from src.tasks.monitoring_tasks import task_stale_detection
+
+        state = _grid_state("BTCUSDT", {"1": {"type": "BUY"}})
+        _write_state(tmp_path, "grid_state_BTCUSDT_conservative.json", state)
+
+        with patch("src.tasks.monitoring_tasks.CONFIG_DIR", tmp_path / "config"):
+            task_stale_detection()  # Should log warning about no timestamps
+
+
+# ═══════════════════════════════════════════════════════════════
+# task_discovery_health_check
+# ═══════════════════════════════════════════════════════════════
+
+
+class TestTaskDiscoveryHealthCheck:
+    @patch("src.tasks.base.get_db_connection")
+    def test_no_db_connection(self, mock_db):
+        """No crash when DB unavailable."""
+        from src.tasks.monitoring_tasks import task_discovery_health_check
+
+        mock_db.return_value = None
+        task_discovery_health_check()  # Should just log warning
+
+    @patch("src.tasks.base.get_db_connection")
+    def test_empty_table(self, mock_db):
+        """No alert when coin_discoveries is empty."""
+        from src.tasks.monitoring_tasks import task_discovery_health_check
+
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+        mock_cursor.__enter__ = MagicMock(return_value=mock_cursor)
+        mock_cursor.__exit__ = MagicMock(return_value=False)
+        mock_cursor.fetchone.return_value = {"last_run": None}
+        mock_conn.cursor.return_value = mock_cursor
+        mock_db.return_value = mock_conn
+
+        task_discovery_health_check()  # Should log "no discoveries yet"
+
+    @patch("src.notifications.telegram_service.get_telegram")
+    @patch("src.tasks.base.get_db_connection")
+    def test_stale_discovery_alert(self, mock_db, mock_tg):
+        """Alert when last discovery is older than 48h."""
+        from src.tasks.monitoring_tasks import task_discovery_health_check
+
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+        mock_cursor.__enter__ = MagicMock(return_value=mock_cursor)
+        mock_cursor.__exit__ = MagicMock(return_value=False)
+
+        old_time = datetime.utcnow() - timedelta(hours=72)
+        mock_cursor.fetchone.side_effect = [
+            {"last_run": old_time},  # MAX(discovered_at)
+            {"total": 5, "approved": 2},  # approval rate
+        ]
+        mock_cursor.fetchall.return_value = []  # idle coins
+        mock_conn.cursor.return_value = mock_cursor
+        mock_db.return_value = mock_conn
+
+        task_discovery_health_check()
+
+        mock_tg.return_value.send.assert_called_once()
+        call_args = mock_tg.return_value.send.call_args[0][0]
+        assert ">48h" in call_args

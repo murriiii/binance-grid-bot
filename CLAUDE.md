@@ -275,6 +275,40 @@ if stop.update(current_price):
         stop.reactivate()
 ```
 
+### 3-Tier Portfolio Management
+
+When `PORTFOLIO_MANAGER=true`, `main_hybrid.py` launches `PortfolioManager` instead of `CohortOrchestrator` directly.
+
+```
+PortfolioManager (src/portfolio/portfolio_manager.py)
+  ├── CashReserveTier (10%)  → USDT, threshold alerts
+  ├── IndexHoldingsTier (65%) → CMC Top 20, quarterly rebalance, trailing stops
+  └── TradingTier (25%)      → CohortOrchestrator wrapper
+  │
+  ├── ProfitRedistributionEngine (weekly)
+  └── AIPortfolioOptimizer (monthly, DeepSeek)
+```
+
+**Key files:**
+- `src/portfolio/portfolio_manager.py` — Top-level orchestrator, 30s tick interval
+- `src/portfolio/tiers/cash_reserve.py` — CashReserveTier (underfunded/overfunded thresholds)
+- `src/portfolio/tiers/index_holdings.py` — IndexHoldingsTier (CoinGecko market cap, 90-day rebalance, 15% trailing stop)
+- `src/portfolio/tiers/trading_tier.py` — TradingTier (wraps CohortOrchestrator, scales cohorts by capital)
+- `src/portfolio/profit_engine.py` — ProfitRedistributionEngine (weekly, 3% drift threshold)
+- `src/portfolio/ai_optimizer.py` — AIPortfolioOptimizer (monthly DeepSeek, guard rails, learning mode)
+- `src/data/market_cap.py` — CoinGecko API client for top coins by market cap
+
+**Production Readiness:**
+- `src/portfolio/validation.py` — ProductionValidator with 9 go-live criteria
+- `src/portfolio/go_live.py` — GoLiveChecklist + DeploymentPhase (Paper→Alpha→Beta→Production)
+- Telegram commands: `/portfolio` (tier breakdown), `/validate` (readiness check)
+- Scheduler: daily production validation at 09:00
+
+**AI Optimizer guard rails:**
+- Allocation bounds: Cash 5-20%, Index 40-80%, Trading 10-40%
+- Max 5pp shift per recommendation
+- Learning mode: first 3 months log-only, auto-apply after 3+ recs with confidence > 0.8
+
 ### Multi-Coin Trading Pipeline
 
 1. **WatchlistManager** maintains coin universe (25+ coins in 6 categories: LARGE_CAP, MID_CAP, L2, DEFI, AI, GAMING)
@@ -296,8 +330,8 @@ Tasks are organized in domain-specific modules under `src/tasks/`, registered by
 | `data_tasks.py` | ETF flows, social sentiment, token unlocks, whale checks |
 | `market_tasks.py` | Market snapshots (hourly), sentiment checks (4h) |
 | `reporting_tasks.py` | Daily summary, playbook update (weekly), weekly export |
-| `system_tasks.py` | Stop-loss check (5min), health check (6h), macro events, outcome updates |
-| `monitoring_tasks.py` | Order reconciliation (30min), order timeout (1h), portfolio plausibility (2h), grid health (4h), stale detection (30min) |
+| `system_tasks.py` | Stop-loss check (5min), health check (6h), macro events, outcome updates (1h/4h/24h/7d), signal correctness (6h), trade decision quality (daily) |
+| `monitoring_tasks.py` | Order reconciliation (30min), order timeout (1h), portfolio plausibility (2h), grid health (4h), stale detection (30min), tier health (2h) |
 
 Shared infrastructure in `src/tasks/base.py` provides `get_db_connection()`. All tasks use `@task_locked` from `src/utils/task_lock.py` to prevent concurrent execution (non-blocking skip).
 

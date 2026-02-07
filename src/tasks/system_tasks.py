@@ -182,11 +182,13 @@ def task_reset_daily_drawdown():
         logger.error(f"Daily Drawdown Reset Error: {e}")
 
 
-def task_update_outcomes():
-    """Aktualisiert Trade-Outcomes."""
-    from src.data.market_data import get_market_data
+def _update_outcomes_for_window(window_hours: int, column: str):
+    """Generic outcome calculation for any time window.
 
-    logger.info("Updating trade outcomes...")
+    Finds trades that are exactly window_hours old (±1h window)
+    and calculates the price change percentage.
+    """
+    from src.data.market_data import get_market_data
 
     conn = get_db_connection()
     if not conn:
@@ -196,35 +198,166 @@ def task_update_outcomes():
         market_data = get_market_data()
 
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute("""
+            cur.execute(
+                f"""
                 SELECT id, symbol, price, action
                 FROM trades
-                WHERE timestamp < NOW() - INTERVAL '24 hours'
-                AND timestamp > NOW() - INTERVAL '25 hours'
-                AND outcome_24h IS NULL
-            """)
+                WHERE timestamp < NOW() - INTERVAL '{window_hours} hours'
+                AND timestamp > NOW() - INTERVAL '{window_hours + 1} hours'
+                AND {column} IS NULL
+                """,
+            )
             trades = cur.fetchall()
 
+            updated = 0
             for trade in trades:
                 current_price = market_data.get_price(trade["symbol"])
+                if not current_price or current_price <= 0:
+                    continue
 
                 pct_change = ((current_price - trade["price"]) / trade["price"]) * 100
                 if trade["action"] == "SELL":
                     pct_change = -pct_change
 
-                cur.execute(
-                    """
-                    UPDATE trades SET outcome_24h = %s WHERE id = %s
-                """,
-                    (pct_change, trade["id"]),
-                )
+                # For 24h window, also set was_good_decision (approximate)
+                if column == "outcome_24h":
+                    is_good = (trade["action"] == "BUY" and pct_change > 0) or (
+                        trade["action"] == "SELL" and pct_change < 0
+                    )
+                    cur.execute(
+                        f"""
+                        UPDATE trades SET {column} = %s,
+                            was_good_decision = COALESCE(was_good_decision, %s)
+                        WHERE id = %s
+                        """,
+                        (pct_change, is_good, trade["id"]),
+                    )
+                else:
+                    cur.execute(
+                        f"UPDATE trades SET {column} = %s WHERE id = %s",
+                        (pct_change, trade["id"]),
+                    )
+                updated += 1
 
-                logger.info(f"Updated outcome for trade {trade['id']}: {pct_change:+.2f}%")
+            conn.commit()
+            if updated:
+                logger.info(f"Updated {column} for {updated} trades")
+
+    except Exception as e:
+        logger.error(f"Outcome Update Error ({column}): {e}")
+    finally:
+        conn.close()
+
+
+def task_update_outcomes():
+    """Aktualisiert Trade-Outcomes (24h). Alle 6 Stunden."""
+    logger.info("Updating trade outcomes (24h)...")
+    _update_outcomes_for_window(24, "outcome_24h")
+
+
+@task_locked
+def task_update_outcomes_1h():
+    """Aktualisiert 1h Trade-Outcomes. Stündlich."""
+    _update_outcomes_for_window(1, "outcome_1h")
+
+
+@task_locked
+def task_update_outcomes_4h():
+    """Aktualisiert 4h Trade-Outcomes. Alle 4 Stunden."""
+    _update_outcomes_for_window(4, "outcome_4h")
+
+
+@task_locked
+def task_update_outcomes_7d():
+    """Aktualisiert 7d Trade-Outcomes. Täglich."""
+    _update_outcomes_for_window(168, "outcome_7d")
+
+
+@task_locked
+def task_evaluate_signal_correctness():
+    """Bewertet ob Signale korrekt waren basierend auf outcome_24h.
+
+    Compares signal direction (final_score) against actual price movement.
+    Signals with |final_score| <= 0.1 are considered neutral and skipped.
+    Runs every 6h after task_update_outcomes.
+    """
+    logger.info("Evaluating signal correctness...")
+
+    conn = get_db_connection()
+    if not conn:
+        return
+
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                UPDATE signal_components sc SET was_correct = CASE
+                    WHEN sc.final_score > 0.1 AND t.outcome_24h > 0 THEN TRUE
+                    WHEN sc.final_score < -0.1 AND t.outcome_24h < 0 THEN TRUE
+                    WHEN ABS(sc.final_score) <= 0.1 THEN NULL
+                    ELSE FALSE
+                END
+                FROM trades t
+                WHERE sc.trade_id = t.id
+                AND sc.was_correct IS NULL
+                AND t.outcome_24h IS NOT NULL
+            """)
+            updated = cur.rowcount
+            conn.commit()
+
+        if updated:
+            logger.info(f"Evaluated signal correctness for {updated} signals")
+
+    except Exception as e:
+        logger.error(f"Signal Correctness Error: {e}")
+    finally:
+        conn.close()
+
+
+@task_locked
+def task_evaluate_trade_decisions():
+    """Bewertet Trade-Qualität basierend auf realisiertem P&L aus trade_pairs.
+
+    More precise than the outcome_24h approximation in task_update_outcomes.
+    Runs daily. Overwrites the approximate was_good_decision with actual P&L data.
+    """
+    logger.info("Evaluating trade decisions from trade_pairs...")
+
+    conn = get_db_connection()
+    if not conn:
+        return
+
+    try:
+        with conn.cursor() as cur:
+            # BUY trades: link via entry_trade_id
+            cur.execute("""
+                UPDATE trades t
+                SET was_good_decision = (tp.net_pnl > 0)
+                FROM trade_pairs tp
+                WHERE tp.entry_trade_id::text = t.id::text
+                AND tp.status = 'closed'
+                AND tp.net_pnl IS NOT NULL
+            """)
+            buy_updated = cur.rowcount
+
+            # SELL trades: link via exit_trade_id
+            cur.execute("""
+                UPDATE trades t
+                SET was_good_decision = (tp.net_pnl > 0)
+                FROM trade_pairs tp
+                WHERE tp.exit_trade_id::text = t.id::text
+                AND tp.status = 'closed'
+                AND tp.net_pnl IS NOT NULL
+            """)
+            sell_updated = cur.rowcount
 
             conn.commit()
 
+        total = buy_updated + sell_updated
+        if total:
+            logger.info(f"Evaluated trade decisions: {buy_updated} BUY + {sell_updated} SELL")
+
     except Exception as e:
-        logger.error(f"Outcome Update Error: {e}")
+        logger.error(f"Trade Decision Evaluation Error: {e}")
     finally:
         conn.close()
 

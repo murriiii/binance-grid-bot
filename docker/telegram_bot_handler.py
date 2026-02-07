@@ -63,6 +63,7 @@ class TradingTelegramBot:
             "*Befehle:*\n"
             "/status - Portfolio Status\n"
             "/report - Cohort-Zwischenbericht\n"
+            "/compare - Cohort-Vergleich\n"
             "/market - Markt-Analyse\n"
             "/ask <frage> - AI Frage\n"
             "/stops - Aktive Stop-Loss\n"
@@ -78,7 +79,9 @@ class TradingTelegramBot:
 
 *Portfolio:*
 /status - Aktueller Portfolio-Status
+/portfolio - 3-Tier Portfolio Breakdown
 /report - Cohort-Zwischenbericht (live)
+/compare - Cohort-Vergleichsranking
 /positions - Offene Positionen
 /performance - Performance-Übersicht
 /stops - Aktive Stop-Loss Orders
@@ -98,6 +101,7 @@ class TradingTelegramBot:
 /buy <symbol> <betrag> - Kaufvorschlag
 /sell <symbol> - Verkaufsvorschlag
 /rebalance - Rebalancing starten
+/validate - Production Readiness Check
 
 *Playbook (Erfahrungsgedächtnis):*
 /playbook - Zeige aktuelle Regeln
@@ -302,6 +306,83 @@ _RSI neutral, MACD bullish crossover, Preis über SMAs_
         await update.message.reply_text(ta, parse_mode="Markdown", reply_markup=reply_markup)
 
     # ═══════════════════════════════════════════════════════════════
+    # PORTFOLIO TIER COMMANDS (3-Tier System)
+    # ═══════════════════════════════════════════════════════════════
+
+    async def cmd_portfolio(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Show 3-Tier portfolio breakdown."""
+        await update.message.reply_text("Loading portfolio tiers...")
+
+        try:
+            import psycopg2
+            from psycopg2.extras import RealDictCursor
+
+            database_url = os.getenv("DATABASE_URL")
+            if database_url:
+                conn = psycopg2.connect(database_url)
+            else:
+                conn = psycopg2.connect(
+                    host=os.getenv("POSTGRES_HOST", "localhost"),
+                    port=os.getenv("POSTGRES_PORT", 5432),
+                    database=os.getenv("POSTGRES_DB", "trading_bot"),
+                    user=os.getenv("POSTGRES_USER", "trading"),
+                    password=os.getenv("POSTGRES_PASSWORD", ""),
+                )
+
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(
+                    "SELECT tier_name, target_pct, current_pct, current_value_usd "
+                    "FROM portfolio_tiers WHERE is_active = TRUE "
+                    "ORDER BY tier_name"
+                )
+                tiers = cur.fetchall()
+
+            conn.close()
+
+            if not tiers:
+                await update.message.reply_text(
+                    "No portfolio tier data found.\nIs PORTFOLIO_MANAGER=true?"
+                )
+                return
+
+            total_value = sum(float(t["current_value_usd"] or 0) for t in tiers)
+
+            tier_emojis = {
+                "cash_reserve": "💵",
+                "index_holdings": "📊",
+                "trading": "⚡",
+            }
+
+            lines = [
+                "<b>🏦 3-TIER PORTFOLIO</b>",
+                "━━━━━━━━━━━━━━━━━━━━━",
+            ]
+
+            for t in tiers:
+                name = t["tier_name"]
+                emoji = tier_emojis.get(name, "📋")
+                target = float(t["target_pct"])
+                current = float(t["current_pct"] or 0)
+                value = float(t["current_value_usd"] or 0)
+                drift = current - target
+
+                bar_len = int(current / 5)  # 20 chars = 100%
+                bar = "█" * bar_len + "░" * (20 - bar_len)
+
+                lines.append(f"\n{emoji} <b>{name.upper()}</b>")
+                lines.append(f"<code>{bar} {current:5.1f}%</code>")
+                lines.append(
+                    f"  Target: {target:.0f}% | Value: ${value:,.0f} | Drift: {drift:+.1f}pp"
+                )
+
+            lines.append(f"\n<b>Total: ${total_value:,.2f}</b>")
+
+            await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+
+        except Exception as e:
+            await update.message.reply_text(f"Error: {e}")
+
+    # ═══════════════════════════════════════════════════════════════
     # PLAYBOOK COMMANDS (Erfahrungsgedächtnis)
     # ═══════════════════════════════════════════════════════════════
 
@@ -434,6 +515,37 @@ _Das Playbook wird bei jedem AI-Call als Kontext verwendet._
             await update.message.reply_text(f"❌ Fehler: {e}")
 
     # ═══════════════════════════════════════════════════════════════
+    # PRODUCTION VALIDATION COMMANDS
+    # ═══════════════════════════════════════════════════════════════
+
+    async def cmd_validate(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Run production readiness validation."""
+        await update.message.reply_text("Running production validation...")
+
+        try:
+            from src.portfolio.validation import ProductionValidator
+
+            validator = ProductionValidator()
+            report = validator.validate_detailed()
+
+            lines = [
+                "<b>🔍 PRODUCTION VALIDATION</b>",
+                "━━━━━━━━━━━━━━━━━━━━━",
+                f"Status: <b>{'✅ READY' if report.is_ready else '⏳ NOT READY'}</b>",
+                f"Progress: <b>{report.passed_count}/{report.total_count}</b> "
+                f"({report.progress_pct:.0f}%)\n",
+            ]
+
+            for r in report.results:
+                icon = "✅" if r.passed else "❌"
+                lines.append(f"{icon} {r.message}")
+
+            await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+
+        except Exception as e:
+            await update.message.reply_text(f"Error: {e}")
+
+    # ═══════════════════════════════════════════════════════════════
     # REPORT COMMAND (Cohort-Zwischenbericht)
     # ═══════════════════════════════════════════════════════════════
 
@@ -456,6 +568,31 @@ _Das Playbook wird bei jedem AI-Call als Kontext verwendet._
 
         except Exception as e:
             logger.error(f"Report error: {e}")
+            await update.message.reply_text(f"❌ Fehler: {e}")
+
+    # ═══════════════════════════════════════════════════════════════
+    # COMPARE COMMAND (Cohort-Vergleich)
+    # ═══════════════════════════════════════════════════════════════
+
+    async def cmd_compare(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Generiert Cohort-Vergleichsranking on-demand."""
+        await update.message.reply_text("🏆 Generiere Cohort-Vergleich...")
+
+        try:
+            from src.tasks.reporting_tasks import _build_cohort_comparison
+
+            report = _build_cohort_comparison()
+
+            if not report:
+                await update.message.reply_text(
+                    "⚠️ Keine Vergleichsdaten.\nMind. 2 aktive Cohorts mit Trades benötigt."
+                )
+                return
+
+            await update.message.reply_text(report, parse_mode="HTML")
+
+        except Exception as e:
+            logger.error(f"Compare error: {e}")
             await update.message.reply_text(f"❌ Fehler: {e}")
 
     # ═══════════════════════════════════════════════════════════════
@@ -599,8 +736,15 @@ def main():
     app.add_handler(CommandHandler("stops", bot.cmd_stops))
     app.add_handler(CommandHandler("ta", bot.cmd_ta))
 
-    # Report Command
+    # Report + Compare Commands
     app.add_handler(CommandHandler("report", bot.cmd_report))
+    app.add_handler(CommandHandler("compare", bot.cmd_compare))
+
+    # Portfolio Tier Commands
+    app.add_handler(CommandHandler("portfolio", bot.cmd_portfolio))
+
+    # Validation Commands
+    app.add_handler(CommandHandler("validate", bot.cmd_validate))
 
     # Playbook Commands
     app.add_handler(CommandHandler("playbook", bot.cmd_playbook))

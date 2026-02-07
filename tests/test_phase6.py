@@ -20,8 +20,8 @@ class TestMainHybrid:
 
         assert hasattr(main_hybrid, "main")
 
-    @patch("main_hybrid.CohortOrchestrator")
-    @patch("main_hybrid.BinanceClient")
+    @patch("src.core.cohort_orchestrator.CohortOrchestrator")
+    @patch("src.api.binance_client.BinanceClient")
     def test_main_creates_cohort_orchestrator(self, mock_client_cls, mock_co_cls):
         """main() creates a CohortOrchestrator and calls run()."""
         import main_hybrid
@@ -45,8 +45,8 @@ class TestMainHybrid:
         mock_co.initial_allocation.assert_called_once()
         mock_co.run.assert_called_once()
 
-    @patch("main_hybrid.CohortOrchestrator")
-    @patch("main_hybrid.BinanceClient")
+    @patch("src.core.cohort_orchestrator.CohortOrchestrator")
+    @patch("src.api.binance_client.BinanceClient")
     def test_main_exits_when_no_cohorts_initialized(self, mock_client_cls, mock_co_cls):
         """main() exits when no cohorts could be initialized."""
         import main_hybrid
@@ -60,8 +60,8 @@ class TestMainHybrid:
 
         assert exc_info.value.code == 1
 
-    @patch("main_hybrid.CohortOrchestrator")
-    @patch("main_hybrid.BinanceClient")
+    @patch("src.core.cohort_orchestrator.CohortOrchestrator")
+    @patch("src.api.binance_client.BinanceClient")
     def test_main_exits_when_no_allocations(self, mock_client_cls, mock_co_cls):
         """main() exits when no cohorts get allocations."""
         import main_hybrid

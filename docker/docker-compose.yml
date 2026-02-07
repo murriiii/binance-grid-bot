@@ -75,6 +75,9 @@ services:
       - BINANCE_TESTNET=${BINANCE_TESTNET:-true}
       - BINANCE_TESTNET_API_KEY=${BINANCE_TESTNET_API_KEY:-}
       - BINANCE_TESTNET_API_SECRET=${BINANCE_TESTNET_API_SECRET:-}
+      # Paper Trading
+      - PAPER_TRADING=${PAPER_TRADING:-false}
+      - PAPER_INITIAL_USDT=${PAPER_INITIAL_USDT:-6000}
       # Telegram
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
@@ -90,6 +93,8 @@ services:
       # Grid passthrough
       - GRID_RANGE_PERCENT=${GRID_RANGE_PERCENT:-5}
       - NUM_GRIDS=${NUM_GRIDS:-5}
+      # Portfolio Manager (3-Tier System)
+      - PORTFOLIO_MANAGER=${PORTFOLIO_MANAGER:-false}
       # Notifications
       - LEARNING_MODE=${LEARNING_MODE:-false}
     volumes:

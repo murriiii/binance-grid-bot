@@ -1,3 +1,54 @@
+## v1.19.0 (2026-02-07)
+
+### Feat (Phase 12: Production Readiness)
+
+- ProductionValidator with 9 go-live criteria (min trades, Sharpe, drawdown, win rate, etc.)
+- GoLiveChecklist with 4 deployment phases (Paper → Alpha $1K → Beta $3K → Production $5K+)
+- Telegram /validate command for production readiness check
+- Daily production validation scheduler task (09:00)
+- 20 tests for Phase 12
+
+## v1.18.0 (2026-02-07)
+
+### Feat (Phase 11: 3-Tier Portfolio Management)
+
+- DB schema: portfolio_tiers, tier_allocation_history, index_holdings, profit_redistributions, ai_portfolio_recommendations
+- PortfolioManager: top-level 3-tier orchestrator with PORTFOLIO_MANAGER feature flag
+- CashReserveTier: USDT safety buffer (10%, underfunded/overfunded thresholds)
+- IndexHoldingsTier: CMC Top 20 buy-and-hold with quarterly rebalance, 15% trailing stops
+- TradingTier: CohortOrchestrator wrapper with capital budget scaling
+- ProfitRedistributionEngine: weekly tier rebalancing when drift > 3%
+- AIPortfolioOptimizer: monthly DeepSeek allocation with guard rails (learning mode, auto-apply)
+- CoinGecko market cap API client for index composition
+- Telegram /portfolio command with tier breakdown and drift display
+- Tier health check task (2h), profit redistribution (weekly), AI optimizer (monthly)
+- Tier section in daily summary report
+- 53 tests for Phase 11
+
+## v1.17.0 (2026-02-07)
+
+### Feat (Phase 10: AI Learning Loop Fix)
+
+- Signal correctness evaluation: populate signal_components.was_correct (6h scheduler task)
+- Trade decision quality: populate trades.was_good_decision via trade_pairs P&L (daily task)
+- Multi-timeframe outcomes: outcome_1h (hourly), outcome_4h (4h), outcome_7d (daily) alongside existing 24h
+- Discovery evaluation accelerated from 30 to 7 days
+- Signal accuracy integrated into Playbook (top signals by reliability per regime)
+- Regime-stratified Playbook rules (separate BULL/BEAR/SIDEWAYS sections)
+- Portfolio snapshots task (hourly) for equity curve tracking
+- 31 tests for Phase 10
+
+## v1.16.0 (2026-02-07)
+
+### Feat
+
+- E2: per-coin unrealized P&L in dashboard (cost basis from open trade_pairs)
+- E3: cohort comparison ranking with /compare Telegram command + daily summary integration
+- E1: AI-enhanced auto-discovery with DeepSeek feedback loop (coin_discoveries table, learning from past decisions)
+- E4: paper trading client (PaperBinanceClient) with real mainnet prices and simulated order matching
+- E5: monitoring extensions — paper-mode awareness, discovery health check task, stale detection tests
+- E6: client.client.get_open_orders refactored to client.get_open_orders, paper-mode in reporting
+
 ## v1.15.0 (2026-02-07)
 
 ### Fix

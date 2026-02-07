@@ -82,6 +82,47 @@ $24/level still meets min_notional.
 account drawdown). The learning mode gate in TelegramService handles force correctly.
 **Production:** Stays as-is. When LEARNING_MODE=false, all messages are sent normally.
 
+### 11. PAPER_TRADING=false (Temporary)
+
+**Where:** `.env` / `docker-compose.yml`
+**Effect:** When `true`, uses `PaperBinanceClient` instead of real Binance API. Real mainnet
+prices, simulated order matching, no API keys needed. State persisted in `config/paper_portfolio_*.json`.
+**Reason:** Paper trading provides more realistic strategy learning than testnet (real prices, real
+orderbook dynamics). Can be enabled alongside or instead of testnet.
+**Production:** Set `PAPER_TRADING=false` for live trading. Can keep `true` for ongoing paper
+testing of new strategies.
+
+### 12. AI Auto-Discovery (Permanent)
+
+**Where:** `src/scanner/coin_discovery.py`, scheduled daily at 07:00
+**Effect:** DeepSeek AI evaluates new USDT trading pairs and adds approved coins to watchlist.
+Every decision is logged in `coin_discoveries` table. After 30 days, outcomes are evaluated and
+fed back into future AI prompts (learning feedback loop).
+**Reason:** Automated coin discovery with AI learning improves over time. The feedback loop ensures
+DeepSeek learns from its mistakes during the 3-4 month learning phase.
+**Production:** Stays as-is. The AI learns continuously.
+
+### 14. PORTFOLIO_MANAGER=false (Temporary)
+
+**Where:** `.env` / `docker-compose.yml`
+**Effect:** When `true`, main_hybrid.py launches PortfolioManager (3-Tier: Cash 10% + Index 65% + Trading 25%) instead of CohortOrchestrator. The trading tier wraps CohortOrchestrator internally.
+**Reason:** 3-Tier Portfolio system needs separate activation. Paper trading should run for 8+ weeks before enabling.
+**Production:** Set `PORTFOLIO_MANAGER=true` after ProductionValidator.validate() returns True (9 criteria met).
+
+### 15. Discovery Evaluation After 7 Days (Permanent)
+
+**Where:** `src/scanner/coin_discovery.py` — `EVALUATION_AFTER_DAYS = 7`
+**Effect:** AI-discovered coins are evaluated for success after 7 days (previously 30 days).
+**Reason:** 30-day evaluation was too slow (only 1 feedback cycle per month). 7 days provides 4x faster learning.
+**Production:** Stays as-is.
+
+### 16. AI Optimizer Learning Mode (Temporary)
+
+**Where:** `src/portfolio/ai_optimizer.py` — `should_auto_apply()` checks recommendation count
+**Effect:** First 3 months: AI portfolio recommendations are logged but NOT auto-applied. After 3+ previous recommendations with confidence > 0.8: auto-apply.
+**Reason:** Validate AI quality before allowing autonomous allocation changes.
+**Production:** After 3+ months of logged recommendations, auto-apply activates automatically.
+
 ---
 
 ## Production Migration Checklist
@@ -102,6 +143,8 @@ Follow this order when switching to production:
        HYBRID_TOTAL_INVESTMENT=<real amount per cohort>
        HYBRID_MAX_SYMBOLS=6
        NUM_GRIDS=5
+       PORTFOLIO_MANAGER=true
+       PAPER_TRADING=false
 
 3. [ ] Update DB cohort capital:
        UPDATE cohorts SET starting_capital = <real_amount>;
@@ -117,12 +160,16 @@ Follow this order when switching to production:
        - IP whitelist configured
        - No withdrawal permission
 
-7. [ ] Start with one cohort first:
-       docker compose --profile hybrid up -d
-       Monitor for 24h before enabling all cohorts
+7. [ ] Run production validation:
+       docker exec hybrid-bot python -c "from src.portfolio.validation import ProductionValidator; v=ProductionValidator(); print(v.validate())"
 
-8. [ ] Verify monitoring tasks are running:
+8. [ ] Start with Alpha phase ($1K):
+       docker compose --profile hybrid up -d
+       Monitor for 1-2 weeks before scaling to Beta ($3K)
+
+9. [ ] Verify monitoring tasks are running:
        docker logs trading-scheduler | grep "task_reconcile"
+       docker logs trading-scheduler | grep "production_validation"
 ```
 
 ### 11. Startup Order Reconciliation (Permanent)
@@ -156,3 +203,6 @@ with already wide base ranges (MEME 15%). Over-expansion reduces fill probabilit
 - `TelegramNotifier.send()` without force — permanent, learning mode gate works correctly
 - Monitoring tasks — permanent, useful in production too
 - Startup order reconciliation — permanent, safety net for all environments
+- Discovery evaluation 7 days — permanent, faster learning cycle
+- Production validation daily at 09:00 — permanent, tracks go-live readiness
+- Tier health check every 2h — permanent, monitors portfolio drift

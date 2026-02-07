@@ -1,5 +1,7 @@
 """Portfolio management tasks."""
 
+import json
+
 from psycopg2.extras import RealDictCursor
 
 from src.tasks.base import get_db_connection, logger
@@ -263,3 +265,140 @@ def task_coin_performance_update():
 
     finally:
         conn.close()
+
+
+@task_locked
+def task_portfolio_snapshot():
+    """Stündlicher Portfolio-Snapshot für Equity-Kurve und Drawdown-Erkennung.
+
+    Berechnet Gesamtwert aus offenen trade_pairs + USDT-Positionen.
+    Speichert in portfolio_snapshots Tabelle.
+    """
+    from src.data.market_data import get_market_data
+
+    logger.info("Taking portfolio snapshot...")
+
+    conn = get_db_connection()
+    if not conn:
+        return
+
+    try:
+        market_data = get_market_data()
+
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            # Get all open positions from trade_pairs
+            cur.execute("""
+                SELECT tp.symbol,
+                    SUM(tp.remaining_quantity) as total_qty,
+                    SUM(tp.entry_value_usd) as cost_basis,
+                    tp.cohort_id
+                FROM trade_pairs tp
+                WHERE tp.status = 'open'
+                GROUP BY tp.symbol, tp.cohort_id
+            """)
+            positions = cur.fetchall()
+
+            total_position_value = 0.0
+            total_cost_basis = 0.0
+            positions_json = {}
+
+            for pos in positions:
+                symbol = pos["symbol"]
+                qty = float(pos["total_qty"] or 0)
+                cost = float(pos["cost_basis"] or 0)
+
+                if qty <= 0:
+                    continue
+
+                current_price = market_data.get_price(symbol)
+                if not current_price or current_price <= 0:
+                    continue
+
+                value = qty * current_price
+                total_position_value += value
+                total_cost_basis += cost
+
+                positions_json[symbol] = {
+                    "qty": qty,
+                    "value": round(value, 2),
+                    "cost_basis": round(cost, 2),
+                    "current_price": current_price,
+                }
+
+            # Get previous snapshot for daily P&L calculation
+            cur.execute("""
+                SELECT total_value_usd FROM portfolio_snapshots
+                ORDER BY timestamp DESC LIMIT 1
+            """)
+            prev = cur.fetchone()
+            prev_value = float(prev["total_value_usd"]) if prev else None
+
+            total_value = total_position_value
+            unrealized_pnl = total_position_value - total_cost_basis
+            unrealized_pnl_pct = (
+                (unrealized_pnl / total_cost_basis * 100) if total_cost_basis > 0 else 0
+            )
+
+            daily_pnl = (total_value - prev_value) if prev_value else None
+            daily_pnl_pct = (
+                (daily_pnl / prev_value * 100) if prev_value and prev_value > 0 else None
+            )
+
+            cur.execute(
+                """
+                INSERT INTO portfolio_snapshots
+                    (total_value_usd, daily_pnl, daily_pnl_pct,
+                     total_pnl, total_pnl_pct, positions)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    total_value,
+                    daily_pnl,
+                    daily_pnl_pct,
+                    unrealized_pnl,
+                    unrealized_pnl_pct,
+                    json.dumps(positions_json),
+                ),
+            )
+            conn.commit()
+
+        logger.info(f"Portfolio snapshot: ${total_value:.2f} (uP&L: {unrealized_pnl:+.2f})")
+
+    except Exception as e:
+        logger.error(f"Portfolio Snapshot Error: {e}")
+    finally:
+        conn.close()
+
+
+def task_auto_discovery():
+    """AI-gesteuerte Coin-Entdeckung mit Lernfeedback. Läuft täglich um 07:00."""
+    from src.notifications.telegram_service import get_telegram
+
+    logger.info("Running AI auto-discovery...")
+
+    try:
+        from src.scanner.coin_discovery import CoinDiscovery
+
+        discovery = CoinDiscovery.get_instance()
+        result = discovery.run_discovery()
+
+        telegram = get_telegram()
+
+        if result.get("errors"):
+            for err in result["errors"]:
+                logger.error(f"Discovery error: {err}")
+
+        if result["added"] > 0 or result["approved"] > 0:
+            msg = (
+                f"🔍 <b>AUTO-DISCOVERY</b>\n\n"
+                f"Kandidaten: {result['candidates']}\n"
+                f"AI-bewertet: {result['evaluated']}\n"
+                f"Genehmigt: {result['approved']}\n"
+                f"Hinzugefügt: {result['added']}"
+            )
+            telegram.send(msg)
+        else:
+            logger.info(f"Discovery: {result['candidates']} candidates, none approved")
+
+    except Exception as e:
+        logger.error(f"Auto-discovery task failed: {e}")

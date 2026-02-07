@@ -1,9 +1,9 @@
 # Trading Bot - Hybrid Multi-Coin System
 
-## Status: Testnet Learning Phase
-## Ziel: Regime-adaptives Hybrid-Trading-System mit Multi-Strategie Cohorts
+## Status: Paper Trading Learning Phase
+## Ziel: AI-optimiertes 3-Tier Portfolio (Cash + Index + Trading)
 
-### Aktueller Fokus: 6 Cohorts auf Testnet (898 Tests)
+### Aktueller Fokus: Production Readiness (1089 Tests)
 
 ---
 
@@ -99,28 +99,46 @@
 - [x] **9.5**: MEME-Kategorie in Constraints
 - [ ] **9.6**: Deploy + Verifikation (6 Cohorts mit unique Coins)
 
+## Phase 10: AI Learning Loop Fix
+
+- [x] **10.1**: Signal-Korrektheit bewerten (`signal_components.was_correct` populieren)
+- [x] **10.2**: Trade-Entscheidungsqualität (`trades.was_good_decision` populieren)
+- [x] **10.3**: Alle Outcome-Zeitfenster berechnen (1h, 4h, 7d neben 24h)
+- [x] **10.4**: Discovery-Evaluation 30d → 7d beschleunigen
+- [x] **10.5**: Signal-Accuracy ins Playbook integrieren
+- [x] **10.6**: Regime-stratifizierte Playbook-Regeln
+- [x] **10.7**: Portfolio Snapshots stündlich (F1)
+
+## Phase 11: 3-Tier Portfolio Management
+
+- [x] **11.1**: DB-Schema (portfolio_tiers, index_holdings, profit_redistributions, etc.)
+- [x] **11.2**: PortfolioManager Klasse + main_hybrid.py Integration
+- [x] **11.3**: Cash Reserve Tier (X% immer USDT)
+- [x] **11.4**: Index Holdings Tier (CMC Top 20, quarterly Rebalance)
+- [x] **11.5**: Trading Tier (CohortOrchestrator Wrapper)
+- [x] **11.6**: Profit Redistribution Engine (wöchentlich)
+- [x] **11.7**: AI Portfolio Optimizer (DeepSeek, monatlich)
+- [x] **11.8**: Telegram Integration + Tier Monitoring
+
+## Phase 12: Production Readiness
+
+- [x] **12.1**: Validation Criteria + ProductionValidator (9 Kriterien)
+- [x] **12.2**: Telegram /validate + Daily Scheduler Task
+- [x] **12.3**: Go-Live Checklist + Deployment Phases (Paper → Alpha → Beta → Production)
+- [x] **12.4**: Tests (20 Tests) + Ruff Clean
+
 ---
 
 ## Spätere Verbesserungen (während Testmonate)
 
 ### Priorität A: Nächste Features
 
-- [ ] **E1: Auto-Discovery** — Automatische Watchlist-Erweiterung
-  - `BinanceClient.get_all_tickers()` Methode
-  - Scheduled Task (1x täglich): Alle USDT-Paare scannen
-  - Filter: Min. 24h-Volume, Marktkapitalisierung, Testnet-Verfügbarkeit
-  - Kategorisierung: Marketcap → LARGE/MID/SMALL, Sektor → DEFI/AI/MEME/etc.
-  - `WatchlistManager.add_coin()` für dynamisches Hinzufügen
-  - Inaktive/illiquide Coins automatisch deaktivieren
-
-- [ ] **E2**: Unrealized P&L im Report (Live-Bewertung der offenen Positionen)
-- [ ] **E3**: Performance-Vergleich zwischen Cohorts (welche Strategie gewinnt?)
-- [ ] **E4: Paper-Trading-Modus gegen Mainnet-Daten** — Echte Mainnet-Preise + simulierte Trades
-  - Nutzt öffentliche Mainnet-API für Echtzeit-Preise (kein API-Key nötig)
-  - Simuliert Orders mit virtuellem Kapital ("Was wäre wenn $100 investiert?")
-  - Grid-Fills basierend auf echten Preisbewegungen statt Testnet-Orderbook
-  - Besseres Strategie-Lernen als Testnet (echtes Marktverhalten)
-  - Baut auf existierendem `src/backtest/engine.py` auf, aber in Echtzeit
+- [x] **E1: AI-Enhanced Auto-Discovery** — DeepSeek-basierte Coin-Entdeckung mit Lernfeedback
+- [x] **E2**: Per-Coin Unrealized P&L im Report (cost basis aus open trade_pairs)
+- [x] **E3**: Cohort-Vergleichsranking mit /compare Telegram-Befehl
+- [x] **E4**: Paper-Trading-Modus mit echten Mainnet-Preisen (PaperBinanceClient)
+- [x] **E5**: Monitoring-Erweiterung (Paper-Mode, Discovery Health Check, Stale Detection Tests)
+- [x] **E6**: Code-Refactoring (client.client → client, Paper-Mode in Reporting)
 
 ### Priorität B: Optimierungen
 
@@ -137,10 +155,7 @@
 
 ### Priorität C: Ungenutzte DB-Tabellen aktivieren
 
-- [ ] **F1: portfolio_snapshots Writer** — Equity-Kurve + Performance-Tracking (HOCH)
-  - Tabelle existiert in init.sql, MetricsCalculator.store_snapshot() existiert
-  - Braucht: Scheduler-Task der regelmäßig Portfolio-Wert berechnet und speichert
-  - Mehrwert: Langzeit-Performance-Messung, Drawdown-Erkennung
+- [x] **F1: portfolio_snapshots Writer** — → Phase 10.7
 
 - [ ] **F2: technical_indicators Writer** — Historische Indikator-Daten (MITTEL)
   - Tabelle existiert (RSI, MACD, BB, SMA, ATR pro Symbol)
@@ -174,6 +189,9 @@
 | 7     | 7     | 5        | deploy |
 | 8     | 8     | 8        | done   |
 | 9     | 6     | 5        | active |
+| 10    | 7     | 7        | done   |
+| 11    | 8     | 8        | done   |
+| 12    | 4     | 4        | done   |
 
 ## Deployment-Strategie
 
@@ -183,3 +201,6 @@
 4. Phase 7: Testnet mit mode_switching=false, dann true
 5. Phase 8: Cohort-System mit 4 Strategien ($1000 je)
 6. Phase 9: 6 Cohorts + Small-Cap/Meme Expansion
+7. Phase 10: AI Learning Loop Fix (Feedback-Lücken schließen)
+8. Phase 11: 3-Tier Portfolio (Cash 10% + Index 65% + Trading 25%)
+9. Phase 12: Production Readiness + Go-Live

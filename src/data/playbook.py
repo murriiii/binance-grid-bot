@@ -263,6 +263,7 @@ Basiert auf: 0 Trades
         # Extrahiere die wichtigsten Abschnitte
         sections_to_include = [
             "## 📊 MARKT-REGIME REGELN",
+            "## 🎯 SIGNAL ACCURACY",
             "## ❌ WAS NICHT FUNKTIONIERT HAT",
             "## ✅ WAS GUT FUNKTIONIERT HAT",
             "## 🎛️ AKTUELLE PARAMETER",
@@ -350,6 +351,10 @@ Basiert auf: 0 Trades
                 success_patterns = self._analyze_success_patterns(cur)
                 metrics["success_patterns"] = success_patterns
 
+                # 7. Signal Accuracy (requires 10.1: was_correct populated)
+                signal_accuracy = self._analyze_signal_accuracy(cur)
+                metrics["signal_accuracy"] = signal_accuracy
+
             # Generiere neues Playbook
             if metrics["total_trades"] >= self.MIN_TRADES_FOR_PATTERN:
                 self.current_version += 1
@@ -377,8 +382,100 @@ Basiert auf: 0 Trades
             "metrics": metrics,
         }
 
+    def _analyze_signal_accuracy(self, cur) -> dict:
+        """Analysiert Signal-Accuracy aus signal_components.
+
+        Returns per-signal accuracy rates and overall stats.
+        Requires 10.1 (was_correct populated) to produce data.
+        """
+        signal_columns = [
+            ("fear_greed_signal", "Fear & Greed"),
+            ("rsi_signal", "RSI"),
+            ("macd_signal", "MACD"),
+            ("trend_signal", "Trend (SMA)"),
+            ("volume_signal", "Volume"),
+            ("whale_signal", "Whale Activity"),
+            ("sentiment_signal", "Sentiment"),
+            ("macro_signal", "Macro"),
+            ("ai_direction_signal", "AI Direction"),
+        ]
+
+        signals = []
+
+        for col, label in signal_columns:
+            cur.execute(
+                f"""
+                SELECT
+                    COUNT(*) as total,
+                    COUNT(CASE WHEN was_correct THEN 1 END) as correct,
+                    AVG(ABS({col})) as avg_strength
+                FROM signal_components
+                WHERE was_correct IS NOT NULL
+                AND ABS({col}) > 0.1
+                """,
+            )
+            result = cur.fetchone()
+            total = result["total"] or 0
+
+            if total >= self.MIN_TRADES_FOR_PATTERN:
+                accuracy = (result["correct"] or 0) / total * 100
+                signals.append(
+                    {
+                        "signal": label,
+                        "column": col,
+                        "total": total,
+                        "correct": result["correct"] or 0,
+                        "accuracy": accuracy,
+                        "avg_strength": float(result["avg_strength"] or 0),
+                    }
+                )
+
+        # Overall accuracy
+        cur.execute("""
+            SELECT
+                COUNT(*) as total,
+                COUNT(CASE WHEN was_correct THEN 1 END) as correct
+            FROM signal_components
+            WHERE was_correct IS NOT NULL
+        """)
+        overall = cur.fetchone()
+        overall_total = overall["total"] or 0
+        overall_accuracy = (
+            (overall["correct"] or 0) / overall_total * 100 if overall_total > 0 else 0
+        )
+
+        # Per-regime signal accuracy
+        regime_accuracy = {}
+        for regime in ["BULL", "BEAR", "SIDEWAYS"]:
+            cur.execute(
+                """
+                SELECT
+                    COUNT(*) as total,
+                    COUNT(CASE WHEN sc.was_correct THEN 1 END) as correct
+                FROM signal_components sc
+                JOIN trades t ON sc.trade_id = t.id
+                WHERE sc.was_correct IS NOT NULL
+                AND t.market_trend = %s
+                """,
+                (regime,),
+            )
+            r = cur.fetchone()
+            r_total = r["total"] or 0
+            if r_total >= self.MIN_TRADES_FOR_PATTERN:
+                regime_accuracy[regime] = {
+                    "total": r_total,
+                    "accuracy": (r["correct"] or 0) / r_total * 100,
+                }
+
+        return {
+            "signals": sorted(signals, key=lambda x: -x["accuracy"]),
+            "overall_total": overall_total,
+            "overall_accuracy": overall_accuracy,
+            "regime_accuracy": regime_accuracy,
+        }
+
     def _analyze_fear_greed_patterns(self, cur) -> list[dict]:
-        """Analysiert Fear & Greed Patterns"""
+        """Analysiert Fear & Greed Patterns, stratifiziert nach Regime."""
         patterns = []
 
         ranges = [
@@ -389,37 +486,49 @@ Basiert auf: 0 Trades
             (80, 100, "Extreme Greed"),
         ]
 
+        regimes = ["BULL", "BEAR", "SIDEWAYS", None]
+
         for min_fg, max_fg, label in ranges:
             for action in ["BUY", "SELL"]:
-                cur.execute(
-                    """
-                    SELECT
-                        COUNT(*) as trades,
-                        COUNT(CASE WHEN was_good_decision THEN 1 END) as wins,
-                        AVG(outcome_24h) as avg_return,
-                        STDDEV(outcome_24h) as volatility
-                    FROM trades
-                    WHERE fear_greed >= %s AND fear_greed < %s
-                    AND action = %s
-                    AND outcome_24h IS NOT NULL
-                """,
-                    (min_fg, max_fg, action),
-                )
-                result = cur.fetchone()
-
-                if result["trades"] and result["trades"] >= self.MIN_TRADES_FOR_PATTERN:
-                    patterns.append(
-                        {
-                            "range": label,
-                            "min": min_fg,
-                            "max": max_fg,
-                            "action": action,
-                            "trades": result["trades"],
-                            "success_rate": result["wins"] / result["trades"] * 100,
-                            "avg_return": float(result["avg_return"] or 0),
-                            "volatility": float(result["volatility"] or 0),
-                        }
+                for regime in regimes:
+                    regime_filter = (
+                        "AND market_trend = %s" if regime else "AND market_trend IS NOT NULL"
                     )
+                    params = [min_fg, max_fg, action]
+                    if regime:
+                        params.append(regime)
+
+                    cur.execute(
+                        f"""
+                        SELECT
+                            COUNT(*) as trades,
+                            COUNT(CASE WHEN was_good_decision THEN 1 END) as wins,
+                            AVG(outcome_24h) as avg_return,
+                            STDDEV(outcome_24h) as volatility
+                        FROM trades
+                        WHERE fear_greed >= %s AND fear_greed < %s
+                        AND action = %s
+                        {regime_filter}
+                        AND outcome_24h IS NOT NULL
+                        """,
+                        params,
+                    )
+                    result = cur.fetchone()
+
+                    if result["trades"] and result["trades"] >= self.MIN_TRADES_FOR_PATTERN:
+                        patterns.append(
+                            {
+                                "range": label,
+                                "min": min_fg,
+                                "max": max_fg,
+                                "action": action,
+                                "regime": regime or "ALL",
+                                "trades": result["trades"],
+                                "success_rate": result["wins"] / result["trades"] * 100,
+                                "avg_return": float(result["avg_return"] or 0),
+                                "volatility": float(result["volatility"] or 0),
+                            }
+                        )
 
         return patterns
 
@@ -488,29 +597,60 @@ Basiert auf: 0 Trades
             "best_hours": hour_data,
         }
 
-    def _analyze_anti_patterns(self, cur) -> list[dict]:
-        """Findet Patterns die NICHT funktioniert haben"""
+    def _analyze_anti_patterns(self, cur) -> dict:
+        """Findet Patterns die NICHT funktioniert haben, stratifiziert nach Regime."""
+        results = {}
+
+        for regime in ["BULL", "BEAR", "SIDEWAYS"]:
+            cur.execute(
+                """
+                SELECT
+                    fear_greed,
+                    action,
+                    symbol,
+                    market_trend,
+                    COUNT(*) as trades,
+                    AVG(outcome_24h) as avg_return
+                FROM trades
+                WHERE outcome_24h IS NOT NULL
+                AND was_good_decision = FALSE
+                AND market_trend = %s
+                GROUP BY fear_greed, action, symbol, market_trend
+                HAVING COUNT(*) >= %s AND AVG(outcome_24h) < -1
+                ORDER BY AVG(outcome_24h) ASC
+                LIMIT 5
+                """,
+                (regime, self.MIN_TRADES_FOR_PATTERN),
+            )
+
+            results[regime] = [
+                {
+                    "fear_greed": row["fear_greed"],
+                    "action": row["action"],
+                    "symbol": row["symbol"],
+                    "trend": row["market_trend"],
+                    "trades": row["trades"],
+                    "avg_return": float(row["avg_return"]),
+                }
+                for row in cur.fetchall()
+            ]
+
+        # Also keep global top anti-patterns for backwards compatibility
         cur.execute(
             """
             SELECT
-                fear_greed,
-                action,
-                symbol,
-                market_trend,
-                COUNT(*) as trades,
-                AVG(outcome_24h) as avg_return
+                fear_greed, action, symbol, market_trend,
+                COUNT(*) as trades, AVG(outcome_24h) as avg_return
             FROM trades
-            WHERE outcome_24h IS NOT NULL
-            AND was_good_decision = FALSE
+            WHERE outcome_24h IS NOT NULL AND was_good_decision = FALSE
             GROUP BY fear_greed, action, symbol, market_trend
             HAVING COUNT(*) >= %s AND AVG(outcome_24h) < -1
             ORDER BY AVG(outcome_24h) ASC
             LIMIT 10
-        """,
+            """,
             (self.MIN_TRADES_FOR_PATTERN,),
         )
-
-        return [
+        results["ALL"] = [
             {
                 "fear_greed": row["fear_greed"],
                 "action": row["action"],
@@ -522,30 +662,66 @@ Basiert auf: 0 Trades
             for row in cur.fetchall()
         ]
 
-    def _analyze_success_patterns(self, cur) -> list[dict]:
-        """Findet die erfolgreichsten Patterns"""
+        return results
+
+    def _analyze_success_patterns(self, cur) -> dict:
+        """Findet die erfolgreichsten Patterns, stratifiziert nach Regime."""
+        results = {}
+
+        for regime in ["BULL", "BEAR", "SIDEWAYS"]:
+            cur.execute(
+                """
+                SELECT
+                    fear_greed,
+                    action,
+                    symbol,
+                    market_trend,
+                    COUNT(*) as trades,
+                    AVG(outcome_24h) as avg_return,
+                    COUNT(CASE WHEN was_good_decision THEN 1 END)::float
+                        / COUNT(*) as win_rate
+                FROM trades
+                WHERE outcome_24h IS NOT NULL
+                AND was_good_decision = TRUE
+                AND market_trend = %s
+                GROUP BY fear_greed, action, symbol, market_trend
+                HAVING COUNT(*) >= %s AND AVG(outcome_24h) > 1
+                ORDER BY win_rate DESC, AVG(outcome_24h) DESC
+                LIMIT 5
+                """,
+                (regime, self.MIN_TRADES_FOR_PATTERN),
+            )
+
+            results[regime] = [
+                {
+                    "fear_greed": row["fear_greed"],
+                    "action": row["action"],
+                    "symbol": row["symbol"],
+                    "trend": row["market_trend"],
+                    "trades": row["trades"],
+                    "avg_return": float(row["avg_return"]),
+                    "win_rate": float(row["win_rate"]) * 100,
+                }
+                for row in cur.fetchall()
+            ]
+
+        # Global top patterns
         cur.execute(
             """
             SELECT
-                fear_greed,
-                action,
-                symbol,
-                market_trend,
-                COUNT(*) as trades,
-                AVG(outcome_24h) as avg_return,
+                fear_greed, action, symbol, market_trend,
+                COUNT(*) as trades, AVG(outcome_24h) as avg_return,
                 COUNT(CASE WHEN was_good_decision THEN 1 END)::float / COUNT(*) as win_rate
             FROM trades
-            WHERE outcome_24h IS NOT NULL
-            AND was_good_decision = TRUE
+            WHERE outcome_24h IS NOT NULL AND was_good_decision = TRUE
             GROUP BY fear_greed, action, symbol, market_trend
             HAVING COUNT(*) >= %s AND AVG(outcome_24h) > 1
             ORDER BY win_rate DESC, AVG(outcome_24h) DESC
             LIMIT 10
-        """,
+            """,
             (self.MIN_TRADES_FOR_PATTERN,),
         )
-
-        return [
+        results["ALL"] = [
             {
                 "fear_greed": row["fear_greed"],
                 "action": row["action"],
@@ -557,6 +733,8 @@ Basiert auf: 0 Trades
             }
             for row in cur.fetchall()
         ]
+
+        return results
 
     def _generate_updated_playbook(self, metrics: dict) -> str:
         """Generiert ein aktualisiertes Playbook basierend auf Metriken"""
@@ -578,23 +756,39 @@ Gesamterfolgsrate: {metrics["success_rate"]:.1f}%
 | F&G Range | Aktion | Erfolgsrate | Avg Return | Trades | Empfehlung |
 |-----------|--------|-------------|------------|--------|------------|
 """
-        # Fear & Greed Tabelle
+        # Fear & Greed Tabelle (global view)
         fg_patterns = metrics.get("fear_greed_patterns", [])
-        if fg_patterns:
-            for p in sorted(fg_patterns, key=lambda x: x["min"]):
+        fg_global = [p for p in fg_patterns if p.get("regime") == "ALL"]
+        if fg_global:
+            for p in sorted(fg_global, key=lambda x: x["min"]):
                 confidence = (
-                    "✅ Stark"
+                    "Stark"
                     if p["success_rate"] > 60
-                    else "⚠️ Mittel"
+                    else "Mittel"
                     if p["success_rate"] > 45
-                    else "❌ Schwach"
+                    else "Schwach"
                 )
                 playbook += f"| {p['range']} ({p['min']}-{p['max']}) | {p['action']} | {p['success_rate']:.1f}% | {p['avg_return']:+.2f}% | {p['trades']} | {confidence} |\n"
         else:
             playbook += "| *Noch keine ausreichenden Daten* | - | - | - | - | - |\n"
 
-        playbook += """
-### Automatisch gelernte Regeln
+        # Regime-stratified Fear & Greed
+        playbook += "\n### Regime-spezifische F&G Regeln\n\n"
+        for regime in ["BULL", "BEAR", "SIDEWAYS"]:
+            fg_regime = [p for p in fg_patterns if p.get("regime") == regime]
+            if fg_regime:
+                playbook += f"**{regime} Regime:**\n"
+                best = sorted(fg_regime, key=lambda x: -x["success_rate"])[:3]
+                for p in best:
+                    emoji = "+" if p["avg_return"] > 0 else ""
+                    playbook += (
+                        f"- {p['action']} bei {p['range']}: "
+                        f"{p['success_rate']:.0f}% Erfolg, "
+                        f"{emoji}{p['avg_return']:.2f}% avg ({p['trades']} Trades)\n"
+                    )
+                playbook += "\n"
+
+        playbook += """### Automatisch gelernte Regeln
 
 """
         # Beste Fear & Greed Strategien
@@ -606,7 +800,8 @@ Gesamterfolgsrate: {metrics["success_rate"]:.1f}%
         if best_fg:
             playbook += "**Empfohlene Strategien:**\n"
             for p in sorted(best_fg, key=lambda x: -x["success_rate"])[:5]:
-                playbook += f"- {p['action']} bei {p['range']}: {p['success_rate']:.0f}% Erfolgsrate ({p['trades']} Trades)\n"
+                regime_info = f" [{p.get('regime', 'ALL')}]" if p.get("regime") != "ALL" else ""
+                playbook += f"- {p['action']} bei {p['range']}{regime_info}: {p['success_rate']:.0f}% Erfolgsrate ({p['trades']} Trades)\n"
         else:
             playbook += "> Noch nicht genug Daten für automatische Regeln.\n"
 
@@ -625,41 +820,70 @@ Gesamterfolgsrate: {metrics["success_rate"]:.1f}%
         else:
             playbook += "> Noch keine symbol-spezifischen Daten.\n"
 
+        # Signal Accuracy Section
+        playbook += self._generate_signal_accuracy_section(metrics)
+
+        # Anti-Patterns (regime-stratified)
         playbook += """
 ---
 
 ## ❌ WAS NICHT FUNKTIONIERT HAT (Anti-Patterns)
 
-### VERMEIDE diese Kombinationen:
-
 """
-        anti_patterns = metrics.get("anti_patterns", [])
-        if anti_patterns:
-            for i, p in enumerate(anti_patterns[:5], 1):
-                playbook += f"{i}. **{p['action']} {p['symbol']}** bei F&G={p['fear_greed']}, Trend={p['trend']}\n"
-                playbook += f"   - Avg Return: {p['avg_return']:+.2f}% über {p['trades']} Trades\n"
-                playbook += "   - ⚠️ Verlustbringende Kombination!\n\n"
-        else:
-            playbook += "> 🎉 Noch keine signifikanten Anti-Patterns gefunden.\n"
+        anti_patterns = metrics.get("anti_patterns", {})
+        if isinstance(anti_patterns, dict):
+            # Regime-stratified format
+            for regime in ["BULL", "BEAR", "SIDEWAYS"]:
+                regime_anti = anti_patterns.get(regime, [])
+                if regime_anti:
+                    playbook += f"### {regime} Regime - Vermeide:\n\n"
+                    for i, p in enumerate(regime_anti[:3], 1):
+                        playbook += (
+                            f"{i}. **{p['action']} {p['symbol']}** bei F&G={p['fear_greed']}\n"
+                        )
+                        playbook += (
+                            f"   - Avg Return: {p['avg_return']:+.2f}% ({p['trades']} Trades)\n\n"
+                        )
 
+            # Global fallback
+            all_anti = anti_patterns.get("ALL", [])
+            if all_anti:
+                playbook += "### Global Top Anti-Patterns:\n\n"
+                for i, p in enumerate(all_anti[:5], 1):
+                    playbook += f"{i}. **{p['action']} {p['symbol']}** F&G={p['fear_greed']}, Trend={p['trend']}: {p['avg_return']:+.2f}% ({p['trades']}x)\n"
+            elif not any(anti_patterns.get(r) for r in ["BULL", "BEAR", "SIDEWAYS"]):
+                playbook += "> Noch keine signifikanten Anti-Patterns gefunden.\n"
+        else:
+            playbook += "> Noch keine Anti-Pattern-Daten.\n"
+
+        # Success Patterns (regime-stratified)
         playbook += """
 ---
 
 ## ✅ WAS GUT FUNKTIONIERT HAT (Erfolgs-Patterns)
 
-### BEVORZUGE diese Kombinationen:
-
 """
-        success_patterns = metrics.get("success_patterns", [])
-        if success_patterns:
-            for i, p in enumerate(success_patterns[:5], 1):
-                playbook += f"{i}. **{p['action']} {p['symbol']}** bei F&G={p['fear_greed']}, Trend={p['trend']}\n"
-                playbook += (
-                    f"   - Win Rate: {p['win_rate']:.0f}%, Avg Return: {p['avg_return']:+.2f}%\n"
-                )
-                playbook += f"   - Basiert auf {p['trades']} Trades\n\n"
+        success_patterns = metrics.get("success_patterns", {})
+        if isinstance(success_patterns, dict):
+            for regime in ["BULL", "BEAR", "SIDEWAYS"]:
+                regime_success = success_patterns.get(regime, [])
+                if regime_success:
+                    playbook += f"### {regime} Regime - Bevorzuge:\n\n"
+                    for i, p in enumerate(regime_success[:3], 1):
+                        playbook += (
+                            f"{i}. **{p['action']} {p['symbol']}** bei F&G={p['fear_greed']}\n"
+                        )
+                        playbook += f"   - Win Rate: {p['win_rate']:.0f}%, Avg: {p['avg_return']:+.2f}% ({p['trades']}x)\n\n"
+
+            all_success = success_patterns.get("ALL", [])
+            if all_success:
+                playbook += "### Global Top Erfolgs-Patterns:\n\n"
+                for i, p in enumerate(all_success[:5], 1):
+                    playbook += f"{i}. **{p['action']} {p['symbol']}** F&G={p['fear_greed']}, Trend={p['trend']}: Win={p['win_rate']:.0f}%, Avg={p['avg_return']:+.2f}% ({p['trades']}x)\n"
+            elif not any(success_patterns.get(r) for r in ["BULL", "BEAR", "SIDEWAYS"]):
+                playbook += "> Noch keine signifikanten Erfolgs-Patterns gefunden.\n"
         else:
-            playbook += "> 🔄 Noch keine signifikanten Erfolgs-Patterns gefunden.\n"
+            playbook += "> Noch keine Erfolgs-Pattern-Daten.\n"
 
         playbook += """
 ---
@@ -720,6 +944,69 @@ Gesamterfolgsrate: {metrics["success_rate"]:.1f}%
 """
 
         return playbook
+
+    def _generate_signal_accuracy_section(self, metrics: dict) -> str:
+        """Generates the signal accuracy section for the playbook."""
+        signal_data = metrics.get("signal_accuracy", {})
+        signals = signal_data.get("signals", [])
+        overall_total = signal_data.get("overall_total", 0)
+        overall_accuracy = signal_data.get("overall_accuracy", 0)
+        regime_accuracy = signal_data.get("regime_accuracy", {})
+
+        section = """
+---
+
+## 🎯 SIGNAL ACCURACY
+
+"""
+        if overall_total < self.MIN_TRADES_FOR_PATTERN:
+            section += "> Noch nicht genug ausgewertete Signale.\n"
+            return section
+
+        section += f"Gesamt: {overall_accuracy:.1f}% Accuracy ({overall_total} Signale)\n\n"
+
+        # Per-regime overall accuracy
+        if regime_accuracy:
+            section += "### Accuracy pro Regime\n\n"
+            for regime in ["BULL", "BEAR", "SIDEWAYS"]:
+                if regime in regime_accuracy:
+                    ra = regime_accuracy[regime]
+                    section += f"- **{regime}**: {ra['accuracy']:.1f}% ({ra['total']} Signale)\n"
+            section += "\n"
+
+        # Per-signal breakdown
+        if signals:
+            section += "### Signal-Trefferquoten\n\n"
+            section += "| Signal | Accuracy | Stärke | Evaluiert |\n"
+            section += "|--------|----------|--------|----------|\n"
+            for s in signals:
+                reliability = (
+                    "Zuverlässig"
+                    if s["accuracy"] > 60
+                    else "Mittel"
+                    if s["accuracy"] > 45
+                    else "Schwach"
+                )
+                section += (
+                    f"| {s['signal']} | {s['accuracy']:.1f}% ({reliability}) | "
+                    f"{s['avg_strength']:.2f} | {s['total']} |\n"
+                )
+
+            # Top 3 most reliable
+            top3 = [s for s in signals if s["accuracy"] > 55][:3]
+            if top3:
+                section += "\n**Zuverlässigste Signale:**\n"
+                for s in top3:
+                    section += f"- {s['signal']}: {s['accuracy']:.0f}% Trefferquote\n"
+
+            # Worst signals to de-weight
+            worst = [s for s in signals if s["accuracy"] < 45]
+            if worst:
+                section += "\n**Unzuverlässige Signale (de-gewichten):**\n"
+                for s in worst:
+                    section += f"- {s['signal']}: nur {s['accuracy']:.0f}%\n"
+
+        return section
 
     def _save_to_database(self, metrics: dict):
         """Speichert die Playbook-Version in der Datenbank"""

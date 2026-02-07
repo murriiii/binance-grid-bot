@@ -50,8 +50,19 @@ def _load_hybrid_states() -> dict[str, dict]:
     return states
 
 
+def _is_paper_mode() -> bool:
+    """Check if paper trading is enabled."""
+    return os.getenv("PAPER_TRADING", "false").lower() == "true"
+
+
 def _get_binance_client():
-    """Lazy-init BinanceClient (same pattern as system_tasks.py)."""
+    """Lazy-init BinanceClient or PaperBinanceClient depending on mode."""
+    if _is_paper_mode():
+        from src.api.paper_client import PaperBinanceClient
+
+        initial = float(os.getenv("PAPER_INITIAL_USDT", "6000"))
+        return PaperBinanceClient(initial_usdt=initial)
+
     from src.api.binance_client import BinanceClient
 
     testnet = os.getenv("BINANCE_TESTNET", "true").lower() == "true"
@@ -209,16 +220,17 @@ def task_portfolio_plausibility():
             if alloc < 0:
                 issues.append(f"{cohort}:{sym} has negative allocation ${alloc:.2f}")
 
-    # Check Binance USDT balance
+    # Check USDT balance (paper mode uses simulated balance)
     try:
         client = _get_binance_client()
         usdt_balance = client.get_account_balance("USDT")
-        logger.info(f"Binance USDT balance: ${usdt_balance:.2f}")
+        mode_label = "Paper" if _is_paper_mode() else "Binance"
+        logger.info(f"{mode_label} USDT balance: ${usdt_balance:.2f}")
 
         if usdt_balance <= 0:
-            issues.append(f"USDT balance is ${usdt_balance:.2f}")
+            issues.append(f"USDT balance is ${usdt_balance:.2f} ({mode_label})")
     except Exception as e:
-        logger.warning(f"Could not check Binance balance: {e}")
+        logger.warning(f"Could not check balance: {e}")
 
     if issues:
         msg = "Portfolio plausibility issues:\n" + "\n".join(f"- {i}" for i in issues)
@@ -348,3 +360,171 @@ def task_stale_detection():
         )
     else:
         logger.info(f"Stale detection OK: last activity {age.total_seconds() / 60:.0f}min ago")
+
+
+@task_locked
+def task_tier_health_check():
+    """Check health of all 3 portfolio tiers (every 2h).
+
+    Checks:
+    - Cash reserve level vs target
+    - Index holdings tracking error
+    - Trading tier activity
+    Only runs when PORTFOLIO_MANAGER=true.
+    """
+    import os
+
+    if os.getenv("PORTFOLIO_MANAGER", "false").lower() != "true":
+        return
+
+    logger.info("Running tier health check...")
+
+    from src.tasks.base import get_db_connection
+
+    conn = get_db_connection()
+    if not conn:
+        return
+
+    issues: list[str] = []
+
+    try:
+        from psycopg2.extras import RealDictCursor
+
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            # 1. Check tier allocations
+            cur.execute(
+                "SELECT tier_name, target_pct, current_pct, current_value_usd "
+                "FROM portfolio_tiers WHERE is_active = TRUE"
+            )
+            for row in cur.fetchall():
+                target = float(row["target_pct"])
+                current = float(row["current_pct"] or 0)
+                drift = abs(current - target)
+                if drift > 5.0:
+                    issues.append(
+                        f"{row['tier_name']}: {current:.1f}% vs target {target:.1f}% "
+                        f"(drift {drift:.1f}pp)"
+                    )
+
+            # 2. Check cash reserve specifically
+            cur.execute("SELECT current_pct FROM portfolio_tiers WHERE tier_name = 'cash_reserve'")
+            cash_row = cur.fetchone()
+            if cash_row and float(cash_row["current_pct"] or 0) < 3.0:
+                issues.append(
+                    f"Cash reserve critically low: {float(cash_row['current_pct'] or 0):.1f}%"
+                )
+
+            # 3. Check trading activity (any trades in last 24h?)
+            cur.execute(
+                "SELECT COUNT(*) as count FROM trade_pairs "
+                "WHERE created_at > NOW() - INTERVAL '24 hours'"
+            )
+            trade_row = cur.fetchone()
+            if trade_row and trade_row["count"] == 0:
+                issues.append("No trading activity in last 24h")
+
+    except Exception as e:
+        logger.debug(f"Tier health check failed: {e}")
+    finally:
+        conn.close()
+
+    if issues:
+        msg = "Tier Health Issues:\n" + "\n".join(f"- {i}" for i in issues)
+        logger.warning(msg)
+
+        from src.notifications.telegram_service import get_telegram
+
+        telegram = get_telegram()
+        telegram.send(msg, force=True)
+    else:
+        logger.info("Tier health check OK")
+
+
+@task_locked
+def task_discovery_health_check():
+    """Validate AI auto-discovery pipeline health (every 12h).
+
+    Checks:
+    - Last discovery ran within 48h
+    - AI approval rate is plausible (not 0% or 100% over 10+ decisions)
+    - Recently added coins have trading activity after 7 days
+    """
+    logger.info("Running discovery health check...")
+
+    from src.tasks.base import get_db_connection
+
+    conn = get_db_connection()
+    if not conn:
+        logger.warning("Discovery health: no DB connection")
+        return
+
+    issues: list[str] = []
+
+    try:
+        from psycopg2.extras import RealDictCursor
+
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            # 1. Check last discovery run
+            cur.execute("SELECT MAX(discovered_at) as last_run FROM coin_discoveries")
+            row = cur.fetchone()
+            if row and row["last_run"]:
+                age = datetime.utcnow() - row["last_run"]
+                if age > timedelta(hours=48):
+                    issues.append(
+                        f"Last discovery was {age.total_seconds() / 3600:.0f}h ago (>48h)"
+                    )
+            else:
+                logger.info("Discovery health: no discoveries yet (table empty)")
+                return
+
+            # 2. Check AI approval rate plausibility
+            cur.execute(
+                "SELECT COUNT(*) as total, "
+                "SUM(CASE WHEN ai_approved THEN 1 ELSE 0 END) as approved "
+                "FROM coin_discoveries "
+                "WHERE discovered_at > NOW() - INTERVAL '30 days'"
+            )
+            rate_row = cur.fetchone()
+            total = rate_row["total"] or 0
+            approved = rate_row["approved"] or 0
+
+            if total >= 10:
+                rate = approved / total * 100
+                if rate == 0:
+                    issues.append(
+                        f"AI approval rate 0% over {total} decisions — AI may be too strict"
+                    )
+                elif rate == 100:
+                    issues.append(
+                        f"AI approval rate 100% over {total} decisions — AI may be too lenient"
+                    )
+
+            # 3. Check added coins have trades after 7 days
+            cutoff = datetime.utcnow() - timedelta(days=7)
+            cur.execute(
+                "SELECT d.symbol FROM coin_discoveries d "
+                "JOIN watchlist w ON d.symbol = w.symbol "
+                "WHERE d.was_added = true AND d.discovered_at < %s "
+                "AND d.was_deactivated = false "
+                "AND (w.total_trades IS NULL OR w.total_trades = 0)",
+                (cutoff,),
+            )
+            idle_coins = [r["symbol"] for r in cur.fetchall()]
+            if idle_coins:
+                issues.append(f"Coins with no trades after 7d: {', '.join(idle_coins[:5])}")
+
+    except Exception as e:
+        logger.debug(f"Discovery health check failed: {e}")
+    finally:
+        conn.close()
+
+    if issues:
+        msg = "Discovery Health Issues:\n" + "\n".join(f"- {i}" for i in issues)
+        logger.warning(msg)
+
+        from src.notifications.telegram_service import get_telegram
+
+        telegram = get_telegram()
+        telegram.send(msg, force=True)
+    else:
+        logger.info("Discovery health OK")

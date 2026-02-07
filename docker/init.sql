@@ -1252,5 +1252,129 @@ CREATE TABLE IF NOT EXISTS trading_mode_history (
 
 CREATE INDEX IF NOT EXISTS idx_mode_timestamp ON trading_mode_history(timestamp DESC);
 
+-- ═══════════════════════════════════════════════════════════════
+-- COIN_DISCOVERIES - AI-gestützte Coin-Entdeckung mit Feedback-Loop
+-- ═══════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS coin_discoveries (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    symbol VARCHAR(20) NOT NULL,
+    discovered_at TIMESTAMPTZ DEFAULT NOW(),
+
+    -- AI Decision
+    ai_approved BOOLEAN NOT NULL,
+    ai_category VARCHAR(20),
+    ai_tier INTEGER,
+    ai_risk VARCHAR(10),
+    ai_reason TEXT,
+
+    -- Context bei Entscheidung
+    volume_24h_at_discovery DECIMAL(20, 2),
+
+    -- Outcome (wird später aktualisiert)
+    was_added BOOLEAN DEFAULT FALSE,
+    was_deactivated BOOLEAN DEFAULT FALSE,
+    deactivated_at TIMESTAMPTZ,
+    deactivated_reason TEXT,
+
+    -- Performance nach Aufnahme (aktualisiert durch task)
+    trades_after_30d INTEGER,
+    win_rate_after_30d DECIMAL(5, 2),
+    avg_return_after_30d DECIMAL(10, 4),
+    was_good_discovery BOOLEAN  -- NULL = noch nicht bewertet
+);
+
+CREATE INDEX IF NOT EXISTS idx_discoveries_symbol ON coin_discoveries(symbol);
+CREATE INDEX IF NOT EXISTS idx_discoveries_date ON coin_discoveries(discovered_at DESC);
+
+-- ═══════════════════════════════════════════════════════════════
+-- PORTFOLIO_TIERS - 3-Tier Portfolio Zielallokationen
+-- ═══════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS portfolio_tiers (
+    tier_name VARCHAR(20) PRIMARY KEY,  -- 'cash_reserve','index_holdings','trading'
+    target_pct DECIMAL(5, 2) NOT NULL,
+    current_pct DECIMAL(5, 2),
+    current_value_usd DECIMAL(20, 2) DEFAULT 0,
+    min_pct DECIMAL(5, 2) NOT NULL,     -- Guard rail minimum
+    max_pct DECIMAL(5, 2) NOT NULL,     -- Guard rail maximum
+    is_active BOOLEAN DEFAULT TRUE,
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Initial tier allocations
+INSERT INTO portfolio_tiers (tier_name, target_pct, min_pct, max_pct) VALUES
+    ('cash_reserve', 10.0, 5.0, 20.0),
+    ('index_holdings', 65.0, 40.0, 80.0),
+    ('trading', 25.0, 10.0, 40.0)
+ON CONFLICT (tier_name) DO NOTHING;
+
+-- ═══════════════════════════════════════════════════════════════
+-- TIER_ALLOCATION_HISTORY - Änderungshistorie
+-- ═══════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS tier_allocation_history (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    timestamp TIMESTAMPTZ DEFAULT NOW(),
+    tier_name VARCHAR(20) NOT NULL,
+    old_target_pct DECIMAL(5, 2),
+    new_target_pct DECIMAL(5, 2),
+    reason TEXT,
+    source VARCHAR(20),  -- 'manual','ai_recommendation','rebalance'
+    market_regime VARCHAR(20)
+);
+
+CREATE INDEX IF NOT EXISTS idx_tier_history_ts ON tier_allocation_history(timestamp DESC);
+
+-- ═══════════════════════════════════════════════════════════════
+-- INDEX_HOLDINGS - ETF-artige Top-20 Positionen
+-- ═══════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS index_holdings (
+    symbol VARCHAR(20) PRIMARY KEY,
+    target_weight_pct DECIMAL(5, 2) NOT NULL,
+    current_weight_pct DECIMAL(5, 2),
+    quantity DECIMAL(20, 8) DEFAULT 0,
+    avg_entry_price DECIMAL(20, 8),
+    current_price DECIMAL(20, 8),
+    trailing_stop_pct DECIMAL(5, 2) DEFAULT 15.0,
+    trailing_stop_price DECIMAL(20, 8),
+    highest_price DECIMAL(20, 8),
+    market_cap_rank INTEGER,
+    is_active BOOLEAN DEFAULT TRUE,
+    last_rebalance_at TIMESTAMPTZ,
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ═══════════════════════════════════════════════════════════════
+-- PROFIT_REDISTRIBUTIONS - Gewinnumverteilungs-Log
+-- ═══════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS profit_redistributions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    timestamp TIMESTAMPTZ DEFAULT NOW(),
+    total_portfolio_value DECIMAL(20, 4),
+    total_profit_usd DECIMAL(20, 4),
+    pre_allocation JSONB,   -- {"cash_reserve": 8.5, "index": 67.2, "trading": 24.3}
+    post_allocation JSONB,  -- target allocation after rebalance
+    transfers JSONB,        -- [{"from": "trading", "to": "cash_reserve", "amount": 50}]
+    trigger_reason VARCHAR(50)  -- 'weekly_schedule','drift_threshold','manual'
+);
+
+CREATE INDEX IF NOT EXISTS idx_profit_redist_ts ON profit_redistributions(timestamp DESC);
+
+-- ═══════════════════════════════════════════════════════════════
+-- AI_PORTFOLIO_RECOMMENDATIONS - Monatliche AI-Empfehlungen
+-- ═══════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS ai_portfolio_recommendations (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    timestamp TIMESTAMPTZ DEFAULT NOW(),
+    recommended_allocations JSONB,  -- {"cash_reserve": 15, "index": 60, "trading": 25}
+    current_allocations JSONB,
+    reasoning TEXT,
+    confidence DECIMAL(3, 2),
+    market_regime VARCHAR(20),
+    was_applied BOOLEAN DEFAULT FALSE,
+    applied_at TIMESTAMPTZ,
+    performance_after_30d JSONB  -- retrospective evaluation
+);
+
+CREATE INDEX IF NOT EXISTS idx_ai_recommendations_ts ON ai_portfolio_recommendations(timestamp DESC);
+
 -- Fertig!
-SELECT 'Trading Bot Database initialized successfully with Multi-Coin System!' as status;
+SELECT 'Trading Bot Database initialized successfully with 3-Tier Portfolio System!' as status;

@@ -129,6 +129,60 @@ def generate_performance_chart():
         logger.error(f"Chart Generation Error: {e}")
 
 
+def _build_tier_report() -> str:
+    """Build 3-tier portfolio report for daily summary.
+
+    Only generates output when PORTFOLIO_MANAGER=true and tier data exists.
+    """
+    import os
+
+    if os.getenv("PORTFOLIO_MANAGER", "false").lower() != "true":
+        return ""
+
+    conn = get_db_connection()
+    if not conn:
+        return ""
+
+    try:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                "SELECT tier_name, target_pct, current_pct, current_value_usd "
+                "FROM portfolio_tiers WHERE is_active = TRUE ORDER BY tier_name"
+            )
+            tiers = cur.fetchall()
+    except Exception:
+        return ""
+    finally:
+        conn.close()
+
+    if not tiers:
+        return ""
+
+    total = sum(float(t["current_value_usd"] or 0) for t in tiers)
+    emojis = {"cash_reserve": "💵", "index_holdings": "📊", "trading": "⚡"}
+
+    lines = ["<b>🏦 TIER BREAKDOWN</b>", "━━━━━━━━━━━━━━━━━━━━━"]
+
+    for t in tiers:
+        name = t["tier_name"]
+        target = float(t["target_pct"])
+        current = float(t["current_pct"] or 0)
+        value = float(t["current_value_usd"] or 0)
+        drift = current - target
+        emoji = emojis.get(name, "📋")
+
+        drift_indicator = ""
+        if abs(drift) > 3:
+            drift_indicator = " ⚠️"
+
+        lines.append(
+            f"{emoji} {name}: <b>{current:.1f}%</b> (→{target:.0f}%) ${value:,.0f}{drift_indicator}"
+        )
+
+    lines.append(f"\n💰 <b>Total: ${total:,.2f}</b>")
+    return "\n".join(lines)
+
+
 def _build_cohort_status() -> str:
     """Build per-cohort dashboard for Telegram.
 
@@ -151,15 +205,23 @@ def _build_cohort_status() -> str:
             return ""
 
     try:
-        from src.api.binance_client import BinanceClient
+        paper_mode = os.getenv("PAPER_TRADING", "false").lower() == "true"
+        if paper_mode:
+            from src.api.paper_client import PaperBinanceClient
 
-        testnet = os.getenv("BINANCE_TESTNET", "true").lower() == "true"
-        client = BinanceClient(testnet=testnet)
+            initial = float(os.getenv("PAPER_INITIAL_USDT", "6000"))
+            client = PaperBinanceClient(initial_usdt=initial)
+        else:
+            from src.api.binance_client import BinanceClient
+
+            testnet = os.getenv("BINANCE_TESTNET", "true").lower() == "true"
+            client = BinanceClient(testnet=testnet)
     except Exception:
         client = None
 
     # Load cohort info + realized P&L from DB
     cohort_info = {}
+    open_pairs_by_cohort: dict[str, dict] = {}
     conn = get_db_connection()
     if conn:
         try:
@@ -173,6 +235,8 @@ def _build_cohort_status() -> str:
                 for row in cur.fetchall():
                     cohort_info[row["name"]] = row
 
+                # Per-cohort: realized P&L + open positions for unrealized P&L
+                open_pairs_by_cohort: dict[str, dict] = {}
                 for name, info in cohort_info.items():
                     try:
                         cur.execute(
@@ -188,6 +252,27 @@ def _build_cohort_status() -> str:
                     except Exception:
                         info["realized_pnl"] = 0.0
                         info["trade_count"] = 0
+
+                    # Open trade pairs for per-coin unrealized P&L
+                    try:
+                        cur.execute(
+                            "SELECT symbol, "
+                            "COALESCE(SUM(entry_value_usd), 0) as cost_basis, "
+                            "COALESCE(SUM(remaining_quantity), 0) as total_qty "
+                            "FROM trade_pairs "
+                            "WHERE cohort_id = %s AND status = 'open' "
+                            "GROUP BY symbol",
+                            (info["id"],),
+                        )
+                        pairs = {}
+                        for row in cur.fetchall():
+                            pairs[row["symbol"]] = {
+                                "cost_basis": float(row["cost_basis"]),
+                                "total_qty": float(row["total_qty"]),
+                            }
+                        open_pairs_by_cohort[name] = pairs
+                    except Exception:
+                        open_pairs_by_cohort[name] = {}
         except Exception as e:
             logger.debug(f"Cohort info query failed: {e}")
         finally:
@@ -251,7 +336,7 @@ def _build_cohort_status() -> str:
                 if client:
                     try:
                         price = client.get_current_price(sym)
-                        orders = client.client.get_open_orders(symbol=sym)
+                        orders = client.get_open_orders(sym)
                         n_buy = sum(1 for o in orders if o["side"] == "BUY")
                         n_sell = sum(1 for o in orders if o["side"] == "SELL")
                         price_str = _format_price(price) if price else "—"
@@ -300,7 +385,18 @@ def _build_cohort_status() -> str:
                 # Show market value if holding, otherwise allocation
                 val_str = f"${mkt_val:.0f}" if mkt_val >= 1 else f"${alloc:.0f}"
                 cohort_market_value += mkt_val if mkt_val >= 1 else alloc
-                coin_rows.append(f"  {base:<6s} {price_str:>8s}  {val_str:>5s}  {order_str}")
+
+                # Per-coin unrealized P&L from open trade pairs
+                coin_pnl_str = ""
+                op = open_pairs_by_cohort.get(cohort_name, {}).get(sym)
+                if op and price and op["cost_basis"] > 0:
+                    coin_upnl = op["total_qty"] * price - op["cost_basis"]
+                    coin_upnl_pct = coin_upnl / op["cost_basis"] * 100
+                    coin_pnl_str = f" {coin_upnl:+.1f}$({coin_upnl_pct:+.1f}%)"
+
+                coin_rows.append(
+                    f"  {base:<5s} {price_str:>8s} {val_str:>5s}{coin_pnl_str} {order_str}"
+                )
 
             cash_reserve = total_investment - total_allocated
             # Total current value = cash reserve + market value of positions
@@ -370,6 +466,86 @@ def _build_cohort_status() -> str:
     return "\n".join(lines)
 
 
+def _build_cohort_comparison() -> str:
+    """Build cohort comparison ranking for Telegram.
+
+    Compares all active cohorts by realized P&L, win rate, and trade count.
+    Uses trade_pairs table for live data (not trading_cycles which need completed cycles).
+    """
+    conn = get_db_connection()
+    if not conn:
+        return ""
+
+    try:
+        from psycopg2.extras import RealDictCursor as RDC
+
+        with conn.cursor(cursor_factory=RDC) as cur:
+            cur.execute("SELECT id, name, starting_capital FROM cohorts WHERE is_active = true")
+            cohorts = cur.fetchall()
+
+            if len(cohorts) < 2:
+                return ""
+
+            rows = []
+            for c in cohorts:
+                cur.execute(
+                    "SELECT "
+                    "COALESCE(SUM(net_pnl), 0) as total_pnl, "
+                    "COUNT(*) as trades, "
+                    "SUM(CASE WHEN net_pnl > 0 THEN 1 ELSE 0 END) as wins "
+                    "FROM trade_pairs "
+                    "WHERE cohort_id = %s AND status = 'closed'",
+                    (c["id"],),
+                )
+                tp = cur.fetchone()
+                total_pnl = float(tp["total_pnl"])
+                trades = tp["trades"]
+                wins = tp["wins"] or 0
+                starting = float(c["starting_capital"])
+                pnl_pct = total_pnl / starting * 100 if starting > 0 else 0.0
+                win_rate = wins / trades * 100 if trades > 0 else 0.0
+
+                rows.append(
+                    {
+                        "name": c["name"],
+                        "pnl": total_pnl,
+                        "pnl_pct": pnl_pct,
+                        "trades": trades,
+                        "win_rate": win_rate,
+                    }
+                )
+
+            # Rank by P&L% descending
+            rows.sort(key=lambda r: r["pnl_pct"], reverse=True)
+
+            lines = [
+                "<b>🏆 COHORT COMPARISON</b>",
+                "━━━━━━━━━━━━━━━━━━━━━",
+                "<code>#  Cohort         P&L%  WinR Trades</code>",
+            ]
+
+            for i, r in enumerate(rows, 1):
+                emoji = COHORT_EMOJIS.get(r["name"], "🤖")
+                name = f"{emoji}{r['name']}"
+                lines.append(
+                    f"<code>{i}  {name:<14s} {r['pnl_pct']:+5.1f}% "
+                    f"{r['win_rate']:4.0f}%  {r['trades']:4d}</code>"
+                )
+
+            # Spread: best vs worst
+            if len(rows) >= 2:
+                spread = rows[0]["pnl_pct"] - rows[-1]["pnl_pct"]
+                lines.append(f"📊 Spread: {spread:.1f}pp ({rows[0]['name']} vs {rows[-1]['name']})")
+
+            return "\n".join(lines)
+
+    except Exception as e:
+        logger.debug(f"Cohort comparison failed: {e}")
+        return ""
+    finally:
+        conn.close()
+
+
 def task_daily_summary():
     """Tägliche Portfolio-Zusammenfassung um 20:00."""
     from src.data.market_data import get_market_data
@@ -420,10 +596,20 @@ def task_daily_summary():
             fear_greed=fear_greed.value,
         )
 
+        # Tier breakdown (if PORTFOLIO_MANAGER mode)
+        tier_report = _build_tier_report()
+        if tier_report:
+            telegram.send(tier_report, disable_notification=True)
+
         # Per-cohort details
         cohort_status = _build_cohort_status()
         if cohort_status:
             telegram.send(cohort_status, disable_notification=True)
+
+        # Cohort comparison ranking
+        comparison = _build_cohort_comparison()
+        if comparison:
+            telegram.send(comparison, disable_notification=True)
 
         data_sources_report = format_data_sources_report()
         if data_sources_report:
