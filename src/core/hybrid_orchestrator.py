@@ -213,6 +213,47 @@ class HybridOrchestrator:
 
         return False
 
+    def _reconcile_startup_orders(self) -> None:
+        """Cancel open orders on Binance that are not tracked in local state files.
+
+        Runs once at startup to clean up orphaned orders from previous runs
+        (e.g. orders placed but state not saved before crash).
+        """
+        config_dir = Path("config")
+        total_cancelled = 0
+
+        for symbol in self.symbols:
+            try:
+                # Load known order IDs from grid state file
+                if self.cohort_name:
+                    sf = config_dir / f"grid_state_{symbol}_{self.cohort_name}.json"
+                else:
+                    sf = config_dir / f"grid_state_{symbol}.json"
+
+                known_ids: set[int] = set()
+                if sf.exists():
+                    with open(sf) as f:
+                        data = json.load(f)
+                    for oid in data.get("active_orders", {}):
+                        known_ids.add(int(oid))
+
+                # Get open orders from Binance
+                open_orders = self.client.get_open_orders(symbol)
+                for order in open_orders:
+                    oid = order["orderId"]
+                    if oid not in known_ids:
+                        self.client.cancel_order(symbol, oid)
+                        total_cancelled += 1
+                        logger.info(f"Reconcile: cancelled unknown order {oid} for {symbol}")
+
+            except Exception as e:
+                logger.warning(f"Reconcile: error for {symbol}: {e}")
+
+        if total_cancelled > 0:
+            logger.info(f"Reconcile: cancelled {total_cancelled} orphaned orders at startup")
+        else:
+            logger.info("Reconcile: no orphaned orders found")
+
     def run(self) -> None:
         """Main loop - runs until stopped."""
         if not self.symbols:
@@ -221,6 +262,7 @@ class HybridOrchestrator:
 
         self.running = True
         self.load_state()
+        self._reconcile_startup_orders()
 
         logger.info(
             f"Orchestrator: starting with {len(self.symbols)} symbols "
@@ -342,11 +384,11 @@ class HybridOrchestrator:
             state.grid_init_failures = 0
             self._last_grid_recalc[state.symbol] = datetime.now()
 
-        # Check if grid needs rebuild (every 30 min, only when price drifts)
+        # Check if grid needs rebuild (every 60 min, only when price drifts near edge)
         last_recalc = self._last_grid_recalc.get(state.symbol)
         if (
             last_recalc
-            and (datetime.now() - last_recalc).total_seconds() > 1800
+            and (datetime.now() - last_recalc).total_seconds() > 3600
             and self._should_rebuild_grid(state)
         ):
             logger.info(f"GRID: rebuilding grid for {state.symbol} (price near edge)")
@@ -493,11 +535,11 @@ class HybridOrchestrator:
         lower = float(state.grid_bot.strategy.lower_price)
         upper = float(state.grid_bot.strategy.upper_price)
 
-        # Rebuild if price is outside or within 10% of the edge
+        # Rebuild if price is outside or within 5% of the edge
         total_range = upper - lower
         if total_range <= 0:
             return True
-        margin = total_range * 0.1
+        margin = total_range * 0.05
         return price < lower + margin or price > upper - margin
 
     def _create_grid_bot(self, state: SymbolState) -> GridBot | None:
@@ -541,6 +583,7 @@ class HybridOrchestrator:
             bot = GridBot(bot_config, client=self.client)
             if bot.initialize():
                 bot.place_initial_orders()
+                bot.save_state()
                 logger.info(f"GRID: initialized {state.symbol}")
                 return bot
             logger.error(f"GRID: init failed for {state.symbol}")

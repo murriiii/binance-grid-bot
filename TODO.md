@@ -115,6 +115,12 @@
 
 - [ ] **E2**: Unrealized P&L im Report (Live-Bewertung der offenen Positionen)
 - [ ] **E3**: Performance-Vergleich zwischen Cohorts (welche Strategie gewinnt?)
+- [ ] **E4: Paper-Trading-Modus gegen Mainnet-Daten** — Echte Mainnet-Preise + simulierte Trades
+  - Nutzt öffentliche Mainnet-API für Echtzeit-Preise (kein API-Key nötig)
+  - Simuliert Orders mit virtuellem Kapital ("Was wäre wenn $100 investiert?")
+  - Grid-Fills basierend auf echten Preisbewegungen statt Testnet-Orderbook
+  - Besseres Strategie-Lernen als Testnet (echtes Marktverhalten)
+  - Baut auf existierendem `src/backtest/engine.py` auf, aber in Echtzeit
 
 ### Priorität B: Optimierungen
 

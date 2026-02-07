@@ -17,14 +17,18 @@ COHORT_EMOJIS = {
 
 
 def _format_price(price: float) -> str:
-    """Format price compactly: $97.3K, $2.7K, $0.145."""
+    """Format price compactly: $97.3K, $2.7K, $0.145, $0.00000857."""
     if price >= 100_000:
         return f"${price / 1000:,.0f}K"
     if price >= 1_000:
         return f"${price / 1000:,.1f}K"
     if price >= 1:
         return f"${price:,.2f}"
-    return f"${price:.4f}"
+    if price >= 0.01:
+        return f"${price:.4f}"
+    if price >= 0.0001:
+        return f"${price:.6f}"
+    return f"${price:.8f}"
 
 
 def _status_emoji(realized_pnl: float, trade_count: int) -> str:

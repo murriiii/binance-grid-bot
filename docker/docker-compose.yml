@@ -89,7 +89,7 @@ services:
       - HYBRID_CONSTRAINTS_PRESET=${HYBRID_CONSTRAINTS_PRESET:-small}
       # Grid passthrough
       - GRID_RANGE_PERCENT=${GRID_RANGE_PERCENT:-5}
-      - NUM_GRIDS=${NUM_GRIDS:-3}
+      - NUM_GRIDS=${NUM_GRIDS:-5}
       # Notifications
       - LEARNING_MODE=${LEARNING_MODE:-false}
     volumes:

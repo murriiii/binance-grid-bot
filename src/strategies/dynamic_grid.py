@@ -488,9 +488,9 @@ class DynamicGridStrategy(SingletonMixin):
         if regime:
             regime_multipliers = {
                 "BULL": 1.1,  # Etwas größere Abstände (momentum)
-                "BEAR": 1.3,  # Größere Abstände (mehr Volatilität)
+                "BEAR": 1.1,  # Leicht größere Abstände (was 1.3 — reduced to avoid over-expansion)
                 "SIDEWAYS": 0.9,  # Engere Abstände (range-bound)
-                "TRANSITION": 1.2,  # Größere Abstände (Unsicherheit)
+                "TRANSITION": 1.0,  # Neutral (was 1.2 — reduced to avoid over-expansion)
             }
             adjusted *= regime_multipliers.get(regime.upper(), 1.0)
 

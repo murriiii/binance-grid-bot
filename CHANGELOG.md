@@ -1,3 +1,14 @@
+## v1.15.0 (2026-02-07)
+
+### Fix
+
+- increase NUM_GRIDS from 3 to 5: doubles fill opportunities (6 levels instead of 4)
+- save state immediately after place_initial_orders() to prevent orphaned "unknown" orders
+- add startup order reconciliation: cancels Binance orders not tracked in local state
+- increase grid rebuild interval from 30min to 60min, tighten margin from 10% to 5%
+- reduce ATR regime multipliers: BEAR 1.3→1.1, TRANSITION 1.2→1.0 to prevent grid over-expansion
+- fix price formatting for micro-price coins (PEPE/SHIB/BONK): dynamic precision instead of fixed .4f
+
 ## v1.14.9 (2026-02-06)
 
 ### Feat

@@ -81,6 +81,7 @@ class OrderManagerMixin:
             )
 
             if placed_count > 0:
+                self.save_state()
                 self.telegram.send(f"📊 {placed_count} Grid-Orders platziert")
 
         except Exception as e:

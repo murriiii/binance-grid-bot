@@ -20,9 +20,9 @@ pytest tests/test_grid_strategy.py::TestGridStrategy::test_initialization -v
 # Run with coverage
 pytest tests/ --cov=src --cov-report=term-missing
 
-# Lint and format (include both entry points)
-ruff check src/ tests/ docker/scheduler.py main.py main_hybrid.py
-ruff format src/ tests/ docker/scheduler.py main.py main_hybrid.py
+# Lint and format
+ruff check src/ tests/ docker/ main.py main_hybrid.py run_backtest.py check_sentiment.py
+ruff format src/ tests/ docker/ main.py main_hybrid.py run_backtest.py check_sentiment.py
 
 # Type checking
 mypy src/
@@ -50,10 +50,12 @@ cd docker && docker compose --profile hybrid up -d
 
 ## Architecture Overview
 
-### Two Entry Points
+### Entry Points
 
 1. **`main.py`** - Classic single-coin GridBot (standalone)
 2. **`main_hybrid.py`** - Hybrid multi-coin system with regime-adaptive mode switching
+3. **`run_backtest.py`** - Backtest runner (no API keys needed, uses public Binance data)
+4. **`check_sentiment.py`** - Market sentiment check (no API keys needed)
 
 ```
 main_hybrid.py

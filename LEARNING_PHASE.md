@@ -36,12 +36,14 @@ Also checked in `src/core/bot.py` (tick) and `src/core/risk_guard.py` (_validate
 **Reason:** Small testnet capital ($1000/cohort) needs relaxed allocation limits.
 **Production:** Set `HYBRID_CONSTRAINTS_PRESET=balanced` (or `conservative` for real capital).
 
-### 5. NUM_GRIDS=3 (Temporary)
+### 5. NUM_GRIDS=5 (Temporary)
 
 **Where:** `.env` / `docker-compose.yml` L92
-**Effect:** Only 3 grid levels per symbol (minimum viable grid).
-**Reason:** Small testnet investment — fewer levels = higher per-level investment = meets min_notional.
-**Production:** Increase to 5-10 depending on investment per symbol.
+**Effect:** 5 grid levels per symbol (6 total levels: 3 BUY + 3 SELL).
+**Reason:** Increased from 3 to 5 — with NUM_GRIDS=3 only 4 levels were created (2 BUY + 2 SELL)
+with 3.33% spacing, causing very low fill rates. NUM_GRIDS=5 gives 1.67% spacing at 5% range.
+$24/level still meets min_notional.
+**Production:** Increase to 7-10 depending on investment per symbol.
 
 ### 6. HYBRID_MAX_SYMBOLS=4 (Temporary)
 
@@ -123,8 +125,34 @@ Follow this order when switching to production:
        docker logs trading-scheduler | grep "task_reconcile"
 ```
 
+### 11. Startup Order Reconciliation (Permanent)
+
+**Where:** `src/core/hybrid_orchestrator.py` — `_reconcile_startup_orders()` called in `run()`.
+**Effect:** At startup, cancels any open orders on Binance that are not tracked in local state files.
+**Reason:** Orders placed but not persisted before crash/restart remain on Binance as orphans,
+blocking capital the bot doesn't know about.
+**Production:** Stays as-is. Essential safety net for any environment.
+
+### 12. Grid Rebuild Interval 60min / 5% Margin (Temporary)
+
+**Where:** `src/core/hybrid_orchestrator.py` — `_execute_grid()` and `_should_rebuild_grid()`.
+**Effect:** Grid rebuild check runs every 60 minutes (was 30) and only triggers when price is
+within 5% of the grid edge (was 10%).
+**Reason:** With NUM_GRIDS=5 and tighter grids, orders need more time to fill before being
+cancelled by a rebuild. 30-min interval was destroying orders before they could execute.
+**Production:** May adjust back to 30min with higher grid counts and more capital.
+
+### 13. ATR Regime Multipliers Reduced (Temporary)
+
+**Where:** `src/strategies/dynamic_grid.py` — `_calculate_adjusted_spacing()`.
+**Effect:** BEAR multiplier reduced from 1.3x to 1.1x, TRANSITION from 1.2x to 1.0x.
+**Reason:** High multipliers were expanding grid ranges excessively, especially for cohorts
+with already wide base ranges (MEME 15%). Over-expansion reduces fill probability.
+**Production:** May restore original values with larger capital and more grid levels.
+
 ## Items That Stay Unchanged
 
 - `skip_portfolio_drawdown: True` — permanent for hybrid/cohort mode
 - `TelegramNotifier.send()` without force — permanent, learning mode gate works correctly
 - Monitoring tasks — permanent, useful in production too
+- Startup order reconciliation — permanent, safety net for all environments

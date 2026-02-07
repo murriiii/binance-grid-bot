@@ -384,7 +384,7 @@ class TestHybridOrchestratorGridRebuild:
 
     @patch("src.core.hybrid_orchestrator.TelegramNotifier")
     def test_should_rebuild_grid_price_near_edge(self, _tg, reset_new_singletons):
-        """Rebuild when price approaches grid edge (within 10% margin)."""
+        """Rebuild when price approaches grid edge (within 5% margin)."""
         from decimal import Decimal
 
         orch, mock_client, SymbolState = self._make_orchestrator()
@@ -395,8 +395,8 @@ class TestHybridOrchestratorGridRebuild:
         mock_bot.strategy.upper_price = Decimal("105.0")
         state.grid_bot = mock_bot
 
-        # Price near lower edge (within 10% of range)
-        mock_client.get_current_price.return_value = 95.5  # 0.5 from lower, margin=1.0
+        # Price near lower edge (within 5% of range = 0.5 margin)
+        mock_client.get_current_price.return_value = 95.2  # 0.2 from lower, margin=0.5
         assert orch._should_rebuild_grid(state) is True
 
     @patch("src.core.hybrid_orchestrator.TelegramNotifier")
