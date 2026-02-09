@@ -1,393 +1,365 @@
-# Binance Grid Trading Bot
+<h1 align="center">
+  <br>
+  AI-Enhanced Crypto Grid Trading Bot
+  <br>
+</h1>
 
-Ein regime-adaptiver Krypto-Trading-Bot mit Hybrid-System (HOLD/GRID/CASH), Multi-Coin Trading, AI-Enhancement, Memory-System und selbstlernendem Trading Playbook.
+<p align="center">
+  <b>A regime-adaptive cryptocurrency trading system that autonomously switches between HOLD, GRID, and CASH modes using Hidden Markov Models, runs 6 parallel strategy cohorts, and continuously learns from its own trades.</b>
+</p>
 
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![Version: 1.20.0](https://img.shields.io/badge/version-1.20.0-green.svg)](https://github.com/murriiii/binance-grid-bot/releases)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
-[![Tests: 1089 passed](https://img.shields.io/badge/tests-1089%20passed-brightgreen.svg)]()
-[![Coverage: 60%](https://img.shields.io/badge/coverage-60%25-yellowgreen.svg)]()
+<p align="center">
+  <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.10+-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python"/></a>
+  <a href="https://github.com/murriiii/binance-grid-bot/releases"><img src="https://img.shields.io/badge/version-1.20.0-green?style=flat-square" alt="Version"/></a>
+  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/license-MIT-yellow?style=flat-square" alt="License"/></a>
+  <a href="https://github.com/astral-sh/ruff"><img src="https://img.shields.io/badge/code_style-ruff-000000?style=flat-square" alt="Ruff"/></a>
+  <img src="https://img.shields.io/badge/tests-1089_passed-brightgreen?style=flat-square" alt="Tests"/>
+  <img src="https://img.shields.io/badge/coverage-60%25-yellowgreen?style=flat-square" alt="Coverage"/>
+</p>
 
-## Features
+<p align="center">
+  <a href="#-features">Features</a> •
+  <a href="#-architecture">Architecture</a> •
+  <a href="#-cohort-system--6-parallel-bots">Cohorts</a> •
+  <a href="#-3-tier-portfolio-management">Portfolio</a> •
+  <a href="#-hybrid-trading-system">Hybrid System</a> •
+  <a href="#-multi-coin-trading-system">Multi-Coin</a> •
+  <a href="#-installation">Install</a> •
+  <a href="#-telegram-commands">Telegram</a> •
+  <a href="#-development">Dev</a>
+</p>
+
+---
+
+## ✨ Features
 
 ### Hybrid Trading System
-- **Regime-Adaptive Modes** - Automatischer Wechsel zwischen HOLD (Bull), GRID (Sideways) und CASH (Bear)
-- **HMM Regime Detection** - Hidden Markov Model erkennt Markt-Regime (BULL/BEAR/SIDEWAYS)
-- **Hysteresis-Schutz** - Verhindert Flip-Flopping: Mindest-Wahrscheinlichkeit (75%), Mindest-Dauer (2 Tage), 24h Cooldown, Safety-Lock nach 2 Transitions/48h
-- **Emergency Bear Exit** - Sofortiger Wechsel zu CASH bei Bear-Probability >= 85%
-- **6 Transition-Pfade** - Graceful Transitions zwischen allen Modi (GRID<->HOLD, GRID<->CASH, HOLD<->CASH)
+- **Regime-Adaptive Modes** — Automatic switching between HOLD (Bull), GRID (Sideways) and CASH (Bear)
+- **HMM Regime Detection** — Hidden Markov Model identifies market regimes (BULL/BEAR/SIDEWAYS)
+- **Hysteresis Protection** — Prevents flip-flopping: minimum probability (75%), minimum duration (2 days), 24h cooldown, safety lock after 2 transitions/48h
+- **Emergency Bear Exit** — Immediate switch to CASH when bear probability >= 85%
+- **6 Transition Paths** — Graceful transitions between all modes (GRID↔HOLD, GRID↔CASH, HOLD↔CASH)
 
 ### Core Trading
-- **Grid Trading Strategy** - Automatisches Kaufen/Verkaufen in definierten Preisbändern
-- **Decimal Precision** - Alle Preis-/Mengenberechnungen nutzen `Decimal` statt `float` (keine Binance-Rejections durch Rundungsfehler)
-- **Fee-Aware Trading** - Binance Taker-Fees (0.1%) werden bei Sell-Quantities automatisch abgezogen, Fee-Aware Grid Spacing Warning bei zu engen Grids
-- **Multi-Coin Trading** - Handel ueber 2-3 Coins pro Cohort mit intelligenter Kapitalverteilung
-- **Dynamic Grid Strategy** - ATR-basierte Grid-Ranges pro Symbol (Range-Bridge: DynamicGridStrategy berechnet Range, GridStrategy behält Decimal-Precision), auto Grid-Rebuild bei Preis-Drift (30 Min Check)
-- **Dynamic Grid Count** - Volatilitaets-basierte Grid-Anzahl (LOW=7, NORMAL=10, HIGH=12, EXTREME=15) statt statischer Konfiguration
-- **Slippage Tracking** - Expected vs. Filled Price Tracking in Basis Points pro Trade
-- **AI-Enhanced Decisions** - DeepSeek-Integration für intelligentere Entscheidungen
-- **Trading Playbook** - Selbstlernendes "Erfahrungsgedächtnis" das aus Trades lernt
-- **Memory System** - PostgreSQL-basiertes RAG-System mit Multi-Dimensional Similarity Scoring (Gaussian F&G Decay, Regime-Match, Symbol-Match, Temporal Decay)
+- **Grid Trading Strategy** — Automated buying/selling within defined price bands
+- **Decimal Precision** — All price/quantity calculations use `Decimal` instead of `float` (zero Binance rejections from rounding errors)
+- **Fee-Aware Trading** — Binance taker fees (0.1%) automatically deducted from sell quantities, fee-aware grid spacing warning for grids that are too tight
+- **Multi-Coin Trading** — Trade across 2-3 coins per cohort with intelligent capital distribution
+- **Dynamic Grid Strategy** — ATR-based grid ranges per symbol (Range-Bridge: DynamicGridStrategy calculates range, GridStrategy maintains Decimal precision), auto grid rebuild on price drift (30 min check)
+- **Dynamic Grid Count** — Volatility-based grid count (LOW=7, NORMAL=10, HIGH=12, EXTREME=15) instead of static configuration
+- **Slippage Tracking** — Expected vs. filled price tracking in basis points per trade
+- **AI-Enhanced Decisions** — DeepSeek integration for smarter trading decisions
+- **Trading Playbook** — Self-learning "experience memory" that learns from trades
+- **Memory System** — PostgreSQL-based RAG system with multi-dimensional similarity scoring (Gaussian F&G Decay, Regime-Match, Symbol-Match, Temporal Decay)
 
 ### Multi-Coin System
-- **Watchlist Management** - 35+ Coins in 7 Kategorien (LARGE_CAP, MID_CAP, L2, DEFI, AI, GAMING, MEME)
-- **Coin Scanner** - Opportunity Detection mit technischen, Volume und Sentiment-Signalen
-- **Portfolio Allocator** - Kelly-basierte Kapitalverteilung mit Risk Constraints
-- **Category-Based Filtering** - Cohorts koennen auf bestimmte Coin-Kategorien beschraenkt werden (`allowed_categories`)
-- **Symbol Exclusion** - Jede Cohort handelt unique Coins (keine Ueberlappung)
-- **Pre-Feasibility Filter** - Coins werden vor Allocation geprueft ob min_position_usd erreichbar ist
-- **Per-Coin Learning** - Optimale Settings pro Coin automatisch erlernen
+- **Watchlist Management** — 35+ coins across 7 categories (LARGE_CAP, MID_CAP, L2, DEFI, AI, GAMING, MEME)
+- **Coin Scanner** — Opportunity detection with technical, volume and sentiment signals
+- **Portfolio Allocator** — Kelly-based capital distribution with risk constraints
+- **Category-Based Filtering** — Cohorts can be restricted to specific coin categories (`allowed_categories`)
+- **Symbol Exclusion** — Each cohort trades unique coins (no overlap)
+- **Pre-Feasibility Filter** — Coins are checked before allocation whether min_position_usd is achievable
+- **Per-Coin Learning** — Optimal settings per coin learned automatically
 
 ### 3-Tier Portfolio Management
-- **Cash Reserve Tier** - Konfigurierbarer USDT-Sicherheitspuffer (Standard 10%)
-- **Index Holdings Tier** - ETF-artiges Buy-and-Hold der CMC Top 20 nach Market Cap, quarterly Rebalance, 15% Trailing Stops
-- **Trading Tier** - Wrapper um CohortOrchestrator, skaliert Cohorts nach verfuegbarem Kapital
-- **Profit Redistribution** - Woechentliche Gewinnumverteilung wenn Tier-Drift > 3%
-- **AI Portfolio Optimizer** - Monatliche DeepSeek-Empfehlungen fuer optimale Tier-Gewichtung mit Guard Rails (Lernmodus erste 3 Monate)
-- **Production Validator** - 9 Kriterien fuer Go-Live (Trades, Sharpe, Drawdown, Win Rate, Signal-Accuracy, etc.)
-- **Deployment Phases** - Gradueller Kapitalaufbau: Paper → Alpha ($1K) → Beta ($3K) → Production ($5K+)
-- **Feature Flag** - `PORTFOLIO_MANAGER=true` aktiviert 3-Tier-System, sonst CohortOrchestrator-Fallback
+- **Cash Reserve Tier** — Configurable USDT safety buffer (default 10%)
+- **Index Holdings Tier** — ETF-like buy-and-hold of CMC Top 20 by market cap, quarterly rebalance, 15% trailing stops
+- **Trading Tier** — Wrapper around CohortOrchestrator, scales cohorts by available capital
+- **Profit Redistribution** — Weekly profit redistribution when tier drift > 3%
+- **AI Portfolio Optimizer** — Monthly DeepSeek recommendations for optimal tier weights with guard rails (learning mode for first 3 months)
+- **Production Validator** — 9 criteria for go-live (trades, Sharpe, drawdown, win rate, signal accuracy, etc.)
+- **Deployment Phases** — Gradual capital ramp-up: Paper → Alpha ($1K) → Beta ($3K) → Production ($5K+)
+- **Feature Flag** — `PORTFOLIO_MANAGER=true` enables 3-tier system, otherwise falls back to CohortOrchestrator
 
 ### Learning & Optimization
-- **Cohort System** - 6 parallele HybridOrchestrator-Instanzen mit je $1000 eigenem Kapital (Conservative, Balanced, Aggressive, Baseline, DeFi Explorer, Meme Hunter)
-- **AI Learning Loop** - Signal-Korrektheit (`was_correct`), Trade-Entscheidungsqualitaet (`was_good_decision`), Multi-Timeframe Outcomes (1h/4h/24h/7d)
-- **Signal-Accuracy im Playbook** - Top-Signale nach Zuverlaessigkeit, regime-stratifizierte Regeln (BULL/BEAR/SIDEWAYS)
-- **Cycle Management** - Wöchentliche Trading-Zyklen mit vollständiger Performance-Analyse
-- **Bayesian Weight Learning** - Adaptive Signal-Gewichtung via Dirichlet-Distribution
-- **A/B Testing Framework** - Statistische Signifikanz-Tests (Welch t-Test, Mann-Whitney U)
-- **Regime Detection** - Hidden Markov Model für Markt-Regime (BULL/BEAR/SIDEWAYS)
+- **Cohort System** — 6 parallel HybridOrchestrator instances each with $1,000 own capital (Conservative, Balanced, Aggressive, Baseline, DeFi Explorer, Meme Hunter)
+- **AI Learning Loop** — Signal correctness (`was_correct`), trade decision quality (`was_good_decision`), multi-timeframe outcomes (1h/4h/24h/7d)
+- **Signal Accuracy in Playbook** — Top signals by reliability, regime-stratified rules (BULL/BEAR/SIDEWAYS)
+- **Cycle Management** — Weekly trading cycles with complete performance analysis
+- **Bayesian Weight Learning** — Adaptive signal weighting via Dirichlet distribution
+- **A/B Testing Framework** — Statistical significance tests (Welch t-test, Mann-Whitney U)
+- **Regime Detection** — Hidden Markov Model for market regimes (BULL/BEAR/SIDEWAYS)
 
 ### Risk Management
-- **Risk Enforcement Pipeline** - Jede Order wird gegen CVaR-Limits, Allocation-Constraints und Portfolio-Drawdown geprüft
-- **Circuit Breaker** - Emergency-Stop bei >10% Flash-Crash zwischen Check-Zyklen
-- **CVaR Position Sizing** - Conditional Value at Risk basierte Positionsgrößen
-- **Stop-Loss Execution** - Retry-Logik (3 Versuche mit Backoff), Balance-Awareness (tatsaechliche Balance statt Soll-Menge, automatisches Re-Fetch bei INSUFFICIENT_BALANCE), Step-Size-Rounding, Telegram-Alert bei totalem Fehlschlag
-- **Stop-Loss Lifecycle** - Zwei-Phasen-Trigger: `update()` erkennt Trigger, `confirm_trigger()` deaktiviert erst nach erfolgreichem Market-Sell, `reactivate()` bei Sell-Fehler
-- **Fee-Adjusted Stop-Loss** - Stop-Loss-Quantities werden um Taker-Fee (0.1%) reduziert, verhindert INSUFFICIENT_BALANCE bei Trigger
-- **Trailing Distance Fix** - TRAILING-Stops nutzen uebergebenen `stop_percentage` als Trailing-Abstand (HOLD=7%, GRID=5%)
-- **Daily Drawdown Reset** - Automatischer Reset der Drawdown-Baseline um Mitternacht (Scheduler-Task + in-tick Detection)
-- **Partial-Fill-Handling** - Teilweise gefuellte Orders werden korrekt verarbeitet statt verworfen
-- **Downtime-Fill-Recovery** - Bei Neustart werden waehrend der Downtime gefuellte Orders erkannt und Follow-ups platziert
-- **Follow-Up Retry** - Fehlgeschlagene Folge-Orders werden mit exponentiellem Backoff (2/5/15/30/60 Min) bis zu 5x wiederholt, kein Telegram-Spam
-- **Kelly Criterion** - Optimale Positionsgroessen-Berechnung
-- **Sharpe/Sortino Ratio** - Risiko-adjustierte Performance-Metriken
-- **Signal Breakdown** - 9-Signal Composite (F&G, RSI, MACD, Trend, Volume, Whale, Sentiment, Macro, AI) pro Trade-Fill in DB mit AI Signal-Validierung (Enum, Confidence Clamping, Semantische Konsistenz)
-- **Metrics Snapshots** - Taegliche Sharpe/CVaR/Kelly Snapshots in `calculation_snapshots` Tabelle
-- **Data Retention** - Automatische Bereinigung alter Daten (8 Tabellen, konfigurierbare Retention: 30-180 Tage)
+- **Risk Enforcement Pipeline** — Every order validated against CVaR limits, allocation constraints and portfolio drawdown
+- **Circuit Breaker** — Emergency stop on >10% flash crash between check cycles
+- **CVaR Position Sizing** — Conditional Value at Risk based position sizes
+- **Stop-Loss Execution** — Retry logic (3 attempts with backoff), balance awareness (actual balance instead of target amount, auto re-fetch on INSUFFICIENT_BALANCE), step-size rounding, Telegram alert on total failure
+- **Stop-Loss Lifecycle** — Two-phase trigger: `update()` detects trigger, `confirm_trigger()` deactivates only after successful market sell, `reactivate()` on sell failure
+- **Fee-Adjusted Stop-Loss** — Stop-loss quantities reduced by taker fee (0.1%), prevents INSUFFICIENT_BALANCE on trigger
+- **Trailing Distance Fix** — TRAILING stops use passed `stop_percentage` as trailing distance (HOLD=7%, GRID=5%)
+- **Daily Drawdown Reset** — Automatic drawdown baseline reset at midnight (scheduler task + in-tick detection)
+- **Partial Fill Handling** — Partially filled orders processed correctly instead of discarded
+- **Downtime Fill Recovery** — On restart, orders filled during downtime are detected and follow-ups placed
+- **Follow-Up Retry** — Failed follow-up orders retried with exponential backoff (2/5/15/30/60 min) up to 5x, no Telegram spam
+- **Kelly Criterion** — Optimal position size calculation
+- **Sharpe/Sortino Ratio** — Risk-adjusted performance metrics
+- **Signal Breakdown** — 9-signal composite (F&G, RSI, MACD, Trend, Volume, Whale, Sentiment, Macro, AI) per trade fill stored in DB with AI signal validation (Enum, Confidence Clamping, Semantic Consistency)
+- **Metrics Snapshots** — Daily Sharpe/CVaR/Kelly snapshots in `calculation_snapshots` table
+- **Data Retention** — Automatic cleanup of old data (8 tables, configurable retention: 30-180 days)
 
 ### Data Sources
-- **Fear & Greed Integration** - Sentiment-basierte Trading-Signale
-- **Social Sentiment** - LunarCrush, Reddit, Twitter mit Source-Availability Dampening und Divergenz-Erkennung
-- **ETF Flow Tracking** - Bitcoin/Ethereum ETF Zuflüsse/Abflüsse
-- **Token Unlocks** - Supply Events vorausschauend berücksichtigt
-- **Whale Alert Tracking** - Überwachung großer Transaktionen
-- **Economic Events** - FOMC, CPI, NFP automatisch berücksichtigt (DB-Persistenz mit Deduplizierung)
-- **Funding Rate Signal** - Binance Futures Funding Rate (5min Cache, bearish bei >0.05%, bullish bei <-0.05%)
-- **Correlation Matrix** - 60-Tage Pearson-Korrelation zwischen Coin-Paaren, Allocator-Penalty fuer hochkorrelierte Positionen
+- **Fear & Greed Integration** — Sentiment-based trading signals
+- **Social Sentiment** — LunarCrush, Reddit, Twitter with source-availability dampening and divergence detection
+- **ETF Flow Tracking** — Bitcoin/Ethereum ETF inflows/outflows
+- **Token Unlocks** — Supply events considered proactively
+- **Whale Alert Tracking** — Monitoring large transactions
+- **Economic Events** — FOMC, CPI, NFP automatically considered (DB persistence with deduplication)
+- **Funding Rate Signal** — Binance Futures funding rate (5min cache, bearish at >0.05%, bullish at <-0.05%)
+- **Correlation Matrix** — 60-day Pearson correlation between coin pairs, allocator penalty for highly correlated positions
 
 ### Technical Analysis
-- **Divergence Detection** - RSI, MACD, Stochastic, MFI, OBV Divergenzen
-- **Technical Indicators** - RSI, MACD, Bollinger Bands, SMA/EMA
-- **Support/Resistance** - Automatische Level-Erkennung
+- **Divergence Detection** — RSI, MACD, Stochastic, MFI, OBV divergences
+- **Technical Indicators** — RSI, MACD, Bollinger Bands, SMA/EMA
+- **Support/Resistance** — Automatic level detection
 
 ### Infrastructure
-- **Graceful Shutdown** - SIGTERM-Handling in allen Entry Points (main.py, main_hybrid.py, scheduler.py) fuer sauberes Docker stop/restart
-- **Heartbeat Health Checks** - Docker Health Checks via `data/heartbeat` Datei statt HTTP-Endpoint (zentrales `touch_heartbeat()` Utility)
-- **Config Validation** - `BotConfig.from_env()` mit `validate()` prueft alle Parameter vor dem Start, `validate_environment()` prueft API-Keys und Abhaengigkeiten
-- **Per-Symbol State Files** - Jede GridBot-Instanz im Hybrid-Modus schreibt eigene `grid_state_{SYMBOL}.json` (kein Ueberschreiben bei Multi-Coin)
-- **State Corruption Recovery** - Korrupte JSON State-Files werden erkannt und sauber zurueckgesetzt statt Crash
-- **Orphan Order Cleanup** - Bei Config-Aenderung (Symbol/Investment) werden alte Orders bei Binance automatisch gecancelt
-- **Circuit Breaker Init** - `_last_known_price` wird bei `initialize()` gesetzt (kein falscher Trigger beim ersten Tick)
-- **Centralized DB Connections** - Alle Module nutzen DatabaseManager Connection Pool statt eigene Connections
-- **Comprehensive Logging** - JSON-strukturierte Logs fuer langfristige Analyse
-- **Weekly Analysis Export** - Automatische Reports fuer Claude Code Optimierung
-- **Telegram Dashboard** - Emoji-basiertes Portfolio-Dashboard mit kompakter Preisformatierung, Status-Emojis und Per-Cohort P&L
-- **Telegram Notifications** - Echtzeit-Alerts und taegliche Reports (TelegramNotifier delegiert an TelegramService Singleton)
-- **SingletonMixin Pattern** - Alle Services (DatabaseManager, HTTPClient, WatchlistManager, CoinScanner, TelegramService, MarketDataProvider etc.) nutzen `SingletonMixin` mit automatischem `close()` Lifecycle und `reset_instance()`. ModeManager ist kein Singleton (jeder Cohort-Orchestrator hat eine eigene Instanz).
-- **Atomic State Writes** - Temp-File + Rename Pattern fuer korruptionsfreie State-Persistenz (DecimalEncoder, Temp-File Cleanup bei Fehlern)
-- **SchedulerConfig** - Scheduler-Zeitpunkte und Intervalle konfigurierbar via `SchedulerConfig` (`get_config().scheduler`) statt Hardcoded-Werte
+- **Graceful Shutdown** — SIGTERM handling in all entry points (main.py, main_hybrid.py, scheduler.py) for clean Docker stop/restart
+- **Heartbeat Health Checks** — Docker health checks via `data/heartbeat` file instead of HTTP endpoint (central `touch_heartbeat()` utility)
+- **Config Validation** — `BotConfig.from_env()` with `validate()` checks all parameters before start, `validate_environment()` checks API keys and dependencies
+- **Per-Symbol State Files** — Each GridBot instance in hybrid mode writes its own `grid_state_{SYMBOL}.json` (no overwriting in multi-coin)
+- **State Corruption Recovery** — Corrupt JSON state files detected and cleanly reset instead of crash
+- **Orphan Order Cleanup** — On config change (symbol/investment), old orders at Binance automatically canceled
+- **Circuit Breaker Init** — `_last_known_price` set at `initialize()` (no false trigger on first tick)
+- **Centralized DB Connections** — All modules use DatabaseManager connection pool instead of own connections
+- **Comprehensive Logging** — JSON-structured logs for long-term analysis
+- **Weekly Analysis Export** — Automatic reports for Claude Code optimization
+- **Telegram Dashboard** — Emoji-based portfolio dashboard with compact price formatting, status emojis and per-cohort P&L
+- **Telegram Notifications** — Real-time alerts and daily reports (TelegramNotifier delegates to TelegramService singleton)
+- **SingletonMixin Pattern** — All services (DatabaseManager, HTTPClient, WatchlistManager, CoinScanner, TelegramService, MarketDataProvider etc.) use `SingletonMixin` with automatic `close()` lifecycle and `reset_instance()`. ModeManager is not a singleton (each cohort orchestrator has its own instance).
+- **Atomic State Writes** — Temp-file + rename pattern for corruption-free state persistence (DecimalEncoder, temp-file cleanup on errors)
+- **SchedulerConfig** — Scheduler times and intervals configurable via `SchedulerConfig` (`get_config().scheduler`) instead of hardcoded values
 
-## Architektur
+---
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                      HYBRID TRADING SYSTEM                                   │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                              │
-│  ┌──────────────┐    ┌──────────────────┐    ┌──────────────┐               │
-│  │   Telegram   │◄───│    Cohort        │───►│   Binance    │               │
-│  │   Service    │    │   Orchestrator   │    │   Client     │               │
-│  └──────────────┘    └────────┬─────────┘    │  (shared)    │               │
-│                               │               └──────────────┘               │
-│              ┌────────────────┼────────────────┐                             │
-│              │                │                │                             │
-│              ▼                ▼                ▼                             │
-│      ┌──────────────┐ ┌──────────────┐ ┌──────────────┐  ...               │
-│      │ Hybrid Orch. │ │ Hybrid Orch. │ │ Hybrid Orch. │  (6 total)        │
-│      │ conservative │ │   balanced   │ │ meme_hunter  │                    │
-│      │  ($1,000)    │ │  ($1,000)    │ │  ($1,000)    │                    │
-│      └──────┬───────┘ └──────┬───────┘ └──────┬───────┘                    │
-│             │                │                │                             │
-│             ▼                ▼                ▼                             │
-│       ┌──────────┐    ┌──────────┐    ┌──────────┐                         │
-│       │ HOLD/GRID│    │ HOLD/GRID│    │ HOLD/GRID│                         │
-│       │ /CASH    │    │ /CASH    │    │ /CASH    │                         │
-│       └──────────┘    └──────────┘    └──────────┘                         │
-│                              │                                               │
-│                    ┌─────────┴─────────┐                                    │
-│                    │                   │                                    │
-│                    ▼                   ▼                                    │
-│              ┌──────────┐       ┌──────────────┐                            │
-│              │   Mode   │       │   GridBot    │                            │
-│              │  Manager │       │   (tick)     │                            │
-│              │(per orch)│       └──────────────┘                            │
-│              └──────────┘                                                    │
-│                    │                                                         │
-│      ┌─────────────┼─────────────┐                                          │
-│      ▼             ▼             ▼                                          │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐                                    │
-│  │  Regime  │ │  Signal  │ │ Bayesian │                                    │
-│  │ Detector │ │ Analyzer │ │ Weights  │                                    │
-│  └──────────┘ └──────────┘ └──────────┘                                    │
-│                                                                              │
-│  ┌────────────────────────────────────────────────────────────────────────┐ │
-│  │                         MULTI-COIN SYSTEM                              │ │
-│  │  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐   │ │
-│  │  │  Watchlist   │ │    Coin      │ │  Portfolio   │ │  Per-Coin    │   │ │
-│  │  │  Manager     │ │   Scanner    │ │  Allocator   │ │  Learning    │   │ │
-│  │  └──────────────┘ └──────────────┘ └──────────────┘ └──────────────┘   │ │
-│  └────────────────────────────────────────────────────────────────────────┘ │
-│                                                                              │
-│  ┌────────────────────────────────────────────────────────────────────────┐ │
-│  │                         DATA PROVIDERS                                  │ │
-│  │  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐   │ │
-│  │  │   Social     │ │   ETF Flow   │ │   Token      │ │   Economic   │   │ │
-│  │  │  Sentiment   │ │   Tracker    │ │   Unlocks    │ │   Events     │   │ │
-│  │  └──────────────┘ └──────────────┘ └──────────────┘ └──────────────┘   │ │
-│  └────────────────────────────────────────────────────────────────────────┘ │
-│                                                                              │
-│  ┌────────────────────────────────────────────────────────────────────────┐ │
-│  │                         RISK MANAGEMENT                                 │ │
-│  │  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐   │ │
-│  │  │   CVaR       │ │   Stop-Loss  │ │   Kelly      │ │   Sharpe/    │   │ │
-│  │  │   Sizing     │ │   Manager    │ │   Criterion  │ │   Sortino    │   │ │
-│  │  └──────────────┘ └──────────────┘ └──────────────┘ └──────────────┘   │ │
-│  └────────────────────────────────────────────────────────────────────────┘ │
-│                                                                              │
-│  ┌────────────────────────────────────────────────────────────────────────┐ │
-│  │                        LEARNING & ANALYSIS                              │ │
-│  │  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐   │ │
-│  │  │   Logging    │ │   Weekly     │ │  Playbook    │ │   Pattern    │   │ │
-│  │  │   System     │ │   Export     │ │  (Regime)    │ │   Learning   │   │ │
-│  │  └──────────────┘ └──────────────┘ └──────────────┘ └──────────────┘   │ │
-│  └────────────────────────────────────────────────────────────────────────┘ │
-│                                                                              │
-│  ┌────────────────────────────────────────────────────────────────────────┐ │
-│  │              3-TIER PORTFOLIO (PORTFOLIO_MANAGER=true)                   │ │
-│  │  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐   │ │
-│  │  │  Cash Tier   │ │  Index Tier  │ │ Trading Tier │ │   AI Port.   │   │ │
-│  │  │  (10% USDT)  │ │  (65% Top20) │ │ (25% Cohorts)│ │  Optimizer   │   │ │
-│  │  └──────────────┘ └──────────────┘ └──────────────┘ └──────────────┘   │ │
-│  │  ┌──────────────┐ ┌──────────────┐                                      │ │
-│  │  │   Profit     │ │  Production  │                                      │ │
-│  │  │   Engine     │ │  Validator   │                                      │ │
-│  │  └──────────────┘ └──────────────┘                                      │ │
-│  └────────────────────────────────────────────────────────────────────────┘ │
-│                             │                                               │
-│                             ▼                                               │
-│                      ┌──────────────┐                                       │
-│                      │  PostgreSQL  │                                       │
-│                      │   Database   │                                       │
-│                      └──────────────┘                                       │
-└─────────────────────────────────────────────────────────────────────────────┘
+## 🏗 Architecture
+
+```mermaid
+graph TB
+    PM[Portfolio Manager] --> CT[Cash Tier<br/>10% USDT]
+    PM --> IT[Index Tier<br/>65% CMC Top 20]
+    PM --> TT[Trading Tier<br/>25%]
+
+    TT --> CO[Cohort Orchestrator]
+
+    CO --> H1[Conservative]
+    CO --> H2[Balanced]
+    CO --> H3[Aggressive]
+    CO --> H4[Baseline]
+    CO --> H5[DeFi Explorer]
+    CO --> H6[Meme Hunter]
+
+    H1 & H2 & H3 & H4 & H5 & H6 --> MM[Mode Manager<br/>HMM Regime Detection]
+
+    MM -->|Bull| HOLD[HOLD Mode<br/>Trailing Stops]
+    MM -->|Sideways| GRID[GRID Mode<br/>ATR-based Grids]
+    MM -->|Bear| CASH[CASH Mode<br/>Capital Preservation]
+
+    GRID --> GB[GridBot.tick<br/>per symbol]
+
+    subgraph Data Layer
+        SA[Signal Analyzer<br/>9 signals] --> SC[Signal Components DB]
+        MC[Market Data] --> SA
+        WA[Whale Alerts] --> SA
+        SS[Social Sentiment] --> SA
+        EE[Economic Events] --> SA
+    end
+
+    GB --> SA
+    HOLD --> SA
+
+    subgraph Learning
+        PB[Trading Playbook]
+        BW[Bayesian Weights]
+        RM[RAG Memory]
+    end
+
+    SA --> PB & BW & RM
+
+    subgraph Risk
+        CV[CVaR Sizing]
+        SL[Stop-Loss Manager]
+        KC[Kelly Criterion]
+        SR[Sharpe / Sortino]
+    end
+
+    subgraph Multi-Coin
+        WL[Watchlist Manager]
+        CS[Coin Scanner]
+        PA[Portfolio Allocator]
+        PL[Per-Coin Learning]
+    end
+
+    style PM fill:#1a1b27,stroke:#70a5fd,color:#fff
+    style CO fill:#1a1b27,stroke:#70a5fd,color:#fff
+    style MM fill:#1a1b27,stroke:#bb9af7,color:#fff
+    style HOLD fill:#9ece6a,stroke:#1a1b27,color:#1a1b27
+    style GRID fill:#e0af68,stroke:#1a1b27,color:#1a1b27
+    style CASH fill:#f7768e,stroke:#1a1b27,color:#1a1b27
 ```
 
-## Cohort System - 6 Parallele Bots
+---
 
-Das **Cohort System** betreibt 6 unabhaengige `HybridOrchestrator`-Instanzen parallel, jede mit eigener Strategie, eigenem Kapital und eigenen Coins. Alle teilen sich ein Binance-Testnet-Konto; das Kapital-Tracking ist virtuell pro Cohort.
+## 🤖 Cohort System — 6 Parallel Bots
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    CohortOrchestrator                            │
-│              (verwaltet 6 HybridOrchestrator)                   │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│  🛡️ Conservative                ⚖️ Balanced                      │
-│  ├─ $1000 Kapital               ├─ $1000 Kapital                 │
-│  ├─ Enge Grids (2%)             ├─ Standard Grids (5%)           │
-│  ├─ Hohe Confidence (>0.7)      ├─ Medium Confidence (>0.5)      │
-│  ├─ Risk: low → conservative    ├─ Risk: medium → balanced       │
-│  └─ Max 3 Coins (LARGE_CAP)    └─ Max 3 Coins                   │
-│                                                                  │
-│  ⚔️ Aggressive                   🧊 Baseline                     │
-│  ├─ $1000 Kapital               ├─ $1000 Kapital                 │
-│  ├─ Weite Grids (8%)            ├─ Standard Grids (5%)           │
-│  ├─ Niedrige Confidence (>0.3)  ├─ Frozen (keine Anpassungen)    │
-│  ├─ Risk: high → aggressive     ├─ Risk: medium → balanced       │
-│  └─ Max 3 Coins (alle Kat.)    └─ Kontrollgruppe                │
-│                                                                  │
-│  🔬 DeFi Explorer               🎰 Meme Hunter                  │
-│  ├─ $1000 Kapital               ├─ $1000 Kapital                 │
-│  ├─ Breite Grids (10%)          ├─ Sehr breite Grids (15%)       │
-│  ├─ Confidence >0.3             ├─ Confidence >0.2               │
-│  ├─ Risk: high → aggressive     ├─ Risk: high → aggressive       │
-│  ├─ Nur DEFI + AI Coins         ├─ Nur MEME Coins                │
-│  └─ Max 3 Coins                 └─ Max 3 Coins                   │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
+The **Cohort System** runs 6 independent `HybridOrchestrator` instances in parallel, each with its own strategy, capital and coins. All share one Binance testnet account; capital tracking is virtual per cohort.
+
+```mermaid
+graph LR
+    CO[Cohort Orchestrator] --> C1["🛡️ Conservative<br/>$1,000 · Tight grids 2%<br/>High confidence >0.7<br/>Max 3 coins (LARGE_CAP)"]
+    CO --> C2["⚖️ Balanced<br/>$1,000 · Standard grids 5%<br/>Medium confidence >0.5<br/>Max 3 coins"]
+    CO --> C3["⚔️ Aggressive<br/>$1,000 · Wide grids 8%<br/>Low confidence >0.3<br/>Max 3 coins (all categories)"]
+    CO --> C4["🧊 Baseline<br/>$1,000 · Standard grids 5%<br/>Frozen (no adjustments)<br/>Control group"]
+    CO --> C5["🔬 DeFi Explorer<br/>$1,000 · Wide grids 10%<br/>Confidence >0.3<br/>DEFI + AI coins only"]
+    CO --> C6["🎰 Meme Hunter<br/>$1,000 · Very wide grids 15%<br/>Confidence >0.2<br/>MEME coins only"]
+
+    style CO fill:#1a1b27,stroke:#70a5fd,color:#fff
 ```
 
-### Architektur
+### Architecture
+- **`CohortOrchestrator`** (`src/core/cohort_orchestrator.py`) loads cohorts from DB via `CohortManager`, creates a `HybridConfig.from_cohort()` and its own `HybridOrchestrator` per cohort
+- **Isolated State Files**: `hybrid_state_{cohort}.json` + `grid_state_{symbol}_{cohort}.json`
+- **Shared BinanceClient**: All cohorts use the same testnet client
+- **ModeManager**: Not a singleton — each orchestrator has its own instance
+- **Symbol Exclusion**: Each cohort trades unique coins — no overlap between cohorts
+- **Category Override**: `allowed_categories` in CohortConfig restricts coins to specific categories (e.g., MEME only for meme_hunter)
+- **Risk-Mapped Presets**: `risk_tolerance` mapped to constraint presets (low→conservative, medium→balanced, high→aggressive)
 
-- **`CohortOrchestrator`** (`src/core/cohort_orchestrator.py`) laedt Cohorts aus DB via `CohortManager`, erstellt pro Cohort eine `HybridConfig.from_cohort()` und einen eigenen `HybridOrchestrator`
-- **Isolierte State-Files**: `hybrid_state_{cohort}.json` + `grid_state_{symbol}_{cohort}.json`
-- **Shared BinanceClient**: Alle Cohorts nutzen denselben Testnet-Client
-- **ModeManager**: Kein Singleton — jeder Orchestrator hat eigene Instanz
-- **Symbol Exclusion**: Jede Cohort handelt unique Coins — keine Ueberlappung zwischen Cohorts
-- **Category Override**: `allowed_categories` in CohortConfig beschraenkt Coins auf bestimmte Kategorien (z.B. nur MEME fuer meme_hunter)
-- **Risk-Mapped Presets**: `risk_tolerance` wird auf Constraint-Presets gemappt (low→conservative, medium→balanced, high→aggressive)
-
-### Vorteile
-- 6x mehr Daten pro Woche
-- Direkter Vergleich: Konservativ vs Aggressiv vs Small-Cap
-- Baseline zeigt ob Aenderungen wirklich helfen
-- Spezialisierte Bots fuer DeFi/AI und Meme-Coins
-- Schnellere statistische Signifikanz
+### Benefits
+- 6x more data per week
+- Direct comparison: Conservative vs Aggressive vs Small-Cap
+- Baseline shows whether changes actually help
+- Specialized bots for DeFi/AI and meme coins
+- Faster statistical significance
 
 ### Cycle Management
+Each cohort runs weekly cycles:
+- **Sunday 00:00**: New cycle starts with fresh capital
+- **Saturday 23:59**: Cycle ends, metrics computed
+- **Automatic**: Sharpe, Sortino, Kelly, VaR, CVaR per cycle
 
-Jede Cohort durchlaeuft woechentliche Zyklen:
-- **Sonntag 00:00**: Neuer Zyklus startet mit frischem Kapital
-- **Samstag 23:59**: Zyklus endet, Metriken werden berechnet
-- **Automatisch**: Sharpe, Sortino, Kelly, VaR, CVaR pro Zyklus
+---
 
-## 3-Tier Portfolio Management
+## 💰 3-Tier Portfolio Management
 
-Das **3-Tier Portfolio System** (`PORTFOLIO_MANAGER=true`) verwaltet Kapital strategisch ueber drei Tiers:
+The **3-Tier Portfolio System** (`PORTFOLIO_MANAGER=true`) manages capital strategically across three tiers:
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    PORTFOLIO MANAGER                              │
-│              (AI-optimierte 3-Tier-Verwaltung)                  │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│  Tier 1: Cash Reserve (10%)    Tier 2: Index Holdings (65%)     │
-│  ├─ Immer USDT                 ├─ CMC Top 20 nach Market Cap    │
-│  ├─ Sicherheitspuffer          ├─ Quarterly Rebalance (90 Tage) │
-│  ├─ Underfunded < 2% → Alert   ├─ 15% Trailing Stops            │
-│  └─ Overfunded > 5% → Umvert.  ├─ Max 30% pro Coin (BTC-Cap)   │
-│                                  └─ Stablecoins ausgeschlossen   │
-│                                                                  │
-│  Tier 3: Hybrid Trading (25%)                                   │
-│  ├─ CohortOrchestrator (6 Bots)                                │
-│  ├─ Kapitalbudget vom Manager                                   │
-│  └─ Cohort-Anzahl skaliert mit Kapital                          │
-│                                                                  │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │ Profit Redistribution Engine (wöchentlich So 17:00)      │   │
-│  │ ├─ Rebalance wenn Tier-Drift > 3%                        │   │
-│  │ ├─ Priorität: Cash → Index → Trading                     │   │
-│  │ └─ Min $10 pro Transfer                                  │   │
-│  ├──────────────────────────────────────────────────────────┤   │
-│  │ AI Portfolio Optimizer (monatlich, DeepSeek)              │   │
-│  │ ├─ Guard Rails: Cash 5-20%, Index 40-80%, Trading 10-40% │   │
-│  │ ├─ Max 5pp Shift pro Empfehlung                          │   │
-│  │ └─ Auto-Apply nach 3+ Empfehlungen bei Confidence > 0.8  │   │
-│  └──────────────────────────────────────────────────────────┘   │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
+```mermaid
+graph TB
+    PM[Portfolio Manager<br/>AI-Optimized 3-Tier Management] --> T1
+    PM --> T2
+    PM --> T3
+
+    T1["💵 Tier 1: Cash Reserve (10%)<br/>Always USDT<br/>Safety buffer<br/>Underfunded <2% → Alert<br/>Overfunded >5% → Redistribute"]
+    T2["📊 Tier 2: Index Holdings (65%)<br/>CMC Top 20 by Market Cap<br/>Quarterly Rebalance (90 days)<br/>15% Trailing Stops<br/>Max 30% per coin (BTC cap)<br/>Stablecoins excluded"]
+    T3["🤖 Tier 3: Hybrid Trading (25%)<br/>CohortOrchestrator (6 bots)<br/>Capital budget from manager<br/>Cohort count scales with capital"]
+
+    PM --> PRE["Profit Redistribution Engine<br/>Weekly (Sun 17:00)<br/>Rebalance when tier drift >3%<br/>Priority: Cash → Index → Trading<br/>Min $10 per transfer"]
+    PM --> AI["AI Portfolio Optimizer<br/>Monthly (DeepSeek)<br/>Guard Rails: Cash 5-20%, Index 40-80%, Trading 10-40%<br/>Max 5pp shift per recommendation<br/>Auto-apply after 3+ recs at confidence >0.8"]
+
+    style PM fill:#1a1b27,stroke:#70a5fd,color:#fff
+    style T1 fill:#9ece6a,stroke:#1a1b27,color:#1a1b27
+    style T2 fill:#7aa2f7,stroke:#1a1b27,color:#fff
+    style T3 fill:#e0af68,stroke:#1a1b27,color:#1a1b27
 ```
 
 ### Deployment Phases
 
-| Phase | Kapital | Cohorts | Validation |
+| Phase | Capital | Cohorts | Validation |
 |-------|---------|---------|------------|
-| Paper | $10.000 (virtuell) | 6 | Nicht erforderlich |
-| Alpha | $1.000 | 2 | ProductionValidator muss bestehen |
-| Beta | $3.000 | 4 | ProductionValidator muss bestehen |
-| Production | $5.000+ | 6 | ProductionValidator muss bestehen |
+| Paper | $10,000 (virtual) | 6 | Not required |
+| Alpha | $1,000 | 2 | ProductionValidator must pass |
+| Beta | $3,000 | 4 | ProductionValidator must pass |
+| Production | $5,000+ | 6 | ProductionValidator must pass |
 
-### Production Validation (9 Kriterien)
+### Production Validation (9 Criteria)
 
-| Kriterium | Schwellenwert |
-|-----------|---------------|
-| Mindest-Trades | 5.000 geschlossene Trade-Paare |
-| Sharpe Ratio | >= 0.5 (annualisiert) |
-| Playbook-Version | >= v4 |
-| Signal-Evaluationen | >= 1.000 (`was_correct` populiert) |
-| Regime-Wechsel | >= 2 (BULL→BEAR oder umgekehrt) |
-| Max Drawdown | < 15% (kein Tier) |
+| Criterion | Threshold |
+|-----------|-----------|
+| Minimum Trades | 5,000 closed trade pairs |
+| Sharpe Ratio | >= 0.5 (annualized) |
+| Playbook Version | >= v4 |
+| Signal Evaluations | >= 1,000 (`was_correct` populated) |
+| Regime Transitions | >= 2 (BULL→BEAR or vice versa) |
+| Max Drawdown | < 15% (no tier) |
 | Win Rate | >= 45% |
 | Index Tracking Error | < 5pp |
-| AI-Empfehlungen | >= 2 geloggt |
+| AI Recommendations | >= 2 logged |
 
-## Hybrid Trading System
+---
 
-Das **Hybrid System** wechselt automatisch zwischen drei Trading-Modi basierend auf dem erkannten Markt-Regime:
+## 🔄 Hybrid Trading System
 
+The **Hybrid System** automatically switches between three trading modes based on detected market regime:
+
+```mermaid
+graph LR
+    subgraph Modes
+        HOLD["🟢 HOLD (BULL)<br/>Market-buy allocations<br/>7% trailing stop<br/>Ride the trend<br/>No active trading"]
+        GRID["🟡 GRID (SIDEWAYS)<br/>Grid trading per symbol<br/>ATR-based grid spacing<br/>BUY → SELL → BUY cycle<br/>Existing grid logic"]
+        CASH["🔴 CASH (BEAR)<br/>Cancel open orders<br/>Sell positions<br/>Capital in USDT<br/>Regime monitoring only"]
+    end
+
+    GRID -->|"Bull detected"| HOLD
+    HOLD -->|"Sideways detected"| GRID
+    GRID -->|"Bear detected"| CASH
+    CASH -->|"Sideways detected"| GRID
+    HOLD -->|"Bear detected"| CASH
+    CASH -->|"Bull detected"| HOLD
+
+    style HOLD fill:#9ece6a,stroke:#1a1b27,color:#1a1b27
+    style GRID fill:#e0af68,stroke:#1a1b27,color:#1a1b27
+    style CASH fill:#f7768e,stroke:#1a1b27,color:#1a1b27
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                    HYBRID TRADING MODES                          │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│  HOLD (BULL)                  GRID (SIDEWAYS)                   │
-│  ├─ Market-Buy Allocations    ├─ Grid-Trading pro Symbol         │
-│  ├─ 7% Trailing Stop          ├─ ATR-basierte Grid-Abstände     │
-│  ├─ Trend reiten              ├─ BUY → SELL → BUY Cycle         │
-│  └─ Kein aktives Trading      └─ Bestehende Grid-Logik          │
-│                                                                  │
-│  CASH (BEAR)                  TRANSITIONS                       │
-│  ├─ Offene Orders canceln     ├─ GRID → HOLD: Grids auslaufen   │
-│  ├─ Positionen verkaufen      ├─ GRID → CASH: Orders canceln    │
-│  ├─ Kapital in USDT           ├─ HOLD → CASH: Enge Trailing     │
-│  └─ Nur Regime-Monitoring     ├─ CASH → GRID: Neues Scanning    │
-│                                ├─ CASH → HOLD: Market-Buy        │
-│                                └─ HOLD → GRID: Grid um Position  │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
-```
 
-### Mode-Management mit Hysteresis
+### Transition Details
+- **GRID → HOLD**: Let grids expire
+- **GRID → CASH**: Cancel orders
+- **HOLD → CASH**: Tighten trailing stops
+- **CASH → GRID**: New scanning
+- **CASH → HOLD**: Market-buy
+- **HOLD → GRID**: Build grid around position
 
-Der ModeManager verhindert Flip-Flopping durch mehrere Schutzmechanismen:
+### Mode Management with Hysteresis
 
-| Regel | Wert | Beschreibung |
-|-------|------|--------------|
-| Min. Regime-Wahrscheinlichkeit | 75% | Regime muss sicher erkannt sein |
-| Min. Regime-Dauer | 2 Tage | Kurzfristige Schwankungen ignorieren |
-| Cooldown nach Wechsel | 24h | Keine sofortige Rueckkehr |
-| Max. Transitions / 48h | 2 | Safety-Lock auf GRID bei Ueberschreitung (Auto-Reset nach 7 Tagen) |
-| Emergency Bear | 85% | Sofortiger CASH-Wechsel ohne Cooldown |
+The ModeManager prevents flip-flopping through multiple protection mechanisms:
 
-### Regime-zu-Mode Mapping
+| Rule | Value | Description |
+|------|-------|-------------|
+| Min. Regime Probability | 75% | Regime must be confidently detected |
+| Min. Regime Duration | 2 days | Ignore short-term fluctuations |
+| Cooldown After Switch | 24h | No immediate reversal |
+| Max. Transitions / 48h | 2 | Safety lock to GRID on violation (auto-reset after 7 days) |
+| Emergency Bear | 85% | Immediate CASH switch without cooldown |
+
+### Regime-to-Mode Mapping
 
 | Regime | Mode | Constraints |
 |--------|------|-------------|
-| BULL | HOLD | Aggressive (max 15% pro Coin) |
+| BULL | HOLD | Aggressive (max 15% per coin) |
 | SIDEWAYS | GRID | Balanced / Small Portfolio |
-| BEAR | CASH | Conservative (min 30% Cash) |
-| TRANSITION | Aktuellen Modus beibehalten | Aktuelle Constraints |
-| None/Unbekannt | GRID (Fallback) | Balanced |
+| BEAR | CASH | Conservative (min 30% cash) |
+| TRANSITION | Keep current mode | Current constraints |
+| None/Unknown | GRID (fallback) | Balanced |
 
-### Starten
+### Starting
 
 ```bash
-# Hybrid-Bot (Multi-Coin, Regime-Adaptive)
+# Hybrid bot (multi-coin, regime-adaptive)
 cd docker && docker compose --profile hybrid up -d
 
-# Klassischer Single-Coin GridBot (weiterhin verfuegbar)
+# Classic single-coin GridBot (still available)
 cd docker && docker compose up -d
 ```
 
-### Konfiguration
+### Configuration
 
 ```env
-# Hybrid-System
+# Hybrid System
 HYBRID_INITIAL_MODE=GRID
-HYBRID_ENABLE_MODE_SWITCHING=false     # Erstmal nur Multi-Coin GRID testen
-HYBRID_TOTAL_INVESTMENT=400         # Wird von Cohort-System ueberschrieben ($1000/Cohort)
-HYBRID_MAX_SYMBOLS=8                # Wird von from_cohort() auf 3 pro Cohort gesetzt
+HYBRID_ENABLE_MODE_SWITCHING=false     # First test multi-coin GRID only
+HYBRID_TOTAL_INVESTMENT=400         # Overridden by cohort system ($1000/cohort)
+HYBRID_MAX_SYMBOLS=8                # Set to 3 per cohort by from_cohort()
 HYBRID_MIN_POSITION_USD=10
 HYBRID_HOLD_TRAILING_STOP_PCT=7.0
 HYBRID_MODE_COOLDOWN_HOURS=24
@@ -395,131 +367,132 @@ HYBRID_MIN_REGIME_PROBABILITY=0.75
 HYBRID_MIN_REGIME_DURATION_DAYS=2
 ```
 
-## Multi-Coin Trading System
+---
 
-Das **Multi-Coin System** ermöglicht diversifiziertes Trading ueber mehrere Coins:
+## 🌐 Multi-Coin Trading System
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    COIN UNIVERSE (35+ Coins)                    │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│  LARGE CAPS (Tier 1)           MID CAPS (Tier 1)                │
-│  ├─ BTC, ETH                   ├─ SOL, AVAX, LINK, DOT          │
-│  └─ Stabil, hohe Liquidität    └─ Gute Moves, moderate Risiko   │
-│                                                                  │
-│  L2 ECOSYSTEM                  DEFI                              │
-│  ├─ ARB, OP, MATIC             ├─ UNI, AAVE, MKR, CRV, LDO      │
-│  └─ Layer 2 Growth             ├─ DYDX, INJ, ENA, PENDLE        │
-│                                  └─ DeFi Blue Chips + Explorer   │
-│                                                                  │
-│  AI TOKENS                     GAMING                            │
-│  ├─ FET, RNDR, TAO, NEAR       ├─ IMX, GALA, AXS, SAND          │
-│  ├─ RENDER, WLD                └─ Gaming/Metaverse              │
-│  └─ AI/Compute Narrative                                        │
-│                                                                  │
-│  MEME (Tier 3)                                                  │
-│  ├─ DOGE, SHIB, PEPE, FLOKI, BONK, WIF                         │
-│  └─ Hochvolatil, breite Grids (15%)                             │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
+The **Multi-Coin System** enables diversified trading across multiple coins:
+
+```mermaid
+graph TB
+    subgraph "Coin Universe (35+ Coins)"
+        LC["💎 LARGE CAPS<br/>BTC, ETH<br/>Stable, high liquidity"]
+        MC["🔷 MID CAPS<br/>SOL, AVAX, LINK, DOT<br/>Good moves, moderate risk"]
+        L2["🔗 L2 ECOSYSTEM<br/>ARB, OP, MATIC<br/>Layer 2 growth"]
+        DF["🏦 DEFI<br/>UNI, AAVE, MKR, CRV, LDO<br/>DYDX, INJ, ENA, PENDLE<br/>DeFi blue chips + explorer"]
+        AI["🧠 AI TOKENS<br/>FET, RNDR, TAO, NEAR<br/>RENDER, WLD<br/>AI/Compute narrative"]
+        GM["🎮 GAMING<br/>IMX, GALA, AXS, SAND<br/>Gaming/Metaverse"]
+        MM["🐸 MEME<br/>DOGE, SHIB, PEPE, FLOKI, BONK, WIF<br/>Highly volatile, wide grids 15%"]
+    end
+
+    style LC fill:#f7768e,stroke:#1a1b27,color:#fff
+    style MC fill:#bb9af7,stroke:#1a1b27,color:#fff
+    style L2 fill:#7aa2f7,stroke:#1a1b27,color:#fff
+    style DF fill:#73daca,stroke:#1a1b27,color:#1a1b27
+    style AI fill:#e0af68,stroke:#1a1b27,color:#1a1b27
+    style GM fill:#9ece6a,stroke:#1a1b27,color:#1a1b27
+    style MM fill:#ff9e64,stroke:#1a1b27,color:#1a1b27
 ```
 
-### Komponenten
+### Components
 
-| Modul | Funktion |
-|-------|----------|
-| **WatchlistManager** | Verwaltet Coin-Universe, aktualisiert Marktdaten, prüft Liquidität |
-| **CoinScanner** | Scannt nach Opportunities mit 5 Score-Dimensionen |
-| **PortfolioAllocator** | Verteilt Kapital mit Kelly-Criterion und Risk Constraints |
+| Module | Function |
+|--------|----------|
+| **WatchlistManager** | Manages coin universe, updates market data, checks liquidity |
+| **CoinScanner** | Scans for opportunities across 5 score dimensions |
+| **PortfolioAllocator** | Distributes capital with Kelly Criterion and risk constraints |
 
 ### Opportunity Scoring
 
-Der CoinScanner analysiert jeden Coin auf 5 Dimensionen:
+The CoinScanner analyzes each coin across 5 dimensions:
 
 ```
 Total Score = Σ (Score × Weight)
 
 ┌────────────────────────────────────────────────────────────────┐
-│  Technical (30%)  │ RSI, MACD, Bollinger Bands, Divergenzen   │
-│  Volume (20%)     │ Volume Spikes, Anomalien                   │
-│  Sentiment (15%)  │ Fear & Greed, Social Media                 │
-│  Whale (15%)      │ Exchange In/Outflows, Accumulation         │
-│  Momentum (20%)   │ 24h Price Change, Trend Stärke             │
+│  Technical (30%)  │ RSI, MACD, Bollinger Bands, Divergences    │
+│  Volume (20%)     │ Volume spikes, anomalies                   │
+│  Sentiment (15%)  │ Fear & Greed, social media                 │
+│  Whale (15%)      │ Exchange in/outflows, accumulation         │
+│  Momentum (20%)   │ 24h price change, trend strength           │
 └────────────────────────────────────────────────────────────────┘
 ```
 
 ### Allocation Constraints
 
 ```python
-# Diversifikation
-max_per_coin_pct = 10.0      # Max 10% pro Coin
-max_per_category_pct = 30.0  # Max 30% pro Kategorie
-min_cash_reserve_pct = 20.0  # Mindestens 20% Cash
+# Diversification
+max_per_coin_pct = 10.0      # Max 10% per coin
+max_per_category_pct = 30.0  # Max 30% per category
+min_cash_reserve_pct = 20.0  # At least 20% cash
 
 # Limits
-max_open_positions = 10      # Max gleichzeitige Positionen
-min_position_usd = 10.0      # Mindestposition
+max_open_positions = 10      # Max concurrent positions
+min_position_usd = 10.0      # Minimum position
 
 # Risk-Adjusted Sizing
-kelly_fraction = 0.5         # Half-Kelly für konservatives Sizing
+kelly_fraction = 0.5         # Half-Kelly for conservative sizing
 ```
 
-### Erwartete Datensammlung (3-4 Monate)
+### Expected Data Collection (3-4 Months)
 
-Mit 6 Cohorts × 18 unique Coins × 24/7 Trading:
+With 6 cohorts × 18 unique coins × 24/7 trading:
 
-| Metrik | Erwartetes Volumen |
-|--------|-------------------|
-| Trades | ~30.000 |
-| Signal-Datenpunkte | ~450.000 |
-| Markt-Snapshots | ~45.000 |
-| Per-Coin Optimierungen | 20+ Sets |
+| Metric | Expected Volume |
+|--------|----------------|
+| Trades | ~30,000 |
+| Signal Data Points | ~450,000 |
+| Market Snapshots | ~45,000 |
+| Per-Coin Optimizations | 20+ sets |
 
-## Trading Playbook - Das Herzstück
+---
 
-Das **Trading Playbook** ist ein selbstlernendes Erfahrungsgedächtnis:
+## 📖 Trading Playbook — The Heart
+
+The **Trading Playbook** is a self-learning experience memory:
 
 ```
-config/TRADING_PLAYBOOK.md          ◄── Aktuelles Playbook
-config/playbook_history/            ◄── Alle historischen Versionen
+config/TRADING_PLAYBOOK.md          ← Current playbook
+config/playbook_history/            ← All historical versions
 ├── playbook_v1_20260205.md
 ├── playbook_v2_20260212.md
 └── ...
 ```
 
-### Wie es funktioniert
+### How It Works
 
-1. **Tägliches Lernen** (21:00): Analysiert neue Trades
-2. **Wöchentliches Update** (Sonntag 19:00): Generiert neues Playbook
-3. **Pattern-Erkennung**: Identifiziert erfolgreiche/fehlgeschlagene Strategien
-4. **AI-Integration**: Playbook wird als Kontext an DeepSeek übergeben
+1. **Daily Learning** (21:00): Analyzes new trades
+2. **Weekly Update** (Sunday 19:00): Generates new playbook
+3. **Pattern Recognition**: Identifies successful/failed strategies
+4. **AI Integration**: Playbook is passed as context to DeepSeek
 
-### Was das Playbook enthält
+### What the Playbook Contains
 
-- Fear & Greed Regeln mit Erfolgsraten
-- Whale Alert Interpretation
-- Economic Event Reaktionen
-- Technische Analyse Regeln
-- Anti-Patterns (was zu vermeiden ist)
-- Erfolgreiche Strategien
+- Fear & Greed rules with success rates
+- Whale alert interpretation
+- Economic event reactions
+- Technical analysis rules
+- Anti-patterns (what to avoid)
+- Successful strategies
 
-## Logging & Analyse
+---
 
-### Strukturierte Logs
+## 📊 Logging & Analysis
+
+### Structured Logs
 
 ```
 logs/
-├── error.log          # Fehler mit vollem Kontext
-├── trade.log          # Jeder Trade mit Marktdaten
-├── decision.log       # AI-Entscheidungen mit Reasoning
-├── performance.log    # Tägliche/wöchentliche Performance
-├── playbook.log       # Playbook-Updates & Regeln
-├── api.log            # API-Calls für Rate-Limit Analyse
-└── combined.log       # Alles kombiniert
+├── error.log          # Errors with full context
+├── trade.log          # Every trade with market data
+├── decision.log       # AI decisions with reasoning
+├── performance.log    # Daily/weekly performance
+├── playbook.log       # Playbook updates & rules
+├── api.log            # API calls for rate limit analysis
+└── combined.log       # Everything combined
 ```
 
-Alle Logs sind JSON-formatiert für einfaches Parsen:
+All logs are JSON-formatted for easy parsing:
 
 ```json
 {
@@ -539,190 +512,190 @@ Alle Logs sind JSON-formatiert für einfaches Parsen:
 
 ### Weekly Analysis Export
 
-Jeden Samstag 23:00 wird ein Export für Claude Code Analyse erstellt:
+Every Saturday at 23:00, an export is created for Claude Code analysis:
 
 ```
 analysis_exports/
 └── week_20260205/
-    ├── analysis_export.json    # Strukturierte Daten
-    ├── ANALYSIS_REPORT.md      # Lesbare Zusammenfassung
-    └── logs/                   # Relevante Log-Ausschnitte
+    ├── analysis_export.json    # Structured data
+    ├── ANALYSIS_REPORT.md      # Readable summary
+    └── logs/                   # Relevant log excerpts
 ```
 
-Siehe [docs/CLAUDE_ANALYSIS_GUIDE.md](docs/CLAUDE_ANALYSIS_GUIDE.md) für den Analyse-Workflow.
+See [docs/CLAUDE_ANALYSIS_GUIDE.md](docs/CLAUDE_ANALYSIS_GUIDE.md) for the analysis workflow.
 
-## Projektstruktur
+---
+
+## 📁 Project Structure
 
 ```
 binance-grid-bot/
 ├── src/
 │   ├── core/
-│   │   ├── bot.py              # GridBot mit tick() Methode
-│   │   ├── order_manager.py    # OrderManagerMixin (Order-Lifecycle)
-│   │   ├── state_manager.py    # StateManagerMixin (State-Persistenz)
-│   │   ├── risk_guard.py       # RiskGuardMixin (Risk-Validierung)
-│   │   ├── config.py           # Zentrale Konfiguration mit Validierung
-│   │   ├── hybrid_orchestrator.py # Hybrid-System Orchestrator
-│   │   ├── hybrid_config.py    # Hybrid-System Konfiguration (from_cohort())
-│   │   ├── mode_manager.py     # Mode-Management mit Hysteresis (kein Singleton)
-│   │   ├── trading_mode.py     # TradingMode Enum, ModeState
-│   │   ├── logging_system.py   # Strukturiertes Logging
-│   │   ├── cohort_manager.py   # Cohort-Definitionen & DB-Zugriff
-│   │   ├── cohort_orchestrator.py # Top-Level: 6 HybridOrchestrator parallel
-│   │   └── cycle_manager.py    # Woechentliche Zyklen
+│   │   ├── bot.py              # GridBot with tick() method
+│   │   ├── order_manager.py    # OrderManagerMixin (order lifecycle)
+│   │   ├── state_manager.py    # StateManagerMixin (state persistence)
+│   │   ├── risk_guard.py       # RiskGuardMixin (risk validation)
+│   │   ├── config.py           # Central configuration with validation
+│   │   ├── hybrid_orchestrator.py # Hybrid system orchestrator
+│   │   ├── hybrid_config.py    # Hybrid system config (from_cohort())
+│   │   ├── mode_manager.py     # Mode management with hysteresis (not singleton)
+│   │   ├── trading_mode.py     # TradingMode enum, ModeState
+│   │   ├── logging_system.py   # Structured logging
+│   │   ├── cohort_manager.py   # Cohort definitions & DB access
+│   │   ├── cohort_orchestrator.py # Top-level: 6 HybridOrchestrators in parallel
+│   │   └── cycle_manager.py    # Weekly cycles
 │   ├── api/
-│   │   ├── binance_client.py   # Binance API Wrapper
-│   │   └── http_client.py      # HTTP Client mit Retry/Caching
+│   │   ├── binance_client.py   # Binance API wrapper
+│   │   └── http_client.py      # HTTP client with retry/caching
 │   ├── strategies/
-│   │   ├── grid_strategy.py    # Grid-Trading-Logik
-│   │   ├── dynamic_grid.py     # ATR-basierte Grids
-│   │   ├── ai_enhanced.py      # DeepSeek AI + Playbook Integration
+│   │   ├── grid_strategy.py    # Grid trading logic
+│   │   ├── dynamic_grid.py     # ATR-based grids
+│   │   ├── ai_enhanced.py      # DeepSeek AI + playbook integration
 │   │   └── portfolio_rebalance.py
 │   ├── data/
-│   │   ├── market_data.py      # Zentraler Marktdaten-Provider
-│   │   ├── watchlist.py        # Multi-Coin Watchlist Manager
+│   │   ├── market_data.py      # Central market data provider
+│   │   ├── watchlist.py        # Multi-coin watchlist manager
 │   │   ├── sentiment.py        # Fear & Greed, CoinGecko
 │   │   ├── social_sentiment.py # LunarCrush, Reddit, Twitter
-│   │   ├── etf_flows.py        # Bitcoin/ETH ETF Tracking
-│   │   ├── token_unlocks.py    # Supply Events
-│   │   ├── whale_alert.py      # Whale-Tracking
-│   │   ├── economic_events.py  # FOMC, CPI, NFP Events
-│   │   ├── memory.py           # Trading Memory System (RAG)
-│   │   ├── playbook.py         # Trading Playbook Generator (Regime-stratifiziert)
-│   │   ├── market_cap.py       # CoinGecko Market Cap API
-│   │   └── fetcher.py          # Historische Daten
-│   ├── scanner/                # Multi-Coin Opportunity Scanner
-│   │   ├── __init__.py
-│   │   ├── coin_scanner.py     # Opportunity Detection
-│   │   ├── coin_discovery.py   # AI Auto-Discovery (DeepSeek)
-│   │   └── opportunity.py      # Opportunity Dataclass
-│   ├── portfolio/              # Portfolio Management
-│   │   ├── __init__.py
-│   │   ├── allocator.py        # Kelly-basierte Kapitalverteilung
-│   │   ├── constraints.py      # Allocation Rules & Limits
-│   │   ├── portfolio_manager.py # 3-Tier Orchestrator (PORTFOLIO_MANAGER=true)
-│   │   ├── profit_engine.py    # Woechentliche Gewinnumverteilung
-│   │   ├── ai_optimizer.py     # Monatliche DeepSeek Tier-Optimierung
-│   │   ├── validation.py       # ProductionValidator (9 Go-Live Kriterien)
+│   │   ├── etf_flows.py        # Bitcoin/ETH ETF tracking
+│   │   ├── token_unlocks.py    # Supply events
+│   │   ├── whale_alert.py      # Whale tracking
+│   │   ├── economic_events.py  # FOMC, CPI, NFP events
+│   │   ├── memory.py           # Trading memory system (RAG)
+│   │   ├── playbook.py         # Trading playbook generator (regime-stratified)
+│   │   ├── market_cap.py       # CoinGecko market cap API
+│   │   └── fetcher.py          # Historical data
+│   ├── scanner/                # Multi-coin opportunity scanner
+│   │   ├── coin_scanner.py     # Opportunity detection
+│   │   ├── coin_discovery.py   # AI auto-discovery (DeepSeek)
+│   │   └── opportunity.py      # Opportunity dataclass
+│   ├── portfolio/              # Portfolio management
+│   │   ├── allocator.py        # Kelly-based capital distribution
+│   │   ├── constraints.py      # Allocation rules & limits
+│   │   ├── portfolio_manager.py # 3-tier orchestrator (PORTFOLIO_MANAGER=true)
+│   │   ├── profit_engine.py    # Weekly profit redistribution
+│   │   ├── ai_optimizer.py     # Monthly DeepSeek tier optimization
+│   │   ├── validation.py       # ProductionValidator (9 go-live criteria)
 │   │   ├── go_live.py          # GoLiveChecklist + DeploymentPhases
 │   │   └── tiers/
-│   │       ├── __init__.py
-│   │       ├── cash_reserve.py # Cash Reserve Tier (USDT)
-│   │       ├── index_holdings.py # Index Tier (CMC Top 20)
-│   │       └── trading_tier.py # Trading Tier (CohortOrchestrator)
+│   │       ├── cash_reserve.py # Cash reserve tier (USDT)
+│   │       ├── index_holdings.py # Index tier (CMC Top 20)
+│   │       └── trading_tier.py # Trading tier (CohortOrchestrator)
 │   ├── risk/
-│   │   ├── stop_loss.py        # Stop-Loss Management (Lifecycle: confirm/reactivate)
-│   │   ├── stop_loss_executor.py # Retry + Balance-Aware Market-Sell
-│   │   └── cvar_sizing.py      # CVaR Position Sizing
+│   │   ├── stop_loss.py        # Stop-loss management (lifecycle: confirm/reactivate)
+│   │   ├── stop_loss_executor.py # Retry + balance-aware market sell
+│   │   └── cvar_sizing.py      # CVaR position sizing
 │   ├── analysis/
 │   │   ├── technical_indicators.py
-│   │   ├── weekly_export.py    # Wöchentlicher Analyse-Export
-│   │   ├── signal_analyzer.py  # Signal-Breakdown Storage
+│   │   ├── weekly_export.py    # Weekly analysis export
+│   │   ├── signal_analyzer.py  # Signal breakdown storage
 │   │   ├── metrics_calculator.py # Sharpe, Sortino, Kelly
-│   │   ├── regime_detection.py # HMM Markt-Regime
-│   │   ├── bayesian_weights.py # Adaptive Signal-Gewichte
-│   │   ├── divergence_detector.py # RSI/MACD Divergenzen
-│   │   └── correlation_matrix.py # 60-Tage Pearson-Korrelation
+│   │   ├── regime_detection.py # HMM market regime
+│   │   ├── bayesian_weights.py # Adaptive signal weights
+│   │   ├── divergence_detector.py # RSI/MACD divergences
+│   │   └── correlation_matrix.py # 60-day Pearson correlation
 │   ├── optimization/
-│   │   └── ab_testing.py       # A/B Testing Framework
+│   │   └── ab_testing.py       # A/B testing framework
 │   ├── models/
 │   │   └── portfolio.py        # Markowitz, Kelly Criterion
 │   ├── notifications/
-│   │   ├── telegram_service.py # Zentraler Telegram Service
-│   │   ├── telegram_bot.py     # Telegram Bot Commands
-│   │   ├── charts.py           # Performance-Charts
-│   │   └── ai_assistant.py     # AI Chat Integration
+│   │   ├── telegram_service.py # Central Telegram service
+│   │   ├── telegram_bot.py     # Telegram bot commands
+│   │   ├── charts.py           # Performance charts
+│   │   └── ai_assistant.py     # AI chat integration
 │   ├── utils/
-│   │   ├── singleton.py        # SingletonMixin Basisklasse (alle Services)
-│   │   ├── heartbeat.py        # Docker Health-Check Heartbeat
-│   │   └── task_lock.py        # Thread-safe Task-Locking
-│   ├── tasks/                  # Domain-spezifische Scheduler Tasks
-│   │   ├── base.py             # Shared Infra (DB-Connection via Pool)
-│   │   ├── system_tasks.py     # Health, Stops, Drawdown Reset
-│   │   ├── analysis_tasks.py   # Regime, Weights, Divergence
-│   │   ├── market_tasks.py     # Snapshots, Sentiment
-│   │   ├── data_tasks.py       # ETF, Social, Whale, Unlocks
-│   │   ├── hybrid_tasks.py     # Mode Eval, Rebalance
-│   │   ├── portfolio_tasks.py  # Watchlist, Scan, Allocation
-│   │   ├── cycle_tasks.py      # Cycle Mgmt, Weekly Rebalance
-│   │   ├── reporting_tasks.py  # Summary, Export, Playbook
-│   │   ├── monitoring_tasks.py # Order Reconciliation, Grid Health
-│   │   └── retention_tasks.py  # Data Retention Auto-Cleanup
+│   │   ├── singleton.py        # SingletonMixin base class (all services)
+│   │   ├── heartbeat.py        # Docker health-check heartbeat
+│   │   └── task_lock.py        # Thread-safe task locking
+│   ├── tasks/                  # Domain-specific scheduler tasks
+│   │   ├── base.py             # Shared infra (DB connection via pool)
+│   │   ├── system_tasks.py     # Health, stops, drawdown reset
+│   │   ├── analysis_tasks.py   # Regime, weights, divergence
+│   │   ├── market_tasks.py     # Snapshots, sentiment
+│   │   ├── data_tasks.py       # ETF, social, whale, unlocks
+│   │   ├── hybrid_tasks.py     # Mode eval, rebalance
+│   │   ├── portfolio_tasks.py  # Watchlist, scan, allocation
+│   │   ├── cycle_tasks.py      # Cycle mgmt, weekly rebalance
+│   │   ├── reporting_tasks.py  # Summary, export, playbook
+│   │   ├── monitoring_tasks.py # Order reconciliation, grid health
+│   │   └── retention_tasks.py  # Data retention auto-cleanup
 │   └── backtest/
-│       └── engine.py           # Backtesting Engine
+│       └── engine.py           # Backtesting engine
 ├── docker/
 │   ├── docker-compose.yml      # PostgreSQL, Redis, Bot
-│   ├── scheduler.py            # Scheduled Tasks (erweitert)
-│   ├── telegram_bot_handler.py # Telegram Command Handler
-│   └── init.sql                # Database Schema (erweitert)
+│   ├── scheduler.py            # Scheduled tasks (extended)
+│   ├── telegram_bot_handler.py # Telegram command handler
+│   └── init.sql                # Database schema (extended)
 ├── config/
-│   ├── bot_state.json          # Persistenter Bot-State (Single-Coin)
-│   ├── hybrid_state_{cohort}.json  # Per-Cohort Orchestrator State
-│   ├── grid_state_{sym}_{cohort}.json # Per-Cohort Grid Bot State
-│   ├── TRADING_PLAYBOOK.md     # Aktuelles Playbook
-│   └── playbook_history/       # Playbook-Versionen
-├── LEARNING_PHASE.md           # Testnet-Konfiguration & Produktion-Migration
-├── logs/                       # Strukturierte Logs (gitignored)
-├── analysis_exports/           # Wöchentliche Exports (gitignored)
+│   ├── bot_state.json          # Persistent bot state (single-coin)
+│   ├── hybrid_state_{cohort}.json  # Per-cohort orchestrator state
+│   ├── grid_state_{sym}_{cohort}.json # Per-cohort grid bot state
+│   ├── TRADING_PLAYBOOK.md     # Current playbook
+│   └── playbook_history/       # Playbook versions
+├── logs/                       # Structured logs (gitignored)
+├── analysis_exports/           # Weekly exports (gitignored)
 ├── docs/
 │   └── CLAUDE_ANALYSIS_GUIDE.md
-├── main.py                     # Entry Point (Single-Coin GridBot)
-├── main_hybrid.py              # Entry Point (Hybrid Multi-Coin)
+├── main.py                     # Entry point (single-coin GridBot)
+├── main_hybrid.py              # Entry point (hybrid multi-coin)
 ├── requirements.txt
-├── pyproject.toml              # Linting/Formatting Config
+├── pyproject.toml              # Linting/formatting config
 └── .github/
     └── workflows/
-        └── ci.yml              # CI/CD Pipeline mit Auto-Release
+        └── ci.yml              # CI/CD pipeline with auto-release
 ```
 
-## Datenbank-Schema
+---
 
-### Tabellen-Übersicht
+## 🗄 Database Schema
 
-| Tabelle | Beschreibung | Hauptverwendung |
-|---------|--------------|-----------------|
-| `trades` | Alle ausgeführten Trades | Trade-History, Performance-Analyse |
-| `cohorts` | Parallele Strategie-Varianten | A/B/C/D Testing |
-| `trading_cycles` | Wöchentliche Trading-Zyklen | Performance pro Zyklus |
-| `signal_components` | Signal-Breakdown pro Trade | Signal-Performance Analyse |
-| `calculation_snapshots` | Kelly, VaR, CVaR Berechnungen | Risk Tracking |
-| `trade_pairs` | BUY/SELL Paare | Echtes P&L Tracking |
-| `regime_history` | Markt-Regime Änderungen | Regime-basierte Anpassungen |
-| **Multi-Coin Tabellen** | | |
-| `watchlist` | Coin-Universe mit Kategorien | Multi-Coin Trading |
-| `coin_performance` | Per-Coin Performance Metriken | Coin-spezifische Optimierung |
-| `cohort_allocations` | Positionen pro Cohort | Portfolio Management |
-| `opportunities` | Scanner-Ergebnisse | Opportunity Tracking |
-| `trading_mode_history` | Mode-Wechsel History | Hybrid-System Tracking |
-| **Data Provider Tabellen** | | |
-| `social_sentiment` | Social Media Tracking | Sentiment Signale |
-| `etf_flows` | BTC/ETH ETF Zuflüsse | Institutional Flows |
-| `token_unlocks` | Token Supply Events | Supply-basierte Signale |
-| `market_snapshots` | Stündliche Marktdaten | Historische Analyse |
-| `whale_alerts` | Große Transaktionen | Sentiment-Analyse |
-| `economic_events` | Makro-Events (FOMC, CPI) | Event-basiertes Trading |
-| `learned_patterns` | Erfolgreiche Muster | AI Context |
-| `portfolio_snapshots` | Portfolio-Zustand | Performance-Tracking |
-| `stop_loss_orders` | Stop-Loss Tracking | Risk Management |
-| `technical_indicators` | Berechnete Indikatoren | Technical Analysis |
-| `ai_conversations` | Telegram AI Chat | Context für AI Antworten |
-| **Portfolio Tier Tabellen** | | |
-| `portfolio_tiers` | Tier-Zielallokationen (cash/index/trading) | 3-Tier Management |
-| `tier_allocation_history` | Aenderungshistorie pro Tier | Audit Trail |
-| `index_holdings` | CMC Top 20 Positionen + Trailing Stops | Index Tier |
-| `profit_redistributions` | Gewinn-Umverteilungs-Log | Rebalancing |
-| `ai_portfolio_recommendations` | DeepSeek Tier-Empfehlungen | AI Optimizer |
-| `coin_discoveries` | AI Auto-Discovery Ergebnisse | Coin Discovery |
+### Table Overview
+
+| Table | Description | Primary Use |
+|-------|-------------|-------------|
+| `trades` | All executed trades | Trade history, performance analysis |
+| `cohorts` | Parallel strategy variants | A/B/C/D testing |
+| `trading_cycles` | Weekly trading cycles | Performance per cycle |
+| `signal_components` | Signal breakdown per trade | Signal performance analysis |
+| `calculation_snapshots` | Kelly, VaR, CVaR calculations | Risk tracking |
+| `trade_pairs` | BUY/SELL pairs | Realized P&L tracking |
+| `regime_history` | Market regime changes | Regime-based adjustments |
+| **Multi-Coin Tables** | | |
+| `watchlist` | Coin universe with categories | Multi-coin trading |
+| `coin_performance` | Per-coin performance metrics | Coin-specific optimization |
+| `cohort_allocations` | Positions per cohort | Portfolio management |
+| `opportunities` | Scanner results | Opportunity tracking |
+| `trading_mode_history` | Mode switch history | Hybrid system tracking |
+| **Data Provider Tables** | | |
+| `social_sentiment` | Social media tracking | Sentiment signals |
+| `etf_flows` | BTC/ETH ETF inflows | Institutional flows |
+| `token_unlocks` | Token supply events | Supply-based signals |
+| `market_snapshots` | Hourly market data | Historical analysis |
+| `whale_alerts` | Large transactions | Sentiment analysis |
+| `economic_events` | Macro events (FOMC, CPI) | Event-based trading |
+| `learned_patterns` | Successful patterns | AI context |
+| `portfolio_snapshots` | Portfolio state | Performance tracking |
+| `stop_loss_orders` | Stop-loss tracking | Risk management |
+| `technical_indicators` | Computed indicators | Technical analysis |
+| `ai_conversations` | Telegram AI chat | Context for AI responses |
+| **Portfolio Tier Tables** | | |
+| `portfolio_tiers` | Tier target allocations (cash/index/trading) | 3-tier management |
+| `tier_allocation_history` | Change history per tier | Audit trail |
+| `index_holdings` | CMC Top 20 positions + trailing stops | Index tier |
+| `profit_redistributions` | Profit redistribution log | Rebalancing |
+| `ai_portfolio_recommendations` | DeepSeek tier recommendations | AI optimizer |
+| `coin_discoveries` | AI auto-discovery results | Coin discovery |
 
 ### Multi-Coin Views
 
-| View | Beschreibung |
-|------|--------------|
-| `v_coin_rankings` | Coins sortiert nach Performance (Win Rate × Trades) |
-| `v_active_positions` | Alle aktiven Positionen mit P&L |
-| `v_category_performance` | Performance aggregiert nach Kategorie |
+| View | Description |
+|------|-------------|
+| `v_coin_rankings` | Coins sorted by performance (Win Rate × Trades) |
+| `v_active_positions` | All active positions with P&L |
+| `v_category_performance` | Performance aggregated by category |
 
-### `trades` - Trade-Historie mit Kontext
+### `trades` — Trade History with Context
 
 ```sql
 CREATE TABLE trades (
@@ -731,85 +704,89 @@ CREATE TABLE trades (
 
     -- Trade Details
     action VARCHAR(10),       -- BUY, SELL, HOLD
-    symbol VARCHAR(20),       -- z.B. BTCUSDT
+    symbol VARCHAR(20),       -- e.g. BTCUSDT
     price DECIMAL(20, 8),
     quantity DECIMAL(20, 8),
     value_usd DECIMAL(20, 2),
 
-    -- Market Context (zum Zeitpunkt des Trades)
+    -- Market Context (at time of trade)
     fear_greed_at_entry INTEGER,  -- 0-100
     btc_price_at_entry DECIMAL(20, 2),
     market_trend VARCHAR(20),     -- BULL, BEAR, SIDEWAYS
 
     -- Decision Context
-    math_signal JSONB,            -- Markowitz/Portfolio Output
-    ai_signal JSONB,              -- DeepSeek Analyse
-    reasoning TEXT,               -- Begründung für Trade
+    math_signal JSONB,            -- Markowitz/Portfolio output
+    ai_signal JSONB,              -- DeepSeek analysis
+    reasoning TEXT,               -- Reasoning for trade
     confidence DECIMAL(3, 2),     -- 0.00 - 1.00
 
-    -- Outcome (später aktualisiert für Playbook-Learning)
-    outcome_1h DECIMAL(10, 4),    -- Return nach 1h
-    outcome_24h DECIMAL(10, 4),   -- Return nach 24h
-    outcome_7d DECIMAL(10, 4),    -- Return nach 7d
-    was_good_decision BOOLEAN     -- Automatisch berechnet
+    -- Outcome (updated later for playbook learning)
+    outcome_1h DECIMAL(10, 4),    -- Return after 1h
+    outcome_24h DECIMAL(10, 4),   -- Return after 24h
+    outcome_7d DECIMAL(10, 4),    -- Return after 7d
+    was_good_decision BOOLEAN     -- Automatically calculated
 );
 ```
 
-## Installation
+---
 
-### Voraussetzungen
+## 📦 Installation
+
+### Prerequisites
 
 - Python 3.10+
 - Docker & Docker Compose
-- Binance Account (Testnet oder Live)
+- Binance Account (Testnet or Live)
 - Optional: DeepSeek API Key, Telegram Bot
 
-### Schnellstart
+### Quick Start
 
 ```bash
-# Repository klonen
+# Clone repository
 git clone https://github.com/murriiii/binance-grid-bot.git
 cd binance-grid-bot
 
-# Virtual Environment erstellen
+# Create virtual environment
 python -m venv venv
 source venv/bin/activate  # Linux/Mac
 
-# Dependencies installieren
+# Install dependencies
 pip install -r requirements.txt
 
-# Environment konfigurieren
+# Configure environment
 cp .env.example .env
-# .env mit deinen API Keys bearbeiten
+# Edit .env with your API keys
 
-# Docker Services starten (PostgreSQL, Redis)
+# Start Docker services (PostgreSQL, Redis)
 cd docker
 docker compose up -d
 
-# Bot starten
+# Start bot
 cd ..
 python main.py
 ```
 
-### Docker Setup (Empfohlen)
+### Docker Setup (Recommended)
 
 ```bash
-# Klassischer Single-Coin GridBot
+# Classic single-coin GridBot
 cd docker
 docker compose up -d
 
-# ODER: Hybrid Multi-Coin System
+# OR: Hybrid multi-coin system
 docker compose --profile hybrid up -d
 
-# Logs anzeigen
-docker logs -f trading-bot       # Single-Coin
+# View logs
+docker logs -f trading-bot       # Single-coin
 docker logs -f hybrid-bot        # Hybrid
 
-# Status pruefen
+# Check status
 docker compose ps
 ```
 
-## Konfiguration
+---
+
+## ⚙️ Configuration
 
 ### Environment Variables (.env)
 
@@ -818,7 +795,7 @@ docker compose ps
 BINANCE_TESTNET=true
 BINANCE_TESTNET_API_KEY=your_testnet_key
 BINANCE_TESTNET_SECRET=your_testnet_secret
-BINANCE_API_KEY=your_live_key       # Nur für Live-Trading
+BINANCE_API_KEY=your_live_key       # Only for live trading
 BINANCE_SECRET=your_live_secret
 
 # === TRADING ===
@@ -829,7 +806,7 @@ GRID_RANGE_PERCENT=5
 
 # === RISK ===
 RISK_TOLERANCE=medium               # low, medium, high
-MAX_DAILY_DRAWDOWN=10               # Prozent
+MAX_DAILY_DRAWDOWN=10               # Percent
 ENABLE_STOP_LOSS=true
 STOP_LOSS_PERCENT=5
 
@@ -845,104 +822,110 @@ TELEGRAM_CHAT_ID=your_chat_id
 DATABASE_URL=postgresql://trading:password@localhost:5433/trading_bot
 ```
 
-## Verwendung
+---
 
-### Telegram Commands
+## 📱 Telegram Commands
 
-| Command | Beschreibung |
-|---------|--------------|
-| `/status` | Aktueller Bot-Status und Portfolio |
-| `/report` | Portfolio-Dashboard mit Emoji-Status pro Cohort, P&L und Coin-Details |
-| `/market` | Marktübersicht (F&G, BTC, Trending) |
-| `/ta BTCUSDT` | Technical Analysis für Symbol |
-| `/whale` | Letzte Whale-Alerts |
-| `/events` | Anstehende Makro-Events |
-| `/performance` | 30-Tage Performance |
-| `/playbook` | Aktuelles Trading Playbook anzeigen |
-| `/playbook_stats` | Playbook-Statistiken |
-| `/playbook_update` | Manuelles Playbook-Update auslösen |
-| `/compare` | Cohort-Vergleichsranking |
-| `/portfolio` | 3-Tier Portfolio-Breakdown mit Drift-Anzeige |
-| `/validate` | Production Readiness Check (9 Kriterien) |
-| `/stop` | Bot stoppen |
+| Command | Description |
+|---------|-------------|
+| `/status` | Current bot status and portfolio |
+| `/report` | Portfolio dashboard with emoji status per cohort, P&L and coin details |
+| `/market` | Market overview (F&G, BTC, trending) |
+| `/ta BTCUSDT` | Technical analysis for symbol |
+| `/whale` | Latest whale alerts |
+| `/events` | Upcoming macro events |
+| `/performance` | 30-day performance |
+| `/playbook` | Show current trading playbook |
+| `/playbook_stats` | Playbook statistics |
+| `/playbook_update` | Trigger manual playbook update |
+| `/compare` | Cohort comparison ranking |
+| `/portfolio` | 3-tier portfolio breakdown with drift display |
+| `/validate` | Production readiness check (9 criteria) |
+| `/stop` | Stop bot |
 
-### Scheduler Tasks
+---
 
-| Task | Zeitplan | Beschreibung |
-|------|----------|--------------|
-| **Hybrid-System Tasks** | | |
-| Mode Evaluation | Stuendlich | Regime auswerten, Mode-Wechsel pruefen |
-| Hybrid Rebalance | 6h | Allocation-Drift pruefen (>5%) |
+## ⏰ Scheduler Tasks
+
+| Task | Schedule | Description |
+|------|----------|-------------|
+| **Hybrid System Tasks** | | |
+| Mode Evaluation | Hourly | Evaluate regime, check mode switch |
+| Hybrid Rebalance | 6h | Check allocation drift (>5%) |
 | **Multi-Coin Tasks** | | |
-| Watchlist Update | 30 Min | Marktdaten fuer alle Coins aktualisieren |
-| Opportunity Scan | 2h | Alle Coins nach Opportunities scannen |
-| Portfolio Rebalance | 06:00 | Allocation pruefen und anpassen |
-| Coin Performance | 21:30 | Per-Coin Metriken aktualisieren |
+| Watchlist Update | 30 min | Update market data for all coins |
+| Opportunity Scan | 2h | Scan all coins for opportunities |
+| Portfolio Rebalance | 06:00 | Check and adjust allocation |
+| Coin Performance | 21:30 | Update per-coin metrics |
 | **Data Collection** | | |
-| Market Snapshot | Stündlich | Marktdaten speichern |
-| Whale Check | Stündlich | Große Transaktionen |
-| Sentiment Check | 4h | F&G Extreme Alert |
+| Market Snapshot | Hourly | Store market data |
+| Whale Check | Hourly | Large transactions |
+| Sentiment Check | 4h | F&G extreme alert |
 | Social Sentiment | 4h | LunarCrush, Reddit, Twitter |
-| ETF Flows | 10:00 | Bitcoin/ETH ETF Tracking |
-| Token Unlocks | 08:00 | Supply Events |
-| Macro Check | 08:00 | FOMC/CPI Events prüfen |
+| ETF Flows | 10:00 | Bitcoin/ETH ETF tracking |
+| Token Unlocks | 08:00 | Supply events |
+| Macro Check | 08:00 | Check FOMC/CPI events |
 | **Analysis** | | |
-| Regime Detection | 4h | HMM Markt-Regime Update |
-| Divergence Scan | 2h | RSI/MACD Divergenzen |
-| Technical Indicators | 2h | Indikatoren berechnen und in DB schreiben |
-| Signal Weights | 22:00 | Bayesian Weight Update |
-| Pattern Learning | 21:00 | Tägliche Trade-Analyse |
+| Regime Detection | 4h | HMM market regime update |
+| Divergence Scan | 2h | RSI/MACD divergences |
+| Technical Indicators | 2h | Compute indicators and write to DB |
+| Signal Weights | 22:00 | Bayesian weight update |
+| Pattern Learning | 21:00 | Daily trade analysis |
 | **Risk & Performance** | | |
-| Stop-Loss Check | 5 Min | Aktive Stops pruefen + Market-Sell mit Retry |
-| Drawdown Reset | 00:00 | Daily Drawdown Baseline zuruecksetzen |
-| Outcome Update | 6h | Trade-Ergebnisse aktualisieren |
-| System Health | 6h | DB, API, Memory pruefen |
-| A/B Test Check | 23:00 | Statistische Signifikanz pruefen |
+| Stop-Loss Check | 5 min | Check active stops + market sell with retry |
+| Drawdown Reset | 00:00 | Reset daily drawdown baseline |
+| Outcome Update | 6h | Update trade outcomes |
+| System Health | 6h | Check DB, API, memory |
+| A/B Test Check | 23:00 | Check statistical significance |
 | **Monitoring** | | |
-| Order Reconciliation | 30 Min | State-Files mit Binance-Orders vergleichen |
-| Order Timeout | Stuendlich | Stale Orders erkennen (>6h, >24h) |
-| Portfolio Plausibility | 2h | Allokations-Mathematik verifizieren |
-| Grid Health | 4h | BUY/SELL-Counts, failed follow-ups |
+| Order Reconciliation | 30 min | Compare state files with Binance orders |
+| Order Timeout | Hourly | Detect stale orders (>6h, >24h) |
+| Portfolio Plausibility | 2h | Verify allocation math |
+| Grid Health | 4h | BUY/SELL counts, failed follow-ups |
 | **Reports** | | |
-| Daily Summary | 20:00 | Portfolio-Report (inkl. Tier-Breakdown) |
-| Weekly Export | Sa 23:00 | Analyse-Export erstellen |
+| Daily Summary | 20:00 | Portfolio report (incl. tier breakdown) |
+| Weekly Export | Sat 23:00 | Create analysis export |
 | **Weekly Tasks** | | |
-| Cycle Management | So 00:00 | Zyklus beenden/starten |
-| Weekly Rebalance | So 18:00 | Portfolio-Rebalancing |
-| Playbook Update | So 19:00 | Playbook neu generieren |
+| Cycle Management | Sun 00:00 | End/start cycle |
+| Weekly Rebalance | Sun 18:00 | Portfolio rebalancing |
+| Playbook Update | Sun 19:00 | Regenerate playbook |
 | **AI Learning Loop** | | |
-| Outcome 1h | Stuendlich | 1h Trade-Ergebnis berechnen |
-| Outcome 4h | 4h | 4h Trade-Ergebnis berechnen |
-| Outcome 24h | 6h | 24h Trade-Ergebnis berechnen (bestehend) |
-| Outcome 7d | 12:00 | 7d Trade-Ergebnis berechnen |
-| Signal Correctness | 6h | `was_correct` fuer Signal-Komponenten |
+| Outcome 1h | Hourly | Calculate 1h trade outcome |
+| Outcome 4h | 4h | Calculate 4h trade outcome |
+| Outcome 24h | 6h | Calculate 24h trade outcome (existing) |
+| Outcome 7d | 12:00 | Calculate 7d trade outcome |
+| Signal Correctness | 6h | `was_correct` for signal components |
 | Trade Decisions | 22:30 | `was_good_decision` via trade_pairs P&L |
-| Portfolio Snapshot | Stuendlich | Equity-Kurve + Sharpe Berechnung |
+| Portfolio Snapshot | Hourly | Equity curve + Sharpe calculation |
 | **Portfolio Tier Tasks** | | |
-| Tier Health Check | 2h | Cash-Level, Drift, Trading-Aktivitaet |
-| Profit Redistribution | So 17:00 | Tier-Rebalancing bei Drift > 3% |
-| AI Portfolio Optimizer | 1. des Monats | DeepSeek Tier-Gewichtungs-Empfehlung |
-| Production Validation | 09:00 | Go-Live Readiness Check |
+| Tier Health Check | 2h | Cash level, drift, trading activity |
+| Profit Redistribution | Sun 17:00 | Tier rebalancing when drift > 3% |
+| AI Portfolio Optimizer | 1st of month | DeepSeek tier weight recommendation |
+| Production Validation | 09:00 | Go-live readiness check |
 | **Data Maintenance** | | |
-| Data Retention Cleanup | 03:00 | Alte Daten bereinigen (8 Tabellen, 30-180 Tage) |
+| Data Retention Cleanup | 03:00 | Clean old data (8 tables, 30-180 days) |
 
-## Wöchentlicher Optimierungs-Workflow
+---
+
+## 🔄 Weekly Optimization Workflow
 
 ```bash
-# Jeden Sonntag nach dem automatischen Export:
+# Every Sunday after the automatic export:
 cd /home/murriiii/dev/private/trading/binance-grid-bot
 claude
 
-# Claude Code fragen:
+# Ask Claude Code:
 "Analyze the latest weekly export in analysis_exports/ and suggest:
 1. Playbook rule updates based on trade outcomes
 2. Code improvements for common errors
 3. Risk management adjustments"
 ```
 
-Detaillierte Anleitung: [docs/CLAUDE_ANALYSIS_GUIDE.md](docs/CLAUDE_ANALYSIS_GUIDE.md)
+Detailed guide: [docs/CLAUDE_ANALYSIS_GUIDE.md](docs/CLAUDE_ANALYSIS_GUIDE.md)
 
-## AI-Enhanced Trading
+---
+
+## 🤖 AI-Enhanced Trading
 
 ### DeepSeek + Playbook Integration
 
@@ -951,93 +934,97 @@ from src.strategies.ai_enhanced import AITradingEnhancer
 
 ai = AITradingEnhancer()
 
-# Der System-Prompt enthält automatisch das Playbook:
-# - Fear & Greed Regeln
-# - Historische Erfolgsraten
-# - Anti-Patterns zu vermeiden
+# System prompt automatically includes the playbook:
+# - Fear & Greed rules
+# - Historical success rates
+# - Anti-patterns to avoid
 
 signal = ai.analyze_news([
     {"title": "Fed signals rate cut", "summary": "..."}
 ])
 print(signal.direction)    # BULLISH
 print(signal.confidence)   # 0.75
-print(signal.reasoning)    # "Fed dovish → Risk-On, Playbook sagt BUY bei F&G < 40..."
+print(signal.reasoning)    # "Fed dovish → Risk-On, Playbook says BUY at F&G < 40..."
 ```
 
-## Risk Management
+---
 
-### Stop-Loss Typen
+## 🛡 Risk Management
 
-| Typ | Beschreibung |
-|-----|--------------|
-| `FIXED` | Fester Prozentsatz unter Entry |
-| `TRAILING` | Folgt dem Preis nach oben |
-| `ATR` | Volatilitätsbasiert (14-Perioden ATR) |
-| `BREAK_EVEN` | Auf Entry setzen nach X% Gewinn |
+### Stop-Loss Types
+
+| Type | Description |
+|------|-------------|
+| `FIXED` | Fixed percentage below entry |
+| `TRAILING` | Follows price upward |
+| `ATR` | Volatility-based (14-period ATR) |
+| `BREAK_EVEN` | Set to entry after X% profit |
 
 ### Order Risk Pipeline
 
-Jede Order (initial + follow-up) durchlaeuft vor Platzierung:
+Every order (initial + follow-up) goes through before placement:
 
-1. **Portfolio Drawdown Check** - Handel gestoppt bei >10% Tagesverlust (Baseline wird taeglich um Mitternacht zurueckgesetzt)
-2. **CVaR Max Position** - Orderwert darf CVaR-Limit nicht ueberschreiten
-3. **Allocation Constraints** - Cash-Reserve und Exposure-Limits eingehalten
-4. **Circuit Breaker** - Emergency-Stop bei Flash-Crash (>10% Drop pro Check-Zyklus)
+1. **Portfolio Drawdown Check** — Trading stopped at >10% daily loss (baseline reset daily at midnight)
+2. **CVaR Max Position** — Order value must not exceed CVaR limit
+3. **Allocation Constraints** — Cash reserve and exposure limits maintained
+4. **Circuit Breaker** — Emergency stop on flash crash (>10% drop per check cycle)
 
-Bei Fehler der Risk-Module: Graceful Degradation (Order wird zugelassen).
+On risk module failure: graceful degradation (order is allowed).
 
 ### Stop-Loss Execution Pipeline
 
-Bei Stop-Loss-Trigger durchlaeuft die Ausfuehrung:
+When a stop-loss triggers:
 
-1. **Balance Check** - Tatsaechliche Balance via API abfragen, `min(intended, actual)` verkaufen
-2. **Step-Size Rounding** - Quantity auf Binance `step_size` runden
-3. **Retry Loop** - 3 Versuche mit Backoff (2s, 5s, 10s). Bei INSUFFICIENT_BALANCE: Balance erneut abfragen und mit reduzierter Menge wiederholen
-4. **Confirm/Reactivate** - Bei Erfolg: `confirm_trigger()` deaktiviert Stop. Bei Fehler: `reactivate()` haelt Stop aktiv fuer naechsten Tick
-5. **Critical Alert** - Bei totalem Fehlschlag: CRITICAL Log + Telegram "Manual sell needed"
+1. **Balance Check** — Query actual balance via API, sell `min(intended, actual)`
+2. **Step-Size Rounding** — Round quantity to Binance `step_size`
+3. **Retry Loop** — 3 attempts with backoff (2s, 5s, 10s). On INSUFFICIENT_BALANCE: re-fetch balance and retry with reduced amount
+4. **Confirm/Reactivate** — On success: `confirm_trigger()` deactivates stop. On failure: `reactivate()` keeps stop active for next tick
+5. **Critical Alert** — On total failure: CRITICAL log + Telegram "Manual sell needed"
 
 ### Portfolio Risk
 
-- **Max Daily Drawdown**: Automatischer Stop bei 10% Tagesverlust
-- **Position Sizing**: Kelly Criterion fuer optimale Groesse
-- **Diversifikation**: Markowitz Mean-Variance Optimization
-- **Stop-Loss Persistenz**: Stops werden in PostgreSQL gespeichert und nach Neustart automatisch wiederhergestellt (Reconciliation bei `load_state()`)
+- **Max Daily Drawdown**: Automatic stop at 10% daily loss
+- **Position Sizing**: Kelly Criterion for optimal size
+- **Diversification**: Markowitz Mean-Variance Optimization
+- **Stop-Loss Persistence**: Stops stored in PostgreSQL and automatically restored after restart (reconciliation at `load_state()`)
 
-## Development
+---
+
+## 🛠 Development
 
 ### Code Style
 
 ```bash
-# Linting mit Ruff
+# Linting with Ruff
 ruff check src/
 
-# Formatierung mit Ruff
+# Formatting with Ruff
 ruff format src/
 
-# Type Checking
+# Type checking
 mypy src/
 ```
 
 ### Tests
 
 ```bash
-# Alle Tests ausfuehren (1089 Tests)
+# Run all tests (1089 tests)
 pytest tests/ -v
 
-# Mit Coverage (Minimum: 60%)
+# With coverage (minimum: 60%)
 pytest tests/ --cov=src --cov-report=term-missing
 
-# Einzelne Testdatei
+# Single test file
 pytest tests/test_grid_strategy.py -v
 ```
 
-#### Test-Abdeckung
+#### Test Coverage
 
-| Bereich | Coverage | Tests |
-|---------|----------|-------|
+| Area | Coverage | Tests |
+|------|----------|-------|
 | Core (bot, orchestrator, mode) | 52-99% | GridBot, Hybrid, ModeManager |
 | Strategies | 47-99% | Grid, Dynamic, AI-Enhanced, Rebalance |
-| Tasks | 75-100% | Alle 8 Task-Module |
+| Tasks | 75-100% | All 8 task modules |
 | Notifications | 61-90% | Telegram, Charts, AI Assistants |
 | Data Providers | 21-73% | Market, Sentiment, Whale, ETF |
 | Risk | 49-94% | CVaR, Stop-Loss, Risk Guard |
@@ -1046,7 +1033,7 @@ pytest tests/test_grid_strategy.py -v
 | Monitoring | 100% | Order Reconciliation, Grid Health, Tier Health |
 | Portfolio Tiers | 90%+ | PortfolioManager, Tiers, Profit Engine, AI Optimizer |
 | Production | 100% | ProductionValidator, GoLiveChecklist |
-| **Gesamt** | **60%** | **1089 Tests** |
+| **Total** | **60%** | **1089 Tests** |
 
 ### Pre-commit Hooks
 
@@ -1055,20 +1042,24 @@ pytest tests/test_grid_strategy.py -v
 pip install pre-commit
 pre-commit install
 
-# Manuell ausführen
+# Run manually
 pre-commit run --all-files
 ```
 
-## CI/CD Pipeline
+---
 
-Die GitHub Actions Pipeline:
+## 🔄 CI/CD Pipeline
+
+The GitHub Actions pipeline:
 
 1. **Lint & Format**: Ruff checks (0 errors)
-2. **Type Check**: MyPy strict mode (0 errors)
-3. **Tests**: 1089 Tests mit Coverage >= 60%
-4. **Auto-Release**: Bei Version-Bump in pyproject.toml wird automatisch ein GitHub Release erstellt
+2. **Type Check**: mypy strict mode (0 errors)
+3. **Tests**: 1089 tests with coverage >= 60%
+4. **Auto-Release**: On version bump in pyproject.toml, a GitHub Release is automatically created
 
-## Conventional Commits
+---
+
+## 📝 Conventional Commits
 
 ```
 feat: Add whale alert integration
@@ -1079,53 +1070,59 @@ test: Add tests for grid strategy
 chore: Update dependencies
 ```
 
-### Automatische Versionierung
+### Automatic Versioning
 
 | Prefix | Version Bump |
-|--------|--------------|
+|--------|-------------|
 | `feat:` | Minor (0.X.0) |
 | `fix:` | Patch (0.0.X) |
 | `BREAKING CHANGE:` | Major (X.0.0) |
 
-## API Integration
+---
 
-| API | Zweck | Auth |
-|-----|-------|------|
-| Binance Spot | Trading, Preise | API Key |
-| Binance Futures | Funding Rate Signal | Keine (public) |
-| Alternative.me | Fear & Greed Index | Keine |
-| CoinGecko | Social Stats, Trending, Market Cap (Index Tier) | Keine |
-| LunarCrush | Social Sentiment, Galaxy Score | API Key |
-| Reddit (PRAW) | Reddit Mentions, Sentiment | OAuth |
-| Farside Investors | Bitcoin ETF Flows | Keine |
-| SoSoValue | ETH ETF Flows | Keine |
-| TokenUnlocks.app | Token Unlock Events | Keine |
-| Blockchain.com | Whale Tracking (BTC) | Keine |
-| TradingView | Economic Calendar | Keine |
-| DeepSeek | AI Analysis | API Key |
+## 🔌 API Integration
+
+| API | Purpose | Auth |
+|-----|---------|------|
+| Binance Spot | Trading, prices | API Key |
+| Binance Futures | Funding rate signal | None (public) |
+| Alternative.me | Fear & Greed Index | None |
+| CoinGecko | Social stats, trending, market cap (Index Tier) | None |
+| LunarCrush | Social sentiment, Galaxy Score | API Key |
+| Reddit (PRAW) | Reddit mentions, sentiment | OAuth |
+| Farside Investors | Bitcoin ETF flows | None |
+| SoSoValue | ETH ETF flows | None |
+| TokenUnlocks.app | Token unlock events | None |
+| Blockchain.com | Whale tracking (BTC) | None |
+| TradingView | Economic calendar | None |
+| DeepSeek | AI analysis | API Key |
 | Telegram | Notifications | Bot Token |
-
-## Lizenz
-
-MIT License - siehe [LICENSE](LICENSE)
-
-## Disclaimer
-
-**Dieses Projekt ist nur für Bildungszwecke gedacht.**
-
-- Keine Finanzberatung
-- Trading birgt Risiken
-- Verwende immer zuerst das Testnet
-- Investiere nur was du bereit bist zu verlieren
-
-## Contributing
-
-1. Fork das Repository
-2. Feature Branch erstellen (`git checkout -b feature/amazing-feature`)
-3. Änderungen committen (`git commit -m 'feat: Add amazing feature'`)
-4. Branch pushen (`git push origin feature/amazing-feature`)
-5. Pull Request öffnen
 
 ---
 
-Made with Claude Code by [murriiii](https://github.com/murriiii)
+## 📄 License
+
+MIT License — see [LICENSE](LICENSE)
+
+## ⚠️ Disclaimer
+
+**This project is for educational purposes only.**
+
+- Not financial advice
+- Trading involves risk
+- Always use testnet first
+- Only invest what you can afford to lose
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit changes (`git commit -m 'feat: Add amazing feature'`)
+4. Push branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+---
+
+<p align="center">
+  Built with <a href="https://claude.ai/code">Claude Code</a> by <a href="https://github.com/murriiii">murriiii</a>
+</p>

@@ -60,3 +60,8 @@ docker/postgres-data/
 # Profiling
 *.prof
 *.pstats
+
+# Internal project docs (not for public repo)
+CLAUDE.md
+TODO.md
+LEARNING_PHASE.md
